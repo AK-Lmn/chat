@@ -31,6 +31,7 @@ Pick exactly one of these shapes:
 Rules:
 - Use the computer for anything you can check: maths, code, data, files, web pages (curl).
 - One action per reply. Keep commands short. Never wait for input; add -y to installs.
+- Put files under your home folder and write it as ~ (for example ~/site/index.html). Never type /home/<name> or /root: the user name differs per computer.
 - For more than one line of code, "write" a file first, then "run" it. Never put several lines into python3 -c.
 - Escape every " inside a string as \\" and every newline as \\n so the JSON is valid.
 - To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): "write" ONE self-contained index.html (inline CSS and JS, no external files or CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence.
@@ -69,6 +70,12 @@ function firstObject(s, start) {
     else if (c === '}' && --depth === 0) return s.slice(start, i + 1);
   }
   return '';
+}
+
+// Models guess the home folder (/home/user, /home/ubuntu, /root), but it differs per computer (Upstash: /home/boxuser,
+// where /home/user cannot be made). A path under a guessed home folder goes to the real one: ~ is expanded on the computer.
+export function homePath(path) {
+  return String(path).replace(/^\/(?:home\/[^/]+|root)(?=\/|$)/, '~');
 }
 
 export function parseAction(text) {
@@ -444,6 +451,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
       }
       messages.push({ role: 'assistant', content: reply.text });
       const action = parseAction(reply.text);
+      if (typeof action.path === 'string') action.path = homePath(action.path);
       if (action.type === 'bad') stats.bad++;
       if (stats.firstAction === null && action.type !== 'bad') stats.firstAction = action.type;
       if (action.type === 'bad' && !last) {

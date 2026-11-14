@@ -46,22 +46,22 @@ describe('build analytics', () => {
     await alertRun({}, { task: 'x', ai: 'a', anon: false, result: { ...base, error: 'e', stats: {} } }, f);
     expect(sent.length).toBe(2);
   });
-  test('one failed write is reported even when the task recovers and ends with a link (coffee site, 2026-11-14)', async () => {
+  test('one failed write is reported even when the task recovers and ends with a link', async () => {
     const computer = {
       ...pod,
       run: async () => ({ status: 200, data: { exitCode: 0, stdout: '/home/boxuser', stderr: '' } }),
-      write: async (id, path) => (path.startsWith('/home/user/') ? { error: "mkdir: cannot create directory '/home/user': Permission denied" } : { status: 200, data: {} }),
+      write: async (id, path) => (path.startsWith('/var/www/') ? { error: "mkdir: cannot create directory '/var/www': Permission denied" } : { status: 200, data: {} }),
     };
-    const model = scripted('{"write": {"path": "/home/user/coffee/styles.css", "content": "body{}"}}', '{"run": "echo $HOME"}', '{"write": {"path": "coffee/styles.css", "content": "body{}"}}', '{"say": "done"}');
+    const model = scripted('{"write": {"path": "/var/www/coffee/styles.css", "content": "body{}"}}', '{"run": "echo $HOME"}', '{"write": {"path": "coffee/styles.css", "content": "body{}"}}', '{"say": "done"}');
     const r = await runTask({ task: 'coffee website', model, computer });
     expect(r.error).toBeNull();
     expect(r.stats.errors).toBe(1);
-    expect(r.stats.failed).toContain('write /home/user/coffee/styles.css');
+    expect(r.stats.failed).toContain('write /var/www/coffee/styles.css');
     expect(r.stats.failed).toContain('Permission denied');
     const sent = [];
     await alertRun({ DISCORD_ERRORS_WEBHOOK: 'https://discord.com/api/webhooks/1/x' }, { task: 'coffee website', ai: 'particle-1:free', anon: false, result: { ...r, links: ['https://chat.flisk.si/s/x'] } }, async (u, init) => (sent.push(JSON.parse(init.body)), new Response(null, { status: 204 })));
     expect(sent.length).toBe(1);
-    expect(sent[0].content).toContain('a step failed: write /home/user/coffee/styles.css');
+    expect(sent[0].content).toContain('a step failed: write /var/www/coffee/styles.css');
   });
 
   test('a command that exits non-zero alone is trial and error, not an alert', async () => {
