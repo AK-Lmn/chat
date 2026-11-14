@@ -214,6 +214,11 @@ tr:last-child td{border-bottom:0}td.x{width:1%;white-space:nowrap}button.del{fon
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.card{background:var(--card);border:1px solid var(--line);border-radius:0;padding:14px;cursor:pointer}
 .card b{text-transform:capitalize}.n{font-size:28px;font-weight:650;letter-spacing:-.02em}.up{color:var(--ok)}.down{color:var(--bad)}
 .msg{color:var(--bad);margin:8px 0}.empty{color:var(--dim);padding:18px 12px}
+h3{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin:28px 0 10px}.dim{color:var(--dim)}td.dim,.x.dim{font-size:13px}tr[data-go]{cursor:pointer}tr[data-go]:hover{background:var(--bg)}
+.card.plain{cursor:default}.bar{position:relative;display:flex;justify-content:space-between;gap:8px;padding:4px 6px;margin-top:6px;font-size:13px}.bar i{position:absolute;left:0;top:0;bottom:0;background:#e9efe9;z-index:0}.bar span,.bar em{position:relative;z-index:1;font-style:normal}
+.bar-row{display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap}.bar-row input{flex:1;min-width:180px}.seg{margin-left:auto;display:flex}.seg button{font:inherit;padding:6px 12px;border:1px solid var(--line);background:var(--card);cursor:pointer}.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+button.plain{font:inherit;padding:8px 14px;border:1px solid var(--line);background:none;cursor:pointer}.tag{display:inline-block;padding:1px 8px;border:1px solid var(--line);background:var(--bg);font-size:13px}
+.board{display:flex;gap:12px;overflow-x:auto;align-items:flex-start}.col{min-width:230px;flex:1;background:#f1efe8;padding:10px}.col h4{margin:0 0 8px;text-transform:capitalize;font-size:13px}.kcard{background:var(--card);border:1px solid var(--line);padding:10px;margin-bottom:8px}.kcard .acts{display:flex;gap:6px;margin-top:8px}.kcard select{font:inherit;font-size:13px;flex:1;min-width:0}
 </style>
 </head>
 <body>
@@ -237,44 +242,89 @@ function nav(current) {
   $('#tabs').innerHTML = tabs.map((t) => '<button data-tab="' + t.name + '" aria-current="' + (t.name === current) + '">' + esc(t.name === 'overview' ? 'Overview' : t.name.replace(/-/g, ' ')) + '</button>').join('');
 }
 $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) location.hash = b.dataset.tab; });
+// The field that says where a record is in a process (status, stage...): it drives the board and the overview breakdown.
+const groupKey = (p) => (p.fields.find((f) => /^(status|stage|state|phase)$/.test(f.key)) || {}).key || '';
+const title = (p, r) => String(r[p.fields[0].key] || 'Untitled');
 async function overview() {
   const view = $('#view');
-  view.innerHTML = '<h2>Overview</h2><p class="does">Every part of ' + esc(APP.title) + ', how many records it holds and whether it answers.</p><div class="cards" id="cards">Loading...</div>';
+  view.innerHTML = '<h2>Overview</h2><p class="does">Every part of ' + esc(APP.title) + ', how many records it holds and whether it answers.</p><div class="cards" id="cards">Loading...</div><div id="more"></div>';
   try {
     const rows = await api('summary');
     $('#cards').innerHTML = rows.map((r) => '<div class="card" data-go="' + esc(r.name) + '"><b>' + esc(r.name.replace(/-/g, ' ')) + '</b><div class="n">' + Number(r.records) + '</div><span class="' + (r.up ? 'up' : 'down') + '">' + (r.up ? 'answering' : 'not answering') + '</span></div>').join('');
   } catch (e) {
     $('#cards').innerHTML = '<p class="msg">Could not load the overview: ' + esc(e.message) + '</p>';
+    return;
   }
+  const all = await Promise.all(APP.parts.map(async (p) => ({ p, rows: await api(p.name).catch(() => []) })));
+  const recent = all.flatMap(({ p, rows }) => rows.map((r) => ({ p, r }))).sort((a, b) => String(b.r.createdAt).localeCompare(String(a.r.createdAt))).slice(0, 8);
+  const splits = all.map(({ p, rows }) => {
+    const g = groupKey(p);
+    if (!g || !rows.length) return '';
+    const c = {};
+    rows.forEach((r) => { const v = String(r[g] || 'none'); c[v] = (c[v] || 0) + 1; });
+    return '<div class="card plain"><b>' + esc(p.name.replace(/-/g, ' ')) + ' by ' + esc(g) + '</b>' + Object.entries(c).map(([k, n]) => '<div class="bar"><span>' + esc(k) + '</span><i style="width:' + Math.round((n / rows.length) * 100) + '%"></i><em>' + n + '</em></div>').join('') + '</div>';
+  }).join('');
+  $('#more').innerHTML = (splits ? '<h3>Pipeline</h3><div class="cards">' + splits + '</div>' : '') +
+    '<h3>Recent activity</h3>' + (recent.length ? '<div class="table"><table><tbody>' + recent.map(({ p, r }) => '<tr data-go="' + esc(p.name) + '"><td class="x">' + esc(p.name.replace(/-/g, ' ')) + '</td><td>' + esc(title(p, r)) + '</td><td class="x dim">' + esc(String(r.createdAt || '').slice(0, 10)) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Nothing yet. Add a record in any tab and it shows here.</div>');
 }
 $('#view').addEventListener('click', (e) => { const c = e.target.closest('[data-go]'); if (c) location.hash = c.dataset.go; });
 async function part(p) {
   const view = $('#view');
+  const g = groupKey(p);
+  let rows = [], editing = null, q = '', mode = 'table';
   view.innerHTML = '<h2>' + esc(p.name.replace(/-/g, ' ')) + '</h2><p class="does">' + esc(p.does) + '</p>' +
-    '<form id="add">' + p.fields.map((f) => '<input name="' + f.key + '" placeholder="' + esc(f.label) + '" aria-label="' + esc(f.label) + '">').join('') + '<button class="go" type="submit">Add</button></form>' +
+    '<form id="add">' + p.fields.map((f) => '<input name="' + f.key + '" placeholder="' + esc(f.label) + '" aria-label="' + esc(f.label) + '">').join('') + '<button class="go" type="submit" id="save">Add</button><button class="plain" type="button" id="cancel" hidden>Cancel</button></form>' +
+    '<div class="bar-row"><input id="q" type="search" placeholder="Search ' + esc(p.name.replace(/-/g, ' ')) + '" aria-label="Search"><span class="dim" id="count"></span>' + (g ? '<span class="seg"><button type="button" data-mode="table" aria-pressed="true">Table</button><button type="button" data-mode="board" aria-pressed="false">Board</button></span>' : '') + '</div>' +
     '<p class="msg" id="msg" hidden></p><div class="table" id="rows">Loading...</div>';
   const say = (t) => { $('#msg').hidden = !t; $('#msg').textContent = t || ''; };
-  const load = async () => {
-    try {
-      const rows = await api(p.name);
-      $('#rows').innerHTML = rows.length
-        ? '<table><thead><tr>' + p.fields.map((f) => '<th>' + esc(f.label) + '</th>').join('') + '<th>Added</th><th></th></tr></thead><tbody>' +
-          rows.slice().reverse().map((r) => '<tr>' + p.fields.map((f) => '<td>' + esc(r[f.key]) + '</td>').join('') + '<td>' + esc(String(r.createdAt || '').slice(0, 10)) + '</td><td class="x"><button class="del" data-id="' + Number(r.id) + '">Delete</button></td></tr>').join('') + '</tbody></table>'
-        : '<div class="empty">No records yet. Add the first one above.</div>';
-    } catch (e) {
-      $('#rows').innerHTML = '<div class="empty">Could not load: ' + esc(e.message) + '</div>';
-    }
+  const shown = () => rows.filter((r) => !q || p.fields.some((f) => String(r[f.key] ?? '').toLowerCase().includes(q))).slice().reverse();
+  const board = (list) => {
+    const cols = [];
+    list.forEach((r) => { const v = String(r[g] || 'none'); if (!cols.includes(v)) cols.push(v); });
+    return '<div class="board">' + cols.map((c) => '<div class="col"><h4>' + esc(c) + ' <span class="dim">' + list.filter((r) => String(r[g] || 'none') === c).length + '</span></h4>' + list.filter((r) => String(r[g] || 'none') === c).map((r) => '<div class="kcard"><b>' + esc(title(p, r)) + '</b>' + p.fields.slice(1).filter((f) => f.key !== g && r[f.key]).map((f) => '<div class="dim">' + esc(f.label) + ': ' + esc(r[f.key]) + '</div>').join('') + '<div class="acts"><select data-move="' + Number(r.id) + '" aria-label="Move to">' + cols.map((o) => '<option' + (o === c ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select><button class="del" data-edit="' + Number(r.id) + '">Edit</button></div></div>').join('') + '</div>').join('') + '</div>';
   };
+  const draw = () => {
+    const list = shown();
+    $('#count').textContent = list.length + (q ? ' of ' + rows.length : '') + ' records';
+    $('#rows').className = mode === 'board' ? '' : 'table';
+    if (!list.length) { $('#rows').innerHTML = '<div class="empty">' + (rows.length ? 'Nothing matches "' + esc(q) + '".' : 'No records yet. Add the first one above.') + '</div>'; return; }
+    $('#rows').innerHTML = mode === 'board' ? board(list) :
+      '<table><thead><tr>' + p.fields.map((f) => '<th>' + esc(f.label) + '</th>').join('') + '<th>Added</th><th></th></tr></thead><tbody>' +
+      list.map((r) => '<tr>' + p.fields.map((f) => '<td>' + (f.key === g && r[f.key] ? '<span class="tag">' + esc(r[f.key]) + '</span>' : /email/.test(f.key) && r[f.key] ? '<a href="mailto:' + esc(r[f.key]) + '">' + esc(r[f.key]) + '</a>' : esc(r[f.key])) + '</td>').join('') + '<td>' + esc(String(r.createdAt || '').slice(0, 10)) + '</td><td class="x"><button class="del" data-edit="' + Number(r.id) + '">Edit</button> <button class="del" data-id="' + Number(r.id) + '">Delete</button></td></tr>').join('') + '</tbody></table>';
+  };
+  const load = async () => {
+    try { rows = await api(p.name); draw(); } catch (e) { $('#rows').innerHTML = '<div class="empty">Could not load: ' + esc(e.message) + '</div>'; }
+  };
+  const stop = () => { editing = null; $('#add').reset(); $('#save').textContent = 'Add'; $('#cancel').hidden = true; };
+  $('#q').addEventListener('input', (e) => { q = e.target.value.trim().toLowerCase(); draw(); });
+  $('#cancel').addEventListener('click', stop);
+  view.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; view.querySelectorAll('[data-mode]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); draw(); }));
   $('#add').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
     if (!Object.values(data).some((v) => String(v).trim())) return say('Fill in at least one field.');
-    try { await api(p.name, { method: 'POST', body: JSON.stringify(data) }); e.target.reset(); say(''); await load(); } catch (err) { say('Could not add: ' + err.message); }
+    try { await api(p.name + (editing ? '/' + editing : ''), { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(data) }); stop(); say(''); await load(); } catch (err) { say('Could not save: ' + err.message); }
   });
   $('#rows').addEventListener('click', async (e) => {
-    const b = e.target.closest('button.del');
+    const ed = e.target.closest('[data-edit]');
+    if (ed) {
+      const r = rows.find((x) => x.id === Number(ed.dataset.edit));
+      if (!r) return;
+      editing = r.id;
+      p.fields.forEach((f) => { $('#add').elements[f.key].value = r[f.key] ?? ''; });
+      $('#save').textContent = 'Save';
+      $('#cancel').hidden = false;
+      $('#add').scrollIntoView({ block: 'center' });
+      return;
+    }
+    const b = e.target.closest('button.del[data-id]');
     if (!b) return;
     try { await api(p.name + '/' + b.dataset.id, { method: 'DELETE' }); say(''); await load(); } catch (err) { say('Could not delete: ' + err.message); }
+  });
+  $('#rows').addEventListener('change', async (e) => {
+    const m = e.target.closest('select[data-move]');
+    if (!m) return;
+    try { await api(p.name + '/' + m.dataset.move, { method: 'PATCH', body: JSON.stringify({ [g]: m.value }) }); say(''); await load(); } catch (err) { say('Could not move: ' + err.message); }
   });
   await load();
 }
