@@ -391,7 +391,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
   const steps = [];
   const links = [];
   // What went wrong or right, counted for the build analytics (src/index.js recordRun): why a build came out weak.
-  const stats = { big: bigApp, bad: 0, empty: 0, provider: 0, errors: 0, system: false, shared: false, copy: false, firstAction: null };
+  const stats = { big: bigApp, bad: 0, empty: 0, provider: 0, errors: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
   const t0 = Date.now();
   const finish = async (answer, error = null) => {
     if (podId && kept) {
@@ -509,6 +509,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         }
       }
       let shown;
+      let ours = false; // chat itself refused the action (a rule, not a broken computer or file)
       if (widget) {
         const r = await widget.widget.run(widget.input, { fetch: fetchImpl, computer, podId });
         if (r.error) shown = { error: r.error };
@@ -526,6 +527,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         emit({ type: 'write', path: action.path, bytes: action.content.length });
         // A short stub over the generated page leaves the live link blank; keep the working page.
         if (builtSystem && /(^|\/)app\/web\/index\.html$/.test(action.path) && action.content.length < 1500) {
+          ours = true;
           shown = { error: 'Refused: that is far shorter than the working page already there, so it would blank the website. Keep the generated page and go straight to share, or write the whole page.' };
           emit({ type: 'output', error: shown.error });
           steps.push({ action, output: shown });
@@ -570,6 +572,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         }
       } else if (action.type === 'publish' && ranApp) {
         // An app with a running API is never shipped as a page: a copy of it cannot save anything.
+        ours = true;
         shown = { error: shareRefused
           ? 'do not publish a copy of the app. This computer cannot have a public link, so "say" that plainly: the app was built and checked here, and a provider that can share (for example Upstash Box) gives a live link next time.'
           : `this task runs an app with an API, so do not publish a copy of it. Send {"share": ${appPort || '<the website port>'}} for a live link to the real app.` };
@@ -593,6 +596,9 @@ export async function runTask({ task, history = [], github = undefined, origin =
         shown = r.error ? { error: scrub(r.error, token) } : { content: clip(scrub(r.data.content, token)) };
       }
       if (shown.error || shown.exitCode > 0) stats.errors++;
+      // The first action the computer or the site could not do (a write, read, publish or share that failed), for the alert.
+      // A command that exits non-zero is normal trial and error and is not one.
+      if (shown.error && !ours && !stats.failed) stats.failed = `${action.type} ${action.path || ''}: ${String(shown.error)}`.replace(/\s+/g, ' ').slice(0, 300);
       steps.push({ action, ...shown });
       if (!shown.widget) emit({ type: 'output', ...shown });
       const note = shown.error
