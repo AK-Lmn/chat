@@ -85,12 +85,20 @@ describe('a bigger app is one Flisk project in ~/app', () => {
     const html = indexHtml(cleanSystem({ title: 'CRM </script><b>', services: ['contacts', 'deals'] }));
     expect(html).not.toContain('localStorage');
     expect(html).toContain("fetch('/api/' + path");
-    expect(html).toContain("method: 'POST'");
+    expect(html).toContain("'POST'");
+    expect(html).toContain("'PATCH'");
     expect(html).toContain("method: 'DELETE'");
     expect(html).toContain('<title>CRM &lt;/script&gt;&lt;b&gt;</title>');
     const script = html.slice(html.indexOf('<script type="module">') + 22, html.lastIndexOf('</script>'));
     expect(script).not.toContain('</script>');
     expect(() => new Function(script)).not.toThrow();
+  });
+
+  test('the website has search, edit, a board for a status field and an overview with a breakdown and recent activity', () => {
+    const html = indexHtml(cleanSystem({ title: 'CRM', services: [{ name: 'contacts', fields: ['Name', 'Email', 'Status'] }, { name: 'deals', fields: ['Title', 'Stage', 'Value'] }] }));
+    for (const part of ['id="q"', 'data-edit', 'data-mode="board"', 'data-move', 'Recent activity', 'Pipeline', 'mailto:']) expect(html).toContain(part);
+    expect(html).toContain('"key":"status"');
+    expect(html).toContain('"key":"stage"');
   });
 
   test('the generated backends really run: add, read, change and delete through a front like Vite, records survive a restart, and the shell check passes', async () => {
