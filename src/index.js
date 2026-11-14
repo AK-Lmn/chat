@@ -275,12 +275,14 @@ export async function recordRun(env, { task, ai, free, anon, result }) {
     .run();
 }
 
-// Why a finished task is worth a look: it failed, a bigger app skipped the "system" builder, or most of its steps failed.
+// Why a finished task is worth a look: it failed, a bigger app skipped the "system" builder, most of its steps failed,
+// or one write, read, publish or share failed (even when the task got past it, like a write to a home folder that is not there).
 export function runProblem(result) {
   const st = result.stats || {};
   if (result.error) return `failed: ${String(result.error).slice(0, 150)}`;
   if (st.big && !st.system) return 'a bigger app did not use the system builder';
   if (st.errors >= 3) return `${st.errors} steps failed`;
+  if (st.failed) return `a step failed: ${st.failed}`;
   if (st.big && !st.shared) return 'a bigger app ended without a live link';
   return null;
 }
