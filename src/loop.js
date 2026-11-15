@@ -280,6 +280,29 @@ export function asksImage(task) {
   const real = /\b(photo|photograph|realistic|selfie)/i.test(t);
   return { prompt: `${what}, ${real ? 'a photorealistic photo, natural light, sharp detail' : 'high detail'}`, caption: `Here is ${what}.` };
 }
+// The hack for when the drawing model has no budget left: the chat model writes the picture as SVG code (gradients, shadows,
+// highlights, layered shapes), which costs no drawing budget. The SVG is cleaned before it is kept: no script, no outside links.
+export const SVG_ASK = 'Draw the picture the user asks for as ONE SVG image, and reply with only the SVG code: no words, no code fence. Make it look realistic and three-dimensional, not flat: viewBox="0 0 800 800", a background with a gradient, every main shape filled with a linearGradient or radialGradient that goes from a light to a dark shade, soft shadows under objects (feGaussianBlur filter), bright highlights, darker shaded sides, fine detail such as fur strands, texture or reflections, and 40 or more shapes. No text, no script, no outside links.';
+export function cleanSvg(raw) {
+  const m = /<svg[\s>][\s\S]*<\/svg>/i.exec(String(raw || ''));
+  if (!m) return null;
+  let svg = m[0]
+    .replace(/<(script|foreignObject|iframe|image|a|style)\b[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<(script|foreignObject|iframe|image|use)\b[^>]*\/?>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s(?:xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*')/gi, '')
+    .replace(/javascript:/gi, '');
+  if (!/<svg[^>]*\sxmlns=/i.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  if (!/<svg[^>]*\sviewBox=/i.test(svg)) svg = svg.replace(/<svg/i, '<svg viewBox="0 0 800 800"');
+  if (svg.length < 400 || svg.length > 300_000 || (svg.match(/<(path|circle|ellipse|rect|polygon|polyline|line)\b/gi) || []).length < 4) return null;
+  return svg;
+}
+const svgDataUrl = (svg) => {
+  const bytes = new TextEncoder().encode(svg);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:image/svg+xml;base64,${btoa(bin)}`;
+};
 const imageAlt = (s) => String(s).replace(/[[\]()\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'picture';
 export const imageAnswer = (spec, url) => `![${imageAlt(spec.caption)}](${url})\n\n${spec.caption}`;
 
@@ -627,7 +650,12 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // Draws the picture and keeps it at its own link (saveImage), so the chat history holds a short link, not the picture.
   const drawImage = async (spec) => {
     emit({ type: 'image_start', prompt: spec.prompt });
-    const pic = await Promise.resolve(photo(spec.prompt)).catch(() => '');
+    let pic = await Promise.resolve(photo(spec.prompt)).catch(() => '');
+    if (!pic) {
+      const r = await model([{ role: 'system', content: SVG_ASK }, { role: 'user', content: spec.prompt.replace(/,\s*(a photorealistic photo.*|high detail)$/i, '') }]).catch(() => null);
+      const svg = cleanSvg(r?.text);
+      if (svg) pic = svgDataUrl(svg);
+    }
     if (!pic) return { error: 'the picture could not be drawn right now: the daily picture limit is used up or the drawing model is busy. Try again later' };
     const saved = saveImage ? await Promise.resolve(saveImage(pic, spec.prompt)).catch((e) => ({ error: String(e?.message || e) })) : { url: pic };
     if (saved?.error || !saved?.url) return { error: saved?.error || 'the picture could not be saved' };
