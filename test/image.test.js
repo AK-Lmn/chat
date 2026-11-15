@@ -129,3 +129,11 @@ describe('when the drawing model has no budget, the chat model draws the picture
     expect(res.headers.get('content-security-policy')).toContain('sandbox');
   });
 });
+
+describe('picture buttons', () => {
+  test('a drawn picture saves as a PNG, and a picture-only answer has no markdown Save/Copy buttons', () => {
+    const page = appPage({ login: 'ann', connected: [] });
+    expect(page).toContain("give(p,'png')");
+    expect(page).toContain('if(!onlyPic)turn.appendChild(sv)');
+  });
+});
