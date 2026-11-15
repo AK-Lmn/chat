@@ -199,10 +199,26 @@ describe('drawing the photo', () => {
   });
 
   test('a failed, slow or empty model gives no photo instead of an error', async () => {
-    expect(await sitePhoto({ DB: fakeDb(), AI: { run: async () => { throw new Error('3036'); } } }, 'a', 'x')).toBe('');
-    expect(await sitePhoto({ DB: fakeDb(), AI: { run: () => new Promise(() => {}) } }, 'a', 'x', { ms: 20 })).toBe('');
-    expect(await sitePhoto({ DB: fakeDb(), AI: ai('') }, 'a', 'x')).toBe('');
-    expect(await sitePhoto({ DB: { prepare: () => { throw new Error('no such table'); } }, AI: ai('B'.repeat(4000)) }, 'a', 'x')).toBe('');
-    expect(await sitePhoto({ DB: fakeDb() }, 'a', 'x')).toBe('');
+    const fetchImpl = async () => new Response('down', { status: 502 });
+    expect(await sitePhoto({ DB: fakeDb(), AI: { run: async () => { throw new Error('3036'); } } }, 'a', 'x', { fetchImpl })).toBe('');
+    expect(await sitePhoto({ DB: fakeDb(), AI: { run: () => new Promise(() => {}) } }, 'a', 'x', { ms: 20, fetchImpl })).toBe('');
+    expect(await sitePhoto({ DB: fakeDb(), AI: ai('') }, 'a', 'x', { fetchImpl })).toBe('');
+    expect(await sitePhoto({ DB: { prepare: () => { throw new Error('no such table'); } }, AI: ai('B'.repeat(4000)) }, 'a', 'x', { fetchImpl })).toBe('');
+    expect(await sitePhoto({ DB: fakeDb() }, 'a', 'x', { fetchImpl })).toBe('');
+  });
+
+  test('when FLUX cannot draw (neurons used up), the picture comes from Pollinations with no key', async () => {
+    const urls = [];
+    const jpeg = new Uint8Array(5000).fill(7);
+    const fetchImpl = async (u) => (urls.push(String(u)), new Response(jpeg, { headers: { 'content-type': 'image/jpeg' } }));
+    const out = await sitePhoto({ DB: fakeDb(), AI: { run: async () => { throw new Error('4006: used up your daily free allocation of 10,000 neurons'); } } }, 'a', 'a cat selfie', { fetchImpl });
+    expect(out).toBe(`data:image/jpeg;base64,${Buffer.from(jpeg).toString('base64')}`);
+    expect(urls[0]).toStartWith('https://image.pollinations.ai/prompt/a%20cat%20selfie?');
+    // A page that is not a picture is no picture.
+    expect(await sitePhoto({ DB: fakeDb() }, 'a', 'x', { fetchImpl: async () => new Response('<html>', { headers: { 'content-type': 'text/html' } }) })).toBe('');
+    // Switched off, nothing is fetched.
+    urls.length = 0;
+    expect(await sitePhoto({ DB: fakeDb(), NO_POLLINATIONS: '1' }, 'a', 'x', { fetchImpl })).toBe('');
+    expect(urls).toEqual([]);
   });
 });

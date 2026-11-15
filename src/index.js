@@ -28,6 +28,8 @@ export const ANON_PER_PERSON_BACKUP = 10;
 export const MAX_SITE_BYTES = 200 * 1024;
 export const SITES_PER_LOGIN = 5;
 export const VIDEOS_PER_LOGIN = 5;
+export const IMAGES_PER_LOGIN = 50;
+export const IMAGE_DAYS = 30;
 export const VOICE_PER_DAY = 60;
 // The mic sends one request per spoken phrase (it writes while you talk), so phrases have their own, larger allowance.
 export const VOICE_PARTS_PER_DAY = 400;
@@ -357,6 +359,17 @@ export async function saveVideo(env, login, parts, title, origin) {
   return { url: `${origin}/v/${id}.mp4` };
 }
 
+// A picture a task drew (the "image" action): kept at its own unguessable link, so the chat history holds a short link
+// instead of the picture. IMAGE_DAYS, the newest IMAGES_PER_LOGIN per login.
+export async function saveImage(env, login, dataUrl, prompt, origin) {
+  const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
+  if (!m) return { error: 'the picture is not an image' };
+  const id = hex(8);
+  await env.DB.prepare('INSERT INTO images (id, login, type, prompt, data, created) VALUES (?, ?, ?, ?, ?, ?)').bind(id, login, m[1], String(prompt || '').slice(0, 300), m[2], new Date().toISOString()).run();
+  await env.DB.prepare('DELETE FROM images WHERE login = ? AND id NOT IN (SELECT id FROM images WHERE login = ? ORDER BY created DESC LIMIT ?)').bind(login, login, IMAGES_PER_LOGIN).run();
+  return { url: `${origin}/i/${id}.${m[1] === 'jpeg' ? 'jpg' : m[1]}` };
+}
+
 // Computers chat started. Every one is written down when it starts, so none is left running by accident: a task's computer is
 // deleted when the task ends, a shared app's computer after KEEP_DAYS, the oldest shared one when a login shares more than
 // KEPT_PER_LOGIN, and whatever a crashed task left behind after two hours (cleanPods, run by the hourly cron).
@@ -474,7 +487,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
 
   if (request.method === 'GET' && path === '/og.png') return new Response(OG_PNG, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
-  if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain' } });
+  if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain' } });
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml' } });
 
   // Is chat able to reach what it depends on? No sign-in, no secrets, only status codes.
@@ -538,6 +551,13 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const row = await env.DB.prepare('SELECT * FROM sites WHERE id = ?').bind(sm[1]).first();
     if (!row || Date.now() - Date.parse(row.created) > SITE_DAYS * 86400_000) return html(messagePage('Page not found', 'This page expired or never existed.'), 404);
     return siteResponse(row);
+  }
+
+  const im = /^\/i\/([a-f0-9]{16})\.(jpg|png|webp)$/.exec(path);
+  if (im && (request.method === 'GET' || request.method === 'HEAD')) {
+    const row = await env.DB.prepare('SELECT type, data, created FROM images WHERE id = ?').bind(im[1]).first().catch(() => null);
+    if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(messagePage('Picture not found', 'This picture expired or never existed.'), 404);
+    return new Response(request.method === 'HEAD' ? null : unb64(row.data), { headers: { 'content-type': `image/${row.type}`, 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' } });
   }
 
   const vm = /^\/v\/([a-f0-9]{16})\.mp4$/.exec(path);
@@ -689,7 +709,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const refund = async () => chosen.free && !m.answered() && refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
       return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
-    const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
+    const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
     return socketPair ? json(200, { socket: true }) : new Response(null, { status: 101, webSocket: client });
   }
@@ -796,7 +816,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ lookupFacts: (q) => lookup(q), task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ lookupFacts: (q) => lookup(q), task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
