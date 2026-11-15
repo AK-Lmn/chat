@@ -1,3 +1,4 @@
+import { ANALYSIS_STYLE } from './analysis-style.js';
 import { ANSWER_STYLE } from './answer-style.js';
 import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -68,6 +69,7 @@ ${widgetPrompt()}
 - In "say", give the result itself (numbers, the content, the link), not a description of the steps.
 - "say" is shown as Markdown: **bold**, [text](https://link) links, "- " lists, and "| a | b |" tables. For weather, prices, schedules or any comparison over days or items, give one line with the current state, then a table (for weather: Day | Sky | High / Low | Rain chance, for the next 7 days), then 2 or 3 bullets with what it means for the user.
 ${ANSWER_STYLE}
+${ANALYSIS_STYLE}
 
 Remember: reply is only the JSON object. Nothing else.`;
 
