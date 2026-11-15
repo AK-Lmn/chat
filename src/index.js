@@ -669,7 +669,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const refund = async () => chosen.free && !m.answered() && refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
       return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
-    const job = runOverSocket(server, { gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
+    const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
     return socketPair ? json(200, { socket: true }) : new Response(null, { status: 101, webSocket: client });
   }
