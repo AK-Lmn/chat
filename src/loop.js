@@ -633,7 +633,7 @@ export async function runTask({ classify = null, task, history = [], github = un
   let direct = files.length ? null : asksImage(task);
   // The wording match above only nominates a message. A small model decides: anything but a clear "picture" (or a failed
   // call) sends the message to the main model, so a text that merely mentions a picture is never drawn by mistake.
-  if (direct && classify) direct = (await Promise.resolve(classify(task)).catch(() => null)) === 'image' ? direct : null;
+  if (direct && classify) direct = (await Promise.resolve(classify(task)).catch((e) => { console.warn('image classifier failed:', String(e?.message || e).slice(0, 200)); return null; })) === 'image' ? direct : null;
   let sources = [];
   if (!direct && lookupFacts && wantsLookup(task, { building, files: files.length })) {
     sources = await Promise.resolve(lookupFacts(task)).catch(() => []) || [];
@@ -672,7 +672,7 @@ export async function runTask({ classify = null, task, history = [], github = un
     emit({ type: 'image_start', prompt: spec.prompt });
     let pic = await Promise.resolve(photo(spec.prompt)).catch(() => '');
     if (!pic) {
-      const r = await model([{ role: 'system', content: SVG_ASK }, { role: 'user', content: spec.prompt.replace(/,\s*(a photorealistic photo.*|high detail)$/i, '') }]).catch(() => null);
+      const r = await Promise.race([model([{ role: 'system', content: SVG_ASK }, { role: 'user', content: spec.prompt.replace(/,\s*(a photorealistic photo.*|high detail)$/i, '') }]), new Promise((_, no) => setTimeout(() => no(new Error('svg took too long')), 60_000))]).catch((e) => { console.warn('svg picture failed:', String(e?.message || e).slice(0, 200)); return null; });
       const svg = cleanSvg(r?.text);
       if (svg) pic = svgDataUrl(svg);
     }

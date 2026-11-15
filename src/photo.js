@@ -27,13 +27,14 @@ export async function pollinationsPhoto(prompt, { fetchImpl = fetch, ms = PHOTO_
     const url = `${base}${encodeURIComponent(String(prompt).slice(0, 800))}?width=1024&height=1024&nologo=true&private=true`;
     const res = await fetchImpl(url, { signal: AbortSignal.timeout(ms) });
     const type = (res.headers.get('content-type') || '').split(';')[0].trim();
-    if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return '';
+    if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) { console.warn('pollinations: no picture', res.status, type); return ''; }
     const bytes = new Uint8Array(await res.arrayBuffer());
     if (bytes.length < 1000 || bytes.length > MAX_PHOTO_BYTES) return '';
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return `data:${type};base64,${btoa(bin)}`;
-  } catch {
+  } catch (e) {
+    console.warn('pollinations failed:', String(e?.message || e).slice(0, 200));
     return '';
   }
 }
@@ -59,7 +60,8 @@ async function fluxPhoto(env, prompt, ms) {
     ]).finally(() => clearTimeout(timer));
     const b64 = typeof out?.image === 'string' ? out.image : '';
     return /^[A-Za-z0-9+/=]{1000,}$/.test(b64) ? `data:image/jpeg;base64,${b64}` : '';
-  } catch {
+  } catch (e) {
+    console.warn('flux failed:', String(e?.message || e).slice(0, 200));
     return '';
   }
 }
