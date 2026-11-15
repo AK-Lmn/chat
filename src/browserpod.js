@@ -12,7 +12,7 @@ export const BROWSER_NOTE = `
 
 IMPORTANT, about this computer: it is a small Linux inside the user's own browser tab. It has busybox sh only (ls, cat, sed, awk, grep, tar, gzip, base64, wc).
 It has NO internet, NO python3, NO node, NO flisk, NO git, and nothing can be installed (no apt, apk, pip or npm).
-So here: never use curl or wget, and never use the "system", "video" or share steps. For a website, "write" one complete index.html (inline CSS and JS) and "publish" it.
+So here: never use curl or wget, and never use the "system", "video" or share steps. For a website, send one "site" action (it needs no computer); only when no layout fits, "write" one complete index.html (inline CSS and JS) and "publish" it.
 If the task truly needs the internet, Python, Node, an installed package or a running app, do not try: reply with "say" and tell the user this needs a cloud computer, which they connect once: sign in with GitHub, then open Computers in the menu.`;
 
 // send(event) goes to the page. Returns the computer for runTask plus reply(message) and close() for the socket.
@@ -62,7 +62,7 @@ export function browserComputer(send, { callMs = CALL_MS, wait = (ms) => new Pro
 // One task over one socket. The first message is the task ({ task, history, files, ai }); after that the page only sends
 // pod_reply messages. gate(body) -> { refuse: { status, ... } } or { model, maxSteps, modelName, vision }.
 // socket: { send(text), close(), addEventListener('message' | 'close' | 'error', fn) }.
-export function runOverSocket(socket, { gate, origin, publish, saveVideo, fetchImpl = fetch, callMs, wait, run = runTask }) {
+export function runOverSocket(socket, { gate, origin, publish, photo, saveVideo, fetchImpl = fetch, callMs, wait, run = runTask }) {
   const send = (e) => {
     try {
       socket.send(JSON.stringify(e));
@@ -108,7 +108,7 @@ export function runOverSocket(socket, { gate, origin, publish, saveVideo, fetchI
       }
       // A closed tab cannot run anything: stop asking the model too.
       const model = async (messages) => (pod.closed ? { error: 'the browser tab closed', kind: 'other' } : ok.model(messages));
-      const r = await run({ task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, saveVideo, emit: send });
+      const r = await run({ task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, photo, saveVideo, emit: send });
       send({ type: 'done', ms: r.ms, error: r.error });
     } catch (e) {
       send({ type: 'error', error: String(e?.message || e).slice(0, 200) });

@@ -9,6 +9,7 @@ import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
 import { KEEP_DAYS, KEPT_PER_LOGIN } from './share.js';
 import { runOverSocket } from './browserpod.js';
+import { sitePhoto } from './photo.js';
 import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession, sameOrigin } from './session.js';
 import { speakStream, MAX_SPEAK } from './tts.js';
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
@@ -312,11 +313,11 @@ async function adminRuns(request, env) {
   return json(200, { days, totals, byAi: byAi.results, recent: recent.results, reviews, recentReviews: recentReviews.results });
 }
 
-// A site a task made: stored as one HTML file, linked by an unguessable id, kept 7 days, the oldest dropped over 5.
-export async function publishSite(env, login, content, origin) {
+// A site a task made (limit: a layout page with its photo may be bigger): stored as one HTML file, linked by an unguessable id, kept 7 days, the oldest dropped over 5.
+export async function publishSite(env, login, content, origin, limit = MAX_SITE_BYTES) {
   const bytes = new TextEncoder().encode(String(content)).length;
   if (!/<html|<!doctype|<body|<h1|<div/i.test(content)) return { error: 'that file is not an HTML page' };
-  if (bytes > MAX_SITE_BYTES) return { error: `the page is ${bytes} bytes; the limit is ${MAX_SITE_BYTES}` };
+  if (bytes > limit) return { error: `the page is ${bytes} bytes; the limit is ${limit}` };
   const id = hex(8);
   await env.DB.prepare('INSERT INTO sites (id, login, html, created) VALUES (?, ?, ?, ?)').bind(id, login, content, new Date().toISOString()).run();
   await env.DB.prepare('DELETE FROM sites WHERE login = ? AND id NOT IN (SELECT id FROM sites WHERE login = ? ORDER BY created DESC LIMIT ?)').bind(login, login, SITES_PER_LOGIN).run();
@@ -646,7 +647,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const refund = async () => chosen.free && !m.answered() && refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
       return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
-    const job = runOverSocket(server, { gate, origin, fetchImpl, publish: (content) => publishSite(env, login, content, origin), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
+    const job = runOverSocket(server, { gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
     return socketPair ? json(200, { socket: true }) : new Response(null, { status: 101, webSocket: client });
   }
@@ -753,7 +754,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content) => publishSite(env, login, content, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});

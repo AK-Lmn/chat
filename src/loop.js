@@ -2,7 +2,11 @@ import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
 import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
 import { cleanShare, KEEP_DAYS, shareApp } from './share.js';
+import { cleanSite, LAYOUTS, photoPrompt, renderSite, SITE_HELP } from './sites.js';
 import { githubNote, scrub, setupGithub } from './github.js';
+
+// A layout page carries its fonts and a photo, so it may be bigger than a hand-written page.
+export const MAX_LAYOUT_BYTES = 1536 * 1024;
 // One task: a model plans, a computer from fleet does the work, the answer comes back. One task = one computer,
 // started on the first action and always stopped at the end.
 export const MAX_STEPS = 8;
@@ -23,6 +27,7 @@ Pick exactly one of these shapes:
 {"write": {"path": "<file>", "content": "<text>"}}
 {"read": "<file>"}
 {"publish": "<path to an index.html>"}
+{"site": {"layout": "<landing|portfolio|menu|event|prices>", "title": "<name>", ...}}
 {"video": {"title": "<short title>", "scenes": [{"text": "<words on screen, at most 10>", "say": "<one spoken sentence>"}]}}
 {"system": {"title": "<name>", "services": [{"name": "<lowercase-name>", "does": "<one short phrase>", "fields": ["<column>"]}]}}
 {"widget": {"kind": "<widget>", ...}}
@@ -34,7 +39,9 @@ Rules:
 - Put files under your home folder and write it as ~ (for example ~/site/index.html). Never type /home/<name> or /root: the user name differs per computer.
 - For more than one line of code, "write" a file first, then "run" it. Never put several lines into python3 -c.
 - Escape every " inside a string as \\" and every newline as \\n so the JSON is valid.
-- To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): "write" ONE self-contained index.html (inline CSS and JS, no CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence. If the user asks for separate files, "write" index.html, styles.css and app.js into one folder (for example ~/site), link them from index.html with <link rel="stylesheet" href="styles.css"> and <script src="app.js" defer></script>, and "publish" the index.html: chat puts the files next to it into the published page. Write each file once; never copy files to a second place.
+- To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): send ONE "site" action: chat draws a finished, good-looking, phone-friendly page from your words and publishes it (no computer needed), then "say" the link in one sentence. The "site" shapes:
+${SITE_HELP}
+- Only when no layout fits the page, or the user asks for their own HTML, CSS or separate files: "write" ONE self-contained index.html (inline CSS and JS, no CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence. If the user asks for separate files, "write" index.html, styles.css and app.js into one folder (for example ~/site), link them from index.html with <link rel="stylesheet" href="styles.css"> and <script src="app.js" defer></script>, and "publish" the index.html: chat puts the files next to it into the published page. Write each file once; never copy files to a second place.
 - When the answers say "What: A website", it is a show-only website, even with a menu, prices or an order or contact form: never build it with Flisk. A form on it does not save anything: its button says where to send the order or message ("Add your order email here").
 - Anything where people add, save, change or delete data (a CRM, a tracker, a shop, a booking tool, a to-do list, a dashboard with records) is an app, never a published page: build it with Flisk (below) so it has a real API, and share it. Never keep an app's data in localStorage and never publish a one-file copy of an app.
 - To make a video (the user asks for a video, a clip or a promo, or the answers say "What: A video"): send ONE "video" action with 4 to 6 scenes. Chat draws the scenes, records a voice-over and makes an mp4 on the computer (it takes a few minutes), then tells you the link. Then "say" the link in one sentence. Never invent a phone number, email address or street address.
@@ -176,6 +183,11 @@ export function parseAction(text) {
         const spec = cleanSystem(a.system);
         if (spec) return { type: 'system', spec };
       }
+      if (a?.site) {
+        const spec = cleanSite(a.site);
+        if (spec) return { type: 'site', spec };
+        return { type: 'bad', text: s, why: `A "site" needs "layout" (one of ${LAYOUTS.join(', ')}) and a "title". Send it again with both, or write and publish an index.html if no layout fits.` };
+      }
       if (a?.share !== undefined) {
         const spec = cleanShare(a.share);
         if (spec) return { type: 'share', spec };
@@ -186,7 +198,7 @@ export function parseAction(text) {
   }
   // An action that starts but never closes (the answer was cut off at the length limit, often a long file with no } in
   // it) is a bad reply to retry, never an answer to show.
-  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
+  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
 
   // If it still looks like a tool call or XML, force a retry.
   if (/DSML|<invoke|<parameter|tool_call|function_call/i.test(String(text))) {
@@ -437,8 +449,8 @@ export function cleanHistory(history) {
     });
 }
 
-// computer: { start, run, write, read, share, stop } (fleet.js, or the visitor's browser: browserpod.js). note: extra instructions about that computer. track: optional { started(podId), kept(podId, url), stopped(podId) }. publish(html) -> url. emit(event) gets every step.
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+// computer: { start, run, write, read, share, stop } (fleet.js, or the visitor's browser: browserpod.js). note: extra instructions about that computer. track: optional { started(podId), kept(podId, url), stopped(podId) }. publish(html, { limit }) -> url. photo(prompt) -> a data: URL or ''. emit(event) gets every step.
+export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -522,7 +534,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         emit({ type: 'retry' });
         messages.push({ role: 'user', content: reply.cut
           ? 'That reply was cut off: it was longer than the answer limit, so the action was lost. Send a shorter action: "write" a smaller file (under about 12 KB) and put the rest in other files (styles in styles.css, scripts in app.js), one "write" at a time.'
-          : 'That reply is not valid JSON. Send the same action again as one valid JSON object only (no tags, no XML, no explanations). Escape " as \\" inside strings.' });
+          : action.why || 'That reply is not valid JSON. Send the same action again as one valid JSON object only (no tags, no XML, no explanations). Escape " as \\" inside strings.' });
         continue;
       }
       // A server was started on the computer but nothing was published: the computer stops with this answer, so the user
@@ -560,7 +572,8 @@ export async function runTask({ task, history = [], github = undefined, origin =
           continue;
         }
       }
-      if (!podId) {
+      // A layout page is made on the Worker: it needs no computer.
+      if (!podId && action.type !== 'site') {
         emit({ type: 'pod_starting' });
         const made = await computer.start(order);
         if (made.error) {
@@ -653,7 +666,19 @@ export async function runTask({ task, history = [], github = undefined, origin =
             : `it works until ${new Date(r.expiresAt).toUTCString()} (about ${mins > 90 ? `${Math.round(mins / 60)} hours` : `${mins} minutes`}), when ${provider || 'the provider'} ends the computer${r.wakesOnVisit ? ' (until then it sleeps when idle and a visit wakes it)' : ''}; tell the user how long it lasts`;
           shown = { live: r.url, note: `This is the running app (website and API), kept running after you answer; ${lasts}. Say this link first.` };
         }
-      } else if (action.type === 'publish' && ranApp) {
+      } else if (action.type === 'site' && !ranApp) {
+        stats.copy = true;
+        emit({ type: 'site', layout: action.spec.layout, title: action.spec.title });
+        // The photo is a nice extra: when it cannot be drawn the page is published with its plain hero.
+        emit({ type: 'photo', title: action.spec.title });
+        const pic = await photo(photoPrompt(action.spec)).catch(() => '');
+        const made = await publish(renderSite(action.spec, pic || ''), { limit: MAX_LAYOUT_BYTES });
+        if (made.error) shown = { error: made.error };
+        else {
+          links.push(made.url);
+          shown = { published: made.url };
+        }
+      } else if ((action.type === 'publish' || action.type === 'site') && ranApp) {
         // An app with a running API is never shipped as a page: a copy of it cannot save anything.
         ours = true;
         shown = { error: shareRefused

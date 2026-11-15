@@ -7,6 +7,14 @@ CREATE TABLE IF NOT EXISTS sites (
 );
 CREATE INDEX IF NOT EXISTS sites_login ON sites (login, created);
 
+-- Photos drawn for layout pages, counted per day: one row per login and one for everybody (login '*').
+CREATE TABLE IF NOT EXISTS site_photos (
+  day TEXT NOT NULL,
+  login TEXT NOT NULL,
+  n INTEGER NOT NULL,
+  PRIMARY KEY (day, login)
+);
+
 -- Videos a task made: the mp4 as base64 parts (one D1 row holds at most 2 MB), 7 days, the newest 5 per login.
 CREATE TABLE IF NOT EXISTS videos (
   id TEXT NOT NULL,             -- 16 random hex characters: the link is unguessable
