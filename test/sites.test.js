@@ -52,7 +52,8 @@ describe('every layout draws a full page', () => {
     const long = 'x'.repeat(5000);
     const raw = { layout: 'menu', look: 'editorial', title: long, tagline: long, about: long, photo: long, hours: Array(50).fill(long), sections: Array(50).fill({ name: long, items: Array(50).fill({ name: long, price: long, text: long }) }) };
     expect(bytes(renderSite(cleanSite(raw), PHOTO))).toBeLessThan(MAX_LAYOUT_BYTES);
-  });
+    // Slow on a busy machine (about 5 s under load): the size is what is checked, not the speed.
+  }, 30000);
 });
 
 describe('looks, accents and the photo', () => {
