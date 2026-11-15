@@ -125,3 +125,39 @@ describe('the "What" guess from the request', () => {
     expect(guess('a booking app for my salon')).toBe('A small app');
   });
 });
+
+describe('a picture request is drawn by chat, never fetched from an image site (2026-11-15: a cat request got a woman)', () => {
+  const computer = { start: async () => ({ status: 201, data: { id: 'p1', provider: 'upstash' } }), stop: async () => ({ status: 200, data: {} }), run: async () => ({ status: 200, data: { exitCode: 0, stdout: '', stderr: '' } }), write: async () => ({ status: 200, data: {} }), read: async () => ({ error: 'none' }) };
+  const act = '{"picture": {"title": "Cat mirror selfie", "prompt": "a fluffy orange tabby cat taking a mirror selfie with a smartphone in a bathroom, soft light"}}';
+
+  test('the prompt tells the model to use the picture action and to say what it asked for, not what it shows', () => {
+    expect(SYSTEM).toContain('"picture" action');
+    expect(SYSTEM).toContain('pollinations');
+    expect(SYSTEM).toContain('You cannot see the picture');
+  });
+
+  test('the drawn picture is published inside a page that shows it', async () => {
+    const asked = [];
+    const published = [];
+    await runTask({
+      task: 'generate a photo of cat taking a mirror selfie', computer, origin: 'https://chat.test',
+      model: scripted(act, '{"say": "Here it is: https://chat.test/s/abc"}'),
+      photo: async (p) => (asked.push(p), 'data:image/jpeg;base64,QUJD'),
+      publish: async (html, o) => (published.push({ html, o }), { url: 'https://chat.test/s/abc' }),
+    });
+    expect(asked[0]).toContain('orange tabby cat');
+    expect(published).toHaveLength(1);
+    expect(published[0].html).toContain('<img src="data:image/jpeg;base64,QUJD"');
+    expect(published[0].html).toContain('alt="a fluffy orange tabby cat');
+  });
+
+  test('when the picture cannot be drawn nothing is published and the model is told not to claim one', async () => {
+    const published = [];
+    const seen = [];
+    const model = async (messages) => { seen.push(messages[messages.length - 1].content); return { text: seen.length === 1 ? act : '{"say": "I could not draw it now, try later."}' }; };
+    const r = await runTask({ task: 'draw a cat', computer, model, photo: async () => '', publish: async (h) => (published.push(h), { url: 'x' }) });
+    expect(published).toHaveLength(0);
+    expect(seen[1]).toContain('never give a link or claim a picture was made');
+    expect(r.answer).toContain('could not draw');
+  });
+});

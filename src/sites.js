@@ -334,3 +334,17 @@ ${foot}</div></body></html>`;
 <main>${ps.map(([lb, h, inner], i) => sec(lb, h, inner, i)).join('')}${sec('Contact', 'Get in touch', contactRows, ps.length, 'contact')}</main>
 ${foot}</body></html>`;
 }
+
+// A page that is one picture (the user asked for a photo, not a website): the image is in the page as data, so it
+// always loads, and the same bytes download as a file.
+export function renderPicture({ title, alt }, src) {
+  const t = esc(String(title || 'Picture').slice(0, 80));
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${t}</title><style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#111;color:#f5f0e8;font-family:system-ui,sans-serif;padding:24px;box-sizing:border-box}h1{font-size:1.6rem;margin:0 0 16px;text-align:center}img{max-width:100%;width:560px;height:auto;border-radius:0;box-shadow:0 10px 40px rgba(0,0,0,.6)}a{color:#f5b942;margin-top:16px}</style></head><body><h1>${t}</h1><img src="${esc(src)}" alt="${esc(String(alt || title || '').slice(0, 300))}"><a href="${esc(src)}" download="picture.jpg">Download the picture</a></body></html>`;
+}
+
+// {"picture": {"title", "prompt"}} from the model, or null.
+export function cleanPicture(raw) {
+  const prompt = String(raw?.prompt ?? '').trim().slice(0, 600);
+  if (prompt.length < 3) return null;
+  return { title: String(raw?.title || prompt).trim().slice(0, 80), prompt };
+}

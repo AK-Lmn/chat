@@ -4,7 +4,7 @@ import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
 import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
 import { cleanShare, KEEP_DAYS, shareApp } from './share.js';
-import { cleanSite, LAYOUTS, photoPrompt, renderSite, SITE_HELP } from './sites.js';
+import { cleanPicture, cleanSite, LAYOUTS, photoPrompt, renderPicture, renderSite, SITE_HELP } from './sites.js';
 import { githubNote, scrub, setupGithub } from './github.js';
 import { sourcesNote, splitPoints, wantsLookup, withSources } from './lookup.js';
 
@@ -44,6 +44,7 @@ Rules:
 - Put files under your home folder and write it as ~ (for example ~/site/index.html). Never type /home/<name> or /root: the user name differs per computer.
 - For more than one line of code, "write" a file first, then "run" it. Never put several lines into python3 -c.
 - Escape every " inside a string as \\" and every newline as \\n so the JSON is valid.
+- To make a picture, photo or drawing (the user asks for a photo, an image, a selfie, a logo picture: not a website): send ONE "picture" action: {"picture": {"title": "<short title>", "prompt": "<what it shows, one or two plain English sentences: subject, setting, light, style>"}}. Chat draws it with its own image model and publishes a page that shows it. Then "say" the link in one sentence and what you asked for. You cannot see the picture, so never describe what it shows and never say it is "real": say what you asked it to draw. Never fetch a picture from an image website on the computer (pollinations, picsum, unsplash...): you cannot control what comes back, and one asked for a cat returned a person.
 - To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): send ONE "site" action: chat draws a finished, good-looking, phone-friendly page from your words and publishes it (no computer needed), then "say" the link in one sentence. The "site" shapes:
 ${SITE_HELP}
 - Only when no layout fits the page, or the user asks for their own HTML, CSS or separate files: "write" ONE self-contained index.html (inline CSS and JS, no CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence. If the user asks for separate files, "write" index.html, styles.css and app.js into one folder (for example ~/site), link them from index.html with <link rel="stylesheet" href="styles.css"> and <script src="app.js" defer></script>, and "publish" the index.html: chat puts the files next to it into the published page. Write each file once; never copy files to a second place.
@@ -221,6 +222,11 @@ export function parseAction(text) {
         const spec = cleanSystem(a.system);
         if (spec) return { type: 'system', spec };
       }
+      if (a?.picture) {
+        const spec = cleanPicture(a.picture);
+        if (spec) return { type: 'picture', spec };
+        return { type: 'bad', text: s, why: 'A "picture" needs a "prompt": what it shows, in a sentence.' };
+      }
       if (a?.site) {
         const spec = cleanSite(a.site);
         if (spec) return { type: 'site', spec };
@@ -236,7 +242,7 @@ export function parseAction(text) {
   }
   // An action that starts but never closes (the answer was cut off at the length limit, often a long file with no } in
   // it) is a bad reply to retry, never an answer to show.
-  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
+  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|site|picture|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
 
   // If it still looks like a tool call or XML, force a retry.
   if (/DSML|<invoke|<parameter|tool_call|function_call/i.test(String(text))) {
@@ -768,6 +774,19 @@ export async function runTask({ task, history = [], github = undefined, origin =
             : `it works until ${new Date(r.expiresAt).toUTCString()} (about ${mins > 90 ? `${Math.round(mins / 60)} hours` : `${mins} minutes`}), when ${provider || 'the provider'} ends the computer${r.wakesOnVisit ? ' (until then it sleeps when idle and a visit wakes it)' : ''}; tell the user how long it lasts`;
           shown = { live: r.url, note: `This is the running app (website and API), kept running after you answer; ${lasts}. Say this link first.` };
         }
+      } else if (action.type === 'picture') {
+        stats.copy = true;
+        emit({ type: 'photo', title: action.spec.title });
+        const pic = await photo(action.spec.prompt).catch(() => '');
+        if (!pic) shown = { error: 'the picture could not be drawn now (the free daily limit may be used up, or the model was busy). "say" that plainly and offer to try again later; never give a link or claim a picture was made.' };
+        else {
+          const made = await publish(renderPicture({ title: action.spec.title, alt: action.spec.prompt }, pic), { limit: MAX_LAYOUT_BYTES });
+          if (made.error) shown = { error: made.error };
+          else {
+            links.push(made.url);
+            shown = { published: made.url, note: `The picture was drawn from this prompt: "${action.spec.prompt}". You have not seen it: say what you asked for, not what it shows.` };
+          }
+        }
       } else if (action.type === 'site' && !ranApp) {
         stats.copy = true;
         emit({ type: 'site', layout: action.spec.layout, title: action.spec.title });
@@ -821,7 +840,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         : shown.live
           ? `Shared. The running app's public link is ${shown.live}. ${shown.note}`
         : shown.published
-          ? `Published. The live link is ${shown.published}`
+          ? `Published. The live link is ${shown.published}${shown.note ? ` ${shown.note}` : ''}`
           : shown.video
             ? `The video is ready. Its link is ${shown.video}`
           : shown.exitCode !== undefined

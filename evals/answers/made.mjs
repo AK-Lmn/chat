@@ -12,6 +12,8 @@ const WANTS_PICTURE = /\b(photo|picture|image|pic|drawing|illustration|logo|self
 export function judgeMade({ q = '', answer = '', page = null }) {
   const findings = [];
   const text = String(answer);
+  if (/pollinations|image\.pollinations|picsum\.photos|source\.unsplash/i.test(`${text}\n${page ?? ''}`)) findings.push('outside-image-site: the picture came from an image website chat cannot control, and one returned a person for a cat');
+  if (/\b(real|actual)\s+(image|photo|picture)\b/i.test(text) && /\b(haven'?t|have not|not)\s+(looked|seen)/i.test(text)) findings.push('unseen-claim: the answer vouches for a picture it says it has not looked at');
   if (/^Sources: \[/m.test(text)) findings.push('stray-sources: a request to make something ends with a line of looked-up sources');
   if (page != null) {
     const broken = localImages(page);
