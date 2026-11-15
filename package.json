@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test test && node --test scripts/*.test.mjs",
+    "test": "bun test test && node --test scripts/*.test.mjs evals/answers/*.test.mjs",
+    "eval": "node evals/answers/run.mjs",
+    "eval:loop": "node evals/answers/loop.mjs",
     "check:radius": "node scripts/check-radius.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },

@@ -21,6 +21,8 @@ jobs:
         run: node scripts/check-radius.mjs
       - name: Radius gate tests
         run: node --test scripts/*.test.mjs
+      - name: Answer scorers agree with the labelled answers, and the loop keeps only real gains
+        run: node --test evals/answers/*.test.mjs
 
   test:
     runs-on: ubuntu-latest
