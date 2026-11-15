@@ -1,0 +1,6 @@
+{
+  "mean": 80.2,
+  "tolerance": 5,
+  "model": "@cf/meta/llama-3.1-8b-instruct-fast",
+  "date": "2026-11-15"
+}

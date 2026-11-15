@@ -45,4 +45,5 @@ test('plain questions get a grounded, structured answer, not a short generic one
   expect(SYSTEM).toContain('Never answer in one or two generic sentences');
   expect(SYSTEM).toContain('specific follow-up');
   expect(SYSTEM).not.toContain('Keep plain questions short');
+  expect(SYSTEM).not.toContain('ANSWER_STYLE');
 });

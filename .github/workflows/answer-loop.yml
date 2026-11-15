@@ -1,0 +1,67 @@
+name: Answer loop
+
+# A CI loop: every night it scores chat's answers, asks a model for a better prompt block, and opens a pull request
+# only when the rewrite scores higher on questions it was not tuned on. See evals/README.md.
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Rewrites to try
+        default: '3'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: answer-loop
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EVAL_URL: ${{ secrets.EVAL_URL }}
+      EVAL_KEY: ${{ secrets.EVAL_KEY }}
+      EVAL_MODEL: ${{ vars.EVAL_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast' }}
+      EDITOR_MODEL: ${{ vars.EDITOR_MODEL }}
+      EVAL_SAMPLES: ${{ vars.EVAL_SAMPLES || '2' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Skip when no model is set up
+        id: ready
+        run: |
+          if [ -z "$EVAL_URL" ] || [ -z "$EVAL_KEY" ]; then
+            echo "Set the EVAL_URL and EVAL_KEY secrets to turn the loop on." >> "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: The scorers still agree with the labelled answers
+        if: steps.ready.outputs.go == 'true'
+        run: node --test evals/answers/*.test.mjs
+      - name: Run the loop
+        if: steps.ready.outputs.go == 'true'
+        env:
+          ROUNDS: ${{ inputs.rounds || '3' }}
+        run: node evals/answers/loop.mjs --rounds "$ROUNDS"
+      - name: Open a pull request for a kept rewrite
+        if: steps.ready.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- src/answer-style.js; then echo "No better prompt this run."; exit 0; fi
+          branch="answer-loop/$(date -u +%Y%m%d-%H%M)"
+          git config user.name "flisk-answer-loop"
+          git config user.email "answer-loop@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add src/answer-style.js evals/answers/baseline.json
+          git commit -s -m "feat(chat): answer loop found a better answer prompt"
+          git push origin "$branch"
+          gh pr create --title "feat(chat): answer loop found a better answer prompt" --body-file evals/answers/last-run.md
