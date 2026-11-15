@@ -1,4 +1,4 @@
-import { ANALYSIS_STYLE } from './analysis-style.js';
+import { ANALYSIS_NOTE, ANALYSIS_STYLE, asksAnalysis } from './analysis-style.js';
 import { ANSWER_STYLE } from './answer-style.js';
 import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -509,9 +509,10 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
+  const analysis = asksAnalysis(task);
   // A plain question about the world: chat looks the subject up first, so the model has facts to take instead of inventing them.
   let sources = [];
   if (lookupFacts && wantsLookup(task, { building, files: files.length })) {
@@ -635,6 +636,11 @@ export async function runTask({ task, history = [], github = undefined, origin =
           }
           continue;
         }
+      }
+      // A research question never needs a computer: refuse run and write, so no computer starts and the model answers from the page it read.
+      if (analysis && (action.type === 'run' || action.type === 'write')) {
+        messages.push({ role: 'user', content: 'Refused: this is a research question and needs no computer. Read the site with the web widget, then reply with "say" in the full report format. Next action as JSON only.' });
+        continue;
       }
       // A layout page is made on the Worker: it needs no computer.
       if (!podId && action.type !== 'site') {
