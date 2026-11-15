@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { handle } from '../src/index.js';
 import { loadSettings, saveSettings } from '../src/keys.js';
-import { alertReview, reportLostReviews, cleanComments, diffLines, parseReview, verifySignature } from '../src/review.js';
+import { alertReview, reportLostReviews, cleanComments, diffLines, parseReview, priorityLine, verdictFor, verifySignature } from '../src/review.js';
 import { makeSession } from '../src/session.js';
 import { fakeD1 } from './d1.js';
 
@@ -19,7 +19,7 @@ const sign = async (secret, body) => {
 };
 const event = (over = {}) => ({ action: 'created', installation: { id: 7 }, repository: { full_name: 'o/r' }, issue: { number: 5, state: 'open', pull_request: {} }, comment: { id: 99, body: '@flisk-chat review pr', user: { login: 'odykyi', type: 'User' } }, ...over });
 
-async function setup({ permission = 'write', model = { summary: 'Adds eval.', verdict: 'request_changes', comments: [{ path: 'src/a.js', line: 3, body: 'eval is unsafe', suggestion: 'const c = parse(x);' }, { path: 'src/a.js', line: 99, body: 'not in the diff' }] }, reject = [], diff = DIFF, ...extra } = {}) {
+async function setup({ permission = 'write', model = { summary: 'Adds eval.', verdict: 'request_changes', comments: [{ path: 'src/a.js', line: 3, priority: 'P0', impact: 9, confidence: 9, ease: 8, body: 'eval is unsafe', suggestion: 'const c = parse(x);' }, { path: 'src/a.js', line: 99, body: 'not in the diff' }] }, reject = [], diff = DIFF, ...extra } = {}) {
   const env = { DB: fakeD1(SCHEMA), PUBLIC_ORIGIN: 'https://chat.test', SESSION_SECRET: 's', KEY_SECRET: 'k'.repeat(32), INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions', GITHUB_WEBHOOK_SECRET: 'whs', GITHUB_APP_ID: '123', GITHUB_APP_KEY: await pem(), FLEET_URL: 'https://fleet.test', FLEET_SERVICE_SECRET: 'x'.repeat(40), ...extra };
   const calls = [];
   const stopped = [];
@@ -56,6 +56,19 @@ describe('diff and answer parsing', () => {
     expect(c).toHaveLength(1);
     expect(c[0].body).toContain('```suggestion\ny\n```');
   });
+  test('every comment is labelled [P0]..[P3] with an ICE score and the worst comes first', () => {
+    const f = diffLines(DIFF);
+    const c = cleanComments([{ path: 'src/a.js', line: 1, body: 'nit', priority: 'P3', impact: 1, confidence: 5, ease: 9 }, { path: 'src/a.js', line: 2, body: 'bug', priority: 'p0', impact: 10, confidence: 8, ease: 5 }, { path: 'src/a.js', line: 3, body: 'no rating' }], f);
+    expect(c.map((x) => x.priority)).toEqual(['P0', 'P2', 'P3']);
+    expect(c[0].body).toMatch(/^\*\*\[P0\]\*\* ICE 400 /);
+    expect(c[1].body).toContain('ICE 125');
+    expect(priorityLine(c)).toContain('P0 x1 · P1 x0 · P2 x1 · P3 x1');
+  });
+  test('the verdict follows the priorities', () => {
+    expect(verdictFor('approve', [{ priority: 'P1' }])).toBe('request_changes');
+    expect(verdictFor('request_changes', [{ priority: 'P2' }])).toBe('comment');
+    expect(verdictFor('approve', [])).toBe('approve');
+  });
   test('a fenced or chatty answer still parses, and nonsense does not', () => {
     expect(parseReview('```json\n{"summary":"ok","verdict":"approve"}\n```').verdict).toBe('approve');
     expect(parseReview('Here: {"summary":"ok","verdict":"weird"}').verdict).toBe('comment');
@@ -73,6 +86,8 @@ describe('@flisk-chat review webhook', () => {
     expect(r.body).toContain('Adds eval.');
     expect(r.body).toContain('Flisk Wolf (free)');
     expect(r.comments).toHaveLength(1);
+    expect(r.comments[0].body).toMatch(/^\*\*\[P0\]\*\* ICE 648 /);
+    expect(r.body).toContain('**Priorities:** P0 x1');
     expect(r.comments[0]).toMatchObject({ path: 'src/a.js', line: 3, side: 'RIGHT' });
     expect(w.calls.filter((c) => c.host === 'inf.test')[0].auth).toBe('Bearer ik');
     expect(w.calls.some((c) => c.path.endsWith('/reactions'))).toBe(true);
