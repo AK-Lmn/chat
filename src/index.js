@@ -4,7 +4,7 @@ import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js
 import { THREE_SRC, TEXTURES } from './earth.js';
 import { fleetClient } from './fleet.js';
 import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, modelFrom, modelLabel, resolveModel, runTask, WORKERS_AI_PER_DAY } from './loop.js';
-import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, reviewsPage, THEME_IDS } from './page.js';
+import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
@@ -135,6 +135,25 @@ const SITE_DAYS = 7;
 // The model picker's list comes from inference (/v1/catalog), so a model added there shows up here with no chat change.
 // Read through the service binding (a Worker cannot fetch another Worker on the same domain), kept 5 minutes per isolate.
 let catalog = { at: 0, models: null };
+// The sandbox providers fleet routes to, by id and name, from fleet's public price list (cached 5 minutes), so a provider
+// added to fleet shows in the computer menu without a chat release. Falls back to the built-in list.
+let fleetNames = { at: 0, names: null };
+export async function loadFleetNames(env, fetchImpl = fetch, now = Date.now()) {
+  if (fleetNames.names && now - fleetNames.at < 300_000) return fleetNames.names;
+  try {
+    const fleet = (env.FLEET_URL || 'https://fleet.flisk.si').replace(/\/$/, '');
+    const res = await fetchImpl(`${fleet}/v1/prices`, { signal: AbortSignal.timeout(1500) });
+    const rows = res.ok ? (await res.json())?.prices : null;
+    if (!Array.isArray(rows) || !rows.length) throw new Error('no prices');
+    const names = { ...PROVIDER_NAMES };
+    for (const r of rows) if (r?.provider && r.provider !== 'demo' && typeof r.label === 'string') names[r.provider] = names[r.provider] || r.label.slice(0, 40);
+    fleetNames = { at: now, names };
+    return names;
+  } catch {
+    return fleetNames.names || PROVIDER_NAMES;
+  }
+}
+
 export async function loadCatalog(env, now = Date.now()) {
   if (catalog.models && now - catalog.at < 300_000) return catalog.models;
   if (!env.INFERENCE) return DEFAULT_MODELS;
@@ -562,7 +581,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   const anon = !!session && isAnon(session.login);
   const who = async (login) => (isAnon(login) ? `ip-${[...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(request.headers.get('cf-connecting-ip') || 'unknown')))].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('')}` : login);
   if (request.method === 'GET' && path === '/') {
-    const models = await loadCatalog(env);
+    const [models, names] = await Promise.all([loadCatalog(env), loadFleetNames(env, fetchImpl)]);
     const { theme, cookie } = pickTheme(request);
     // The session cookie goes first and the look cookie last.
     const withLook = (res) => {
@@ -573,7 +592,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const spot = placeFrom(request.cf);
     const here = spot ? { lat: Math.round(spot.latitude), lng: Math.round(spot.longitude) } : null;
     const pod = podBase(env);
-    const page = (opts) => html(appPage({ ...opts, models, theme, here, pod }), 200, { 'content-security-policy': cspWithPod(pod, origin) });
+    const page = (opts) => html(appPage({ ...opts, models, theme, here, pod, names }), 200, { 'content-security-policy': cspWithPod(pod, origin) });
     if (!session) {
       if (!env.SESSION_SECRET) return withLook(page({ login: null, connected: [] }));
       const login = newAnonLogin();
