@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { appPage } from '../src/page.js';
-import { asksImage, cleanSvg, inlineLocal, parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { asksImage, cleanSvg, imageIntent, inlineLocal, parseAction, runTask, SYSTEM } from '../src/loop.js';
 import { handle, saveImage } from '../src/index.js';
 import { fakeD1 } from './d1.js';
 
@@ -135,5 +135,27 @@ describe('picture buttons', () => {
     const page = appPage({ login: 'ann', connected: [] });
     expect(page).toContain("give(p,'png')");
     expect(page).toContain('if(!onlyPic)turn.appendChild(sv)');
+  });
+});
+
+describe('a small model decides, not the wording', () => {
+  const run = (classify) => {
+    let asked = 0;
+    return runTask({ task: 'draw me a dragon over Kyiv', classify, model: async () => (asked++, { text: '{"say":"here is the plan"}' }), computer: noComputer, publish: async () => { throw new Error('no'); }, photo: async () => '', saveImage: async () => ({ url: 'x' }), emit: () => {} }).then((r) => ({ r, asked }));
+  };
+  test('a message the wording nominates but the classifier calls "other" goes to the main model', async () => {
+    const { r, asked } = await run(async () => 'other');
+    expect(asked).toBe(1);
+    expect(r.answer).toContain('here is the plan');
+  });
+  test('a failing classifier also goes to the main model', async () => {
+    const { asked } = await run(async () => { throw new Error('down'); });
+    expect(asked).toBe(1);
+  });
+  test('imageIntent: one word "image" means image, anything else or no binding does not', async () => {
+    expect(imageIntent({})).toBeNull();
+    expect(await imageIntent({ AI: { run: async () => ({ response: 'image' }) } })('draw a cat')).toBe('image');
+    expect(await imageIntent({ AI: { run: async () => ({ response: 'other.' }) } })('draw up a plan')).toBe('other');
+    expect(await imageIntent({ AI: { run: async () => ({ choices: [{ message: { content: 'Image' } }] }) } })('draw a cat')).toBe('image');
   });
 });
