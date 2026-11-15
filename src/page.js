@@ -552,12 +552,13 @@ const MODELS=window.__MODELS__||[],IC=window.__ICONS__||{},LG=window.__LOGOS__||
 let history=[];
 const down=()=>{scroller.scrollTop=scroller.scrollHeight;};
 const node=(tag,cls,text)=>{const d=document.createElement(tag);if(cls)d.className=cls;if(text!=null)d.textContent=text;return d;};
-const inl=(p,s)=>{String(s).split(/(\\[[^\\]]+\\]+\\(https?:\\/\\/[^\\s)]+\\)|\\*\\*[^*]+\\*\\*|\\x60[^\\x60]+\\x60|https?:\\/\\/[^\\s)|]+)/).forEach(t=>{if(!t)return;
+const inl=(p,s)=>{String(s).split(/(\\[[^\\]]+\\]+\\(https?:\\/\\/[^\\s)]+\\)|\\*\\*[^*]+\\*\\*|\\x60[^\\x60]+\\x60|https?:\\/\\/[^\\s)|]+|(?<![\\w@/.-])[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)*\\.(?:com|dev|io|sh|org|net|ai|app|si|so|co)(?:\\/[^\\s)|,;]*)?(?![\\w@-]))/i).forEach(t=>{if(!t)return;
   const ml=/^\\[([^\\]]+)\\]+\\((https?:\\/\\/[^\\s)]+)\\)$/.exec(t);
   if(ml){const a=document.createElement('a');a.href=ml[2];a.target='_blank';a.rel='noopener';a.textContent=ml[1];p.appendChild(a);}
   else if(t.slice(0,2)==='**'&&t.length>4)p.appendChild(node('b','',t.slice(2,-2)));
   else if(t.charCodeAt(0)===96&&t.length>2)p.appendChild(node('code','',t.slice(1,-1)));
   else if(/^https?:\\/\\//.test(t)){const a=document.createElement('a');a.href=t;a.target='_blank';a.rel='noopener';a.textContent=t;p.appendChild(a);}
+  else if(/^[a-z0-9][a-z0-9.-]*\\.(com|dev|io|sh|org|net|ai|app|si|so|co)(\\/[^\\s)|,;]*)?$/i.test(t)){const a=document.createElement('a');a.href='https://'+t;a.target='_blank';a.rel='noopener';a.textContent=t+' \u2197';p.appendChild(a);}
   else p.appendChild(document.createTextNode(t));});};
 const LI=/^\\s*([-*]|\\d+[.)])\\s+(.*)/;
 const md=(n,text)=>{n.textContent='';const L=String(text).split('\\n');let i=0;

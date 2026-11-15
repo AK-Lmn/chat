@@ -30,3 +30,16 @@ describe('inline links in chat answers', () => {
     expect(k.some((n) => n.tag === '#text' && n.text.includes(']'))).toBe(false);
   });
 });
+
+describe('bare domains in chat answers', () => {
+  it('turns a bare product domain into a clickable link with an arrow', () => {
+    const k = render('Tilt: tilt.dev is a close rival');
+    const a = k.find((n) => n.tag === 'a');
+    expect(a?.href).toBe('https://tilt.dev');
+    expect(a?.text).toBe('tilt.dev ↗');
+  });
+  it('does not link an email address', () => {
+    const k = render('mail me at bob@example.com');
+    expect(k.some((n) => n.tag === 'a')).toBe(false);
+  });
+});
