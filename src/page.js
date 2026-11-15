@@ -591,6 +591,7 @@ const skyIcon=(kind,size)=>{const s=sv('svg',{viewBox:'0 0 40 40',width:size,hei
 const fmtT=(v,u)=>v==null?'–':Math.round(v)+'°';
 const dayName=(d,i)=>i===0?'Today':new Date(d+'T12:00:00').toLocaleDateString(undefined,{weekday:'short'});
 const WIDGET_DRAW={
+  web(d){const c=node('div','wg wgweb');c.appendChild(node('span','','Read '+d.host+(d.count?' ('+d.count+' items)':'')));return c;},
   weather(d){const c=node('div','wg wgw');
     const top=node('div','wtop'),big=node('div','wbig');big.appendChild(skyIcon(d.now.icon,56));big.appendChild(node('span','wtemp',fmtT(d.now.temp)));big.appendChild(node('span','wunit',d.unit));
     const meta=node('div','wmeta');[d.now.sky,'Feels like '+fmtT(d.now.feels),'Humidity '+(d.now.humidity==null?'–':d.now.humidity+'%'),'Wind '+(d.now.wind==null?'–':Math.round(d.now.wind)+' '+d.wind)].forEach(t=>meta.appendChild(node('span','',t)));

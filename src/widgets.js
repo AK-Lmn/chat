@@ -140,7 +140,35 @@ async function grow(input, { fetch, citable }) {
   };
 }
 
+// Reads a public web page or feed from the Worker. The in-tab computer has no internet, and a cloud one may be slow:
+// this works everywhere. RSS/Atom gives titles and links; HTML gives its text. Nothing is drawn; the model gets the text.
+export async function web({ url }, { fetch }) {
+  let u;
+  try { u = new URL(url); } catch { return { error: 'that is not a web address' }; }
+  if (!/^https?:$/.test(u.protocol) || /^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[)/.test(u.hostname)) return { error: 'only public http(s) addresses' };
+  const r = await fetch(u.href, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; FliskChat/1.0)', accept: '*/*' }, redirect: 'follow' }).catch((e) => ({ error: String(e?.message || e) }));
+  if (r.error) return { error: `could not reach ${u.hostname}: ${r.error}. Try another address.` };
+  if (!r.ok) return { error: `${u.hostname} answered ${r.status}. Try another address.` };
+  const body = (await r.text().catch(() => '')).slice(0, 400000);
+  const dec = (t) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/\s+/g, ' ').trim();
+  const items = [...body.matchAll(/<(item|entry)\b[\s\S]*?<\/\1>/gi)].slice(0, 15).map((m) => {
+    const x = m[0];
+    const title = dec(x.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
+    const link = dec(x.match(/<link[^>]*>([\s\S]*?)<\/link>/i)?.[1] || '') || x.match(/<link[^>]*href="([^"]+)"/i)?.[1] || '';
+    return title ? `- ${title}${link ? ` (${link})` : ''}` : '';
+  }).filter(Boolean);
+  const text = items.length ? items.join('\n') : dec(body.replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, ' ')).slice(0, 6000);
+  if (!text) return { error: `${u.hostname} gave an empty page. Try another address.` };
+  return { data: { url: u.href, host: u.hostname, count: items.length }, summary: `${u.href}:\n${text}` };
+}
+
 export const WIDGETS = {
+  web: {
+    id: 'web', title: 'Web',
+    prompt: '{"widget": {"kind": "web", "url": "<public https address>"}} reads a web page, an RSS feed or a JSON API without a key and gives you its text (feeds as titles with links). Works with no computer and with the in-tab computer that has no internet. Use it for news (https://feeds.bbci.co.uk/news/rss.xml, https://hnrss.org/frontpage, https://news.google.com/rss), prices, lookups and any page; if one address fails, try another.',
+    clean: (i) => (str(i.url, 500) ? { url: str(i.url, 500) } : null),
+    run: web,
+  },
   weather: {
     id: 'weather', title: 'Weather',
     prompt: '{"widget": {"kind": "weather", "place": "<city>", "units": "c"}} for the weather or a forecast anywhere ("units": "f" for Fahrenheit and mph). Draws a card with now, the next hours and 7 days. No computer is needed. Then "say" two or three bullets on what it means (a coat, rain, a good day for a walk); do not repeat the numbers.',
