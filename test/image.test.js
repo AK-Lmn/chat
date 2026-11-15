@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { appPage } from '../src/page.js';
-import { asksImage, inlineLocal, parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { asksImage, cleanSvg, inlineLocal, parseAction, runTask, SYSTEM } from '../src/loop.js';
 import { handle, saveImage } from '../src/index.js';
 import { fakeD1 } from './d1.js';
 
@@ -97,5 +97,35 @@ describe('the chat page shows the picture', () => {
     expect(page).toContain("if(im){n.appendChild(picture(im[2],im[1]));i++;continue;}");
     expect(page).toContain("step('Drawing the picture','','image')");
     for (const [, s] of page.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(s)).not.toThrow();
+  });
+});
+
+describe('when the drawing model has no budget, the chat model draws the picture as SVG code', () => {
+  const SVG = `<svg viewBox="0 0 800 800"><defs><radialGradient id="g"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#a50"/></radialGradient></defs><rect width="800" height="800" fill="#cde"/><circle cx="400" cy="400" r="200" fill="url(#g)" onclick="x()"/><ellipse cx="400" cy="620" rx="220" ry="40" fill="#0003"/><path d="M200 300 L400 100 L600 300Z" fill="#c60"/><script>alert(1)</script><image href="https://evil.test/a.png"/>${'<circle cx="1" cy="1" r="1"/>'.repeat(10)}</svg>`;
+  test('cleanSvg keeps the shapes and drops script, handlers and outside links', () => {
+    const out = cleanSvg('Here you go:\n```svg\n' + SVG + '\n```');
+    expect(out).toContain('radialGradient');
+    expect(out).toContain('xmlns="http://www.w3.org/2000/svg"');
+    expect(out).not.toMatch(/script|onclick|evil\.test|<image/i);
+    expect(cleanSvg('no picture here')).toBeNull();
+    expect(cleanSvg('<svg><rect/></svg>')).toBeNull();
+  });
+
+  test('a picture request whose photo fails is drawn by the chat model and kept as an svg', async () => {
+    let saved = null;
+    const r = await runTask({ task: 'generate a photo of a red fox in the snow', model: async () => ({ text: SVG }), computer: noComputer, photo: async () => '', saveImage: async (pic) => ((saved = pic), { url: 'https://chat.flisk.si/i/0123456789abcdef.svg' }) });
+    expect(saved).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(r.answer).toContain('![Here is a red fox in the snow.](https://chat.flisk.si/i/0123456789abcdef.svg)');
+  });
+
+  test('saved svg is served with a locked-down policy', async () => {
+    const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
+    const env = { DB: fakeD1(SCHEMA), PUBLIC_ORIGIN: 'https://chat.flisk.si' };
+    const out = await saveImage(env, 'odykyi', `data:image/svg+xml;base64,${btoa(cleanSvg(SVG))}`, 'fox', 'https://chat.flisk.si');
+    expect(out.url).toMatch(/\/i\/[0-9a-f]{16}\.svg$/);
+    const res = await handle(new Request(out.url), env, {});
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/svg+xml');
+    expect(res.headers.get('content-security-policy')).toContain('sandbox');
   });
 });

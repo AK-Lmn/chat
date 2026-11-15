@@ -362,12 +362,12 @@ export async function saveVideo(env, login, parts, title, origin) {
 // A picture a task drew (the "image" action): kept at its own unguessable link, so the chat history holds a short link
 // instead of the picture. IMAGE_DAYS, the newest IMAGES_PER_LOGIN per login.
 export async function saveImage(env, login, dataUrl, prompt, origin) {
-  const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
+  const m = /^data:image\/(jpeg|png|webp|svg\+xml);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl));
   if (!m) return { error: 'the picture is not an image' };
   const id = hex(8);
   await env.DB.prepare('INSERT INTO images (id, login, type, prompt, data, created) VALUES (?, ?, ?, ?, ?, ?)').bind(id, login, m[1], String(prompt || '').slice(0, 300), m[2], new Date().toISOString()).run();
   await env.DB.prepare('DELETE FROM images WHERE login = ? AND id NOT IN (SELECT id FROM images WHERE login = ? ORDER BY created DESC LIMIT ?)').bind(login, login, IMAGES_PER_LOGIN).run();
-  return { url: `${origin}/i/${id}.${m[1] === 'jpeg' ? 'jpg' : m[1]}` };
+  return { url: `${origin}/i/${id}.${m[1] === 'jpeg' ? 'jpg' : m[1] === 'svg+xml' ? 'svg' : m[1]}` };
 }
 
 // Computers chat started. Every one is written down when it starts, so none is left running by accident: a task's computer is
@@ -565,11 +565,11 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     return siteResponse(row);
   }
 
-  const im = /^\/i\/([a-f0-9]{16})\.(jpg|png|webp)$/.exec(path);
+  const im = /^\/i\/([a-f0-9]{16})\.(jpg|png|webp|svg)$/.exec(path);
   if (im && (request.method === 'GET' || request.method === 'HEAD')) {
     const row = await env.DB.prepare('SELECT type, data, created FROM images WHERE id = ?').bind(im[1]).first().catch(() => null);
     if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(messagePage('Picture not found', 'This picture expired or never existed.'), 404);
-    return new Response(request.method === 'HEAD' ? null : unb64(row.data), { headers: { 'content-type': `image/${row.type}`, 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' } });
+    return new Response(request.method === 'HEAD' ? null : unb64(row.data), { headers: { 'content-type': `image/${row.type}`, ...(row.type === 'svg+xml' ? { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}), 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' } });
   }
 
   const vm = /^\/v\/([a-f0-9]{16})\.mp4$/.exec(path);
