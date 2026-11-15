@@ -13,6 +13,9 @@ best better good bad great worst worse favourite favorite greatest top right wro
 
 const GREETING = /^\s*(hi|hello|hey|yo|thanks|thank you|thx|ok|okay|bye|good (morning|evening|night)|привіт|дякую|добрий день|hola|gracias)\b[\s!.?]*$/i;
 // Live data has its own playbooks (news, prices, weather), and an encyclopedia is the wrong source for it.
+// A request to make something (a picture, a logo, a page) is not a question about the world: looking it up put
+// "Sources: Selfie" under "generate a photo of cat taking a mirror selfie".
+const MAKE = /^\s*(?:(?:please|pls|can you|could you|will you|i want you to|будь ласка)[\s,]+)*(?:(?:generate|draw|paint|sketch|render|make|create|design|згенеруй|намалюй|зроби|створи)(?!\p{L})|(?:an?\s+|one\s+)?(?:photo|image|pic|drawing|illustration|logo|фото|картинка|малюнок|зображення)\s+(?:of|з|із)\s)/iu;
 const LIVE = /\b(news|headlines?|weather|forecast|price|bitcoin|btc|eth|crypto|stock|exchange rate|today|tonight|tomorrow|right now|latest|score)\b/i;
 
 const words = (s) => String(s ?? '').toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'+#.-]*/gu) || [];
@@ -30,7 +33,7 @@ export const wikiFor = (task) => (/[Ѐ-ӿ]/.test(String(task ?? '')) ? 'uk' : 'e
 export function wantsLookup(task, { building = false, files = 0 } = {}) {
   const t = String(task ?? '').trim();
   if (building || files || !t || t.length > 400) return false;
-  if (GREETING.test(t) || LIVE.test(t) || /https?:\/\//i.test(t)) return false;
+  if (GREETING.test(t) || LIVE.test(t) || MAKE.test(t) || /https?:\/\//i.test(t)) return false;
   // Worth a search when the question names something (a capital letter that does not open a sentence) or has enough
   // subject words to find one page. "ok cool" and "why is the sky blue" have neither, and a search for them finds
   // a film and a colour.

@@ -56,3 +56,12 @@ For a plain question that names something, chat searches Wikipedia before the mo
 the sources under the answer. `EVAL_LOOKUP=1 node evals/answers/run.mjs` answers the same way and counts the years in
 the answers that are in no source and not in the question. That count is a report, not a gate: it reads years only,
 so an invented name or quote still passes.
+
+## Things chat made (pictures, pages)
+
+`answers/made.mjs` does the checks a person does by eye on something chat made: every picture on the page loads, the
+answer does not say a picture was made when none shows, and no looked-up sources are added to a request to make
+something. `answers/made.json` holds the labelled cases; each bad one is a real complaint (the first: the cat mirror
+selfie of 2026-11-15, published with a broken image). CI runs them with the other answer checks.
+
+To check a published page by hand: `node evals/answers/made.mjs https://chat.flisk.si/s/<id>` (exit 1 when a picture is broken).
