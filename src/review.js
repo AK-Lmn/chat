@@ -67,7 +67,7 @@ export function diffLines(diff) {
 
 function prompt(diff, cut) {
   return [
-    { role: 'system', content: 'You review a GitHub pull request diff. Find real bugs, security problems and missing tests; skip style nits. Answer with ONE JSON object only: {"summary": "3-6 plain sentences: what changed, the risks, what to test", "verdict": "approve" | "request_changes" | "comment", "comments": [{"path": "file path from the diff", "line": <line number in the NEW file, a line shown in the diff>, "body": "the problem and why", "suggestion": "optional replacement for that one line"}]}. At most 8 comments. Use "request_changes" only for a real bug, "approve" only if you found nothing that matters.' },
+    { role: 'system', content: 'You review a GitHub pull request diff. Find real bugs, security problems and missing tests; skip style nits. Rate EVERY comment: "priority" P0 = breaks production, data loss or a security hole, must fix before merge; P1 = a real bug or a missing test on a changed behavior, fix before merge; P2 = should fix, a risk or a gap that can follow in a later PR; P3 = nice to have, optional. Also give "impact", "confidence" and "ease" (whole numbers 1 to 10, ease 10 = a one-line fix) so the ICE score can be computed. Answer with ONE JSON object only: {"summary": "3-6 plain sentences: what changed, the risks, what to test", "verdict": "approve" | "request_changes" | "comment", "comments": [{"path": "file path from the diff", "line": <line number in the NEW file, a line shown in the diff>, "priority": "P0" | "P1" | "P2" | "P3", "impact": 1-10, "confidence": 1-10, "ease": 1-10, "body": "the problem and why", "suggestion": "optional replacement for that one line"}]}. At most 8 comments. Use "request_changes" only if a P0 or P1 exists, "approve" only if you found nothing that matters.' },
     { role: 'user', content: `${diff}${cut ? '\n\n(The diff was cut here because it is too long; say so in the summary.)' : ''}` },
   ];
 }
@@ -85,13 +85,37 @@ export function parseReview(text) {
   }
 }
 
-// Keep only comments GitHub will accept, and turn a suggestion into a suggestion block.
+export const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
+const score = (v) => Math.min(10, Math.max(1, Math.round(Number(v)) || 5));
+const priorityOf = (v) => (PRIORITIES.includes(String(v).toUpperCase()) ? String(v).toUpperCase() : 'P2');
+
+// Keep only comments GitHub will accept, label each [P0]..[P3] with its ICE score (impact x confidence x ease), worst first.
 export function cleanComments(comments, files) {
   return comments
-    .map((c) => ({ path: String(c?.path || '').replace(/^b\//, ''), line: Number(c?.line), body: String(c?.body || '').trim().slice(0, 1500), suggestion: typeof c?.suggestion === 'string' ? c.suggestion.slice(0, 1500) : '' }))
+    .map((c) => {
+      const impact = score(c?.impact), confidence = score(c?.confidence), ease = score(c?.ease);
+      return { path: String(c?.path || '').replace(/^b\//, ''), line: Number(c?.line), priority: priorityOf(c?.priority), impact, confidence, ease, ice: impact * confidence * ease, body: String(c?.body || '').trim().slice(0, 1500), suggestion: typeof c?.suggestion === 'string' ? c.suggestion.slice(0, 1500) : '' };
+    })
     .filter((c) => c.body && files[c.path]?.has(c.line))
+    .sort((x, y) => PRIORITIES.indexOf(x.priority) - PRIORITIES.indexOf(y.priority) || y.ice - x.ice)
     .slice(0, 8)
-    .map((c) => ({ path: c.path, line: c.line, side: 'RIGHT', body: c.suggestion ? `${c.body}\n\n\`\`\`suggestion\n${c.suggestion.replace(/\n+$/, '')}\n\`\`\`` : c.body }));
+    .map((c) => {
+      const text = `**[${c.priority}]** ICE ${c.ice} (impact ${c.impact} x confidence ${c.confidence} x ease ${c.ease})\n\n${c.body}`;
+      return { path: c.path, line: c.line, side: 'RIGHT', priority: c.priority, ice: c.ice, body: c.suggestion ? `${text}\n\n\`\`\`suggestion\n${c.suggestion.replace(/\n+$/, '')}\n\`\`\`` : text };
+    });
+}
+
+// The verdict follows the priorities, not the model's mood: P0/P1 block the merge, anything else cannot.
+export function verdictFor(verdict, comments) {
+  const blocking = comments.some((c) => c.priority === 'P0' || c.priority === 'P1');
+  if (blocking) return 'request_changes';
+  return verdict === 'request_changes' ? 'comment' : verdict;
+}
+
+export function priorityLine(comments) {
+  if (!comments.length) return '';
+  const n = (p) => comments.filter((c) => c.priority === p).length;
+  return `**Priorities:** ${PRIORITIES.map((p) => `${p} x${n(p)}`).join(' · ')}. P0 breaks production or security, P1 a real bug or missing test, P2 should fix, P3 optional. ICE = impact x confidence x ease (1 to 1000), higher goes first.\n\n`;
 }
 
 export async function reviewPullRequest(env, event, { fetchImpl = fetch, overLimit = async () => false, now = Date.now() } = {}) {
@@ -157,8 +181,9 @@ export async function reviewPullRequest(env, event, { fetchImpl = fetch, overLim
 
   const foot = `\n\n<sub>Reviewed by ${who} on request of @${sender}${cut ? `, first ${Math.round(cap / 1000)} KB of the diff only` : ''}. ${saved ? '' : `Use your own model: ${env.PUBLIC_ORIGIN}/reviews. `}A model can be wrong: read before you merge.</sub>`;
   const comments = cleanComments(review.comments, files);
-  const event_ = { approve: 'APPROVE', request_changes: 'REQUEST_CHANGES', comment: 'COMMENT' }[review.verdict];
-  const post = (e, c) => api(`/repos/${repo}/pulls/${issue.number}/reviews`, { method: 'POST', body: { event: e, body: review.summary + foot, ...(c.length ? { comments: c } : {}) } });
+  const verdict = verdictFor(review.verdict, comments);
+  const event_ = { approve: 'APPROVE', request_changes: 'REQUEST_CHANGES', comment: 'COMMENT' }[verdict];
+  const post = (e, c) => api(`/repos/${repo}/pulls/${issue.number}/reviews`, { method: 'POST', body: { event: e, body: priorityLine(comments) + review.summary + foot, ...(c.length ? { comments: c.map(({ priority, ice, ...rest }) => rest) } : {}) } });
   let res = await post(event_, comments);
   // A bot cannot approve its own author's PR, and one bad inline comment fails the whole review: fall back step by step.
   if (!res.ok && comments.length) res = await post(event_, []);
@@ -166,7 +191,7 @@ export async function reviewPullRequest(env, event, { fetchImpl = fetch, overLim
   if (!res.ok) await say(`@${sender} ${review.summary}${foot}`);
   let run = null;
   if (!event.auto && commandOf(comment.body) === 'review run') run = await startRun(env, { repo, pr: issue.number, installationId: installation.id, sender, isPrivate: !!repository.private, fetchImpl, say });
-  return { posted: true, ai: who, verdict: review.verdict, comments: comments.length, run };
+  return { posted: true, ai: who, verdict, comments: comments.length, run };
 }
 
 // A review that failed or never answered goes to the private Discord channel (env.DISCORD_ERRORS_WEBHOOK). Never throws.
