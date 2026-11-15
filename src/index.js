@@ -486,6 +486,18 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   const origin = env.PUBLIC_ORIGIN || url.origin;
 
   if (request.method === 'GET' && path === '/og.png') return new Response(OG_PNG, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path.startsWith('/logo/')) {
+    const host = decodeURIComponent(path.slice(6)).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(host) || host.length > 100) return new Response(null, { status: 404 });
+    for (const u of [`https://icons.duckduckgo.com/ip3/${host}.ico`, `https://www.google.com/s2/favicons?domain=${host}&sz=64`]) {
+      try {
+        const r = await fetchImpl(u, { cf: { cacheTtl: 604800, cacheEverything: true } });
+        const type = r.headers.get('content-type') || '';
+        if (r.ok && /^image\//.test(type)) return new Response(r.body, { headers: { 'content-type': type, 'cache-control': 'public, max-age=604800' } });
+      } catch {}
+    }
+    return new Response(null, { status: 404, headers: { 'cache-control': 'public, max-age=3600' } });
+  }
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain' } });
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml' } });

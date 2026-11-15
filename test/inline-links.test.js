@@ -4,7 +4,7 @@ import { appPage } from '../src/page.js';
 // Pull the page's own inline formatter out of the served HTML and run it on a tiny DOM stub.
 function render(s) {
   const html = String(appPage({ login: 'x' }));
-  const start = html.indexOf('const inl=');
+  const start = html.indexOf('const lg=');
   const src = html.slice(start, html.indexOf('const LI=', start));
   const mk = (tag) => ({ tag, kids: [], attrs: {}, appendChild(c) { this.kids.push(c); }, set textContent(v) { this.text = v; } });
   const document = { createElement: mk, createTextNode: (t) => ({ tag: '#text', text: t }) };
@@ -41,5 +41,13 @@ describe('bare domains in chat answers', () => {
   it('does not link an email address', () => {
     const k = render('mail me at bob@example.com');
     expect(k.some((n) => n.tag === 'a')).toBe(false);
+  });
+});
+
+describe('logos next to links', () => {
+  it('puts a same-origin logo image before a product link', () => {
+    const k = render('[Tilt](https://www.tilt.dev/x)');
+    expect(k[0].tag).toBe('img');
+    expect(k[0].src).toBe('/logo/tilt.dev');
   });
 });
