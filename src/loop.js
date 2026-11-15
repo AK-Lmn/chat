@@ -463,7 +463,7 @@ export function asksToBuild(task, history = []) {
 }
 // Playbooks ("skills") matched to the task: known keyless sources, so the model does not reach for an API that needs a key.
 export const PLAYBOOKS = [
-  { when: /\b(news|headlines?|today'?s? stories)\b/i, text: 'News: curl -s https://feeds.bbci.co.uk/news/rss.xml (or https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en, https://hnrss.org/frontpage) and pull <title> and <link> with grep/sed or python3 xml.etree. No key needed. Never use newsapi.org.' },
+  { when: /\b(news|headlines?|today'?s? stories)\b/i, text: 'News: {"widget": {"kind": "web", "url": "https://feeds.bbci.co.uk/news/rss.xml"}} first (or curl -s https://feeds.bbci.co.uk/news/rss.xml (or https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en, https://hnrss.org/frontpage) and pull <title> and <link> with grep/sed or python3 xml.etree. No key needed. Never use newsapi.org.' },
   { when: /\b(bitcoin|btc|eth|crypto|coin)\b/i, text: 'Crypto prices: curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd" (no key).' },
   { when: /\b(stock|share price|ticker|nasdaq|s&p)\b/i, text: 'Stocks: curl -s "https://stooq.com/q/l/?s=aapl.us&f=sd2t2ohlcv&h&e=csv" (no key; ticker.us).' },
   { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: curl -s https://open.er-api.com/v6/latest/USD (no key).' },

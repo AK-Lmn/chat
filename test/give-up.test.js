@@ -40,3 +40,12 @@ test('playbooks match the task', () => {
   expect(playbooksFor('bitcoin price')).toContain('coingecko');
   expect(playbooksFor('write me a poem')).toBe('');
 });
+
+import { web } from '../src/widgets.js';
+test('the web widget reads an RSS feed as titles with links', async () => {
+  const rss = '<rss><channel><title>BBC</title><item><title><![CDATA[Big story]]></title><link>https://bbc.co.uk/1</link></item></channel></rss>';
+  const r = await web({ url: 'https://feeds.bbci.co.uk/news/rss.xml' }, { fetch: async () => new Response(rss) });
+  expect(r.summary).toContain('- Big story (https://bbc.co.uk/1)');
+  expect((await web({ url: 'http://localhost/x' }, { fetch })).error).toContain('public');
+  expect((await web({ url: 'https://x.test' }, { fetch: async () => new Response('', { status: 403 }) })).error).toContain('another address');
+});
