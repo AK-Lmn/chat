@@ -49,3 +49,10 @@ facts you are sure of. A question that came from a bad real answer also goes int
 - The scores read shape and known facts. An answer with an invented fact that is not on a question's list still passes.
 - Scores differ between models: compare with a baseline on the same model.
 - 16 questions is a small set. Grow it from real chats before trusting small gains.
+
+## Fact lookup
+
+For a plain question that names something, chat searches Wikipedia before the model answers (`src/lookup.js`) and puts
+the sources under the answer. `EVAL_LOOKUP=1 node evals/answers/run.mjs` answers the same way and counts the years in
+the answers that are in no source and not in the question. That count is a report, not a gate: it reads years only,
+so an invented name or quote still passes.

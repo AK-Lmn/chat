@@ -3,6 +3,7 @@
 // to src/answer-style.js only when it wins on score. Run on a schedule by .github/workflows/answer-loop.yml, which
 // turns a kept rewrite into a pull request.
 //   node evals/answers/loop.mjs --rounds 3
+import { lookup } from '../../src/lookup.js';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { BASELINE_FILE, config, currentStyle, evaluate, improve, loadBaseline, loadQuestions, makeAsk, overall, proposeStyle, writeStyle } from './lib.mjs';
 
@@ -14,7 +15,7 @@ const questions = loadQuestions();
 const ask = makeAsk(cfg);
 const out = await improve({
   questions, style: currentStyle(), rounds, log: (m) => console.log(m),
-  measure: (qs, style) => evaluate(qs, style, ask, { samples: cfg.samples }),
+  measure: (qs, style) => evaluate(qs, style, ask, { samples: cfg.samples, facts: cfg.lookup ? (q) => lookup(q) : null }),
   propose: (style, summary) => proposeStyle(style, summary, ask, cfg.editor),
 });
 const before = overall(questions, out.start.train, out.start.holdout);

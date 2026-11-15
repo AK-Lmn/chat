@@ -3,7 +3,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseAction, SYSTEM } from '../../src/loop.js';
 import { ANSWER_STYLE } from '../../src/answer-style.js';
-import { summarize } from './score.mjs';
+import { sourcesNote, splitPoints, wantsLookup, withSources } from '../../src/lookup.js';
+import { summarize, unsupportedYears } from './score.mjs';
 
 const here = (f) => new URL(f, import.meta.url);
 export const STYLE_FILE = here('../../src/answer-style.js');
@@ -14,7 +15,7 @@ export const currentStyle = () => ANSWER_STYLE;
 
 // EVAL_URL is any OpenAI-compatible chat completions address (Flisk Inference, Workers AI, OpenRouter...).
 export function config(env = process.env) {
-  const cfg = { url: env.EVAL_URL, key: env.EVAL_KEY, model: env.EVAL_MODEL, editor: env.EDITOR_MODEL || env.EVAL_MODEL, samples: Math.max(1, Number(env.EVAL_SAMPLES) || 1) };
+  const cfg = { url: env.EVAL_URL, key: env.EVAL_KEY, model: env.EVAL_MODEL, editor: env.EDITOR_MODEL || env.EVAL_MODEL, samples: Math.max(1, Number(env.EVAL_SAMPLES) || 1), lookup: env.EVAL_LOOKUP === '1' };
   const missing = ['url', 'key', 'model'].filter((k) => !cfg[k]).map((k) => `EVAL_${k.toUpperCase()}`);
   return { cfg, missing };
 }
@@ -36,27 +37,29 @@ export function makeAsk(cfg, fetchImpl = fetch) {
 
 // One question the way chat asks it: the real system prompt with `style` in place of the current block. The eval has
 // no computer, so a model that reaches for one is told so once and must answer.
-export async function answerFor(question, style, ask) {
-  const messages = [{ role: 'system', content: SYSTEM.replace(ANSWER_STYLE, style) }, { role: 'user', content: question.q }];
+// facts(q) -> sources, the same lookup chat does before it answers (src/lookup.js). Without it the model answers from memory.
+export async function answerFor(question, style, ask, facts = null) {
+  const sources = facts && wantsLookup(question.q) ? await Promise.resolve(facts(question.q)).catch(() => []) || [] : [];
+  const messages = [{ role: 'system', content: SYSTEM.replace(ANSWER_STYLE, style) + sourcesNote(sources) }, { role: 'user', content: question.q }];
   for (let turn = 0; turn < 2; turn++) {
     const raw = await ask(messages);
     const action = parseAction(raw);
-    if (action?.type === 'say') return String(action.text || '');
+    if (action?.type === 'say') return { answer: withSources(splitPoints(String(action.text || '')), sources), sources };
     messages.push({ role: 'assistant', content: raw }, { role: 'user', content: 'Result: this test has no computer and no widgets. Reply with "say" now, from what you know. JSON only.' });
   }
-  return '';
+  return { answer: '', sources };
 }
 
-export async function evaluate(questions, style, ask, { samples = 1, parallel = 4 } = {}) {
+export async function evaluate(questions, style, ask, { samples = 1, parallel = 4, facts = null } = {}) {
   const jobs = questions.flatMap((question) => Array.from({ length: samples }, () => question));
   const rows = new Array(jobs.length);
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(parallel, jobs.length) }, async () => {
     while (next < jobs.length) {
       const i = next++;
-      let answer = '';
-      try { answer = await answerFor(jobs[i], style, ask); } catch (e) { answer = ''; rows[i] = { error: String(e?.message || e) }; }
-      rows[i] = { ...rows[i], question: jobs[i], answer };
+      let got = { answer: '', sources: [] };
+      try { got = await answerFor(jobs[i], style, ask, facts); } catch (e) { rows[i] = { error: String(e?.message || e) }; }
+      rows[i] = { ...rows[i], question: jobs[i], answer: got.answer, sources: got.sources, unsupported: unsupportedYears(jobs[i], got.answer, got.sources) };
     }
   }));
   const failed = rows.filter((r) => r.error);
