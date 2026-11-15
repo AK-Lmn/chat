@@ -94,6 +94,7 @@ function firstObject(s, start) {
 // A published page is one file. A site written as index.html plus its own styles.css and app.js (the user asked for
 // separate files) is bundled here: each stylesheet <link> and <script src> that names a file next to the page is
 // replaced by that file's text. Links to other sites, to / paths and to data: stay as they are.
+const IMAGE_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', svg: 'image/svg+xml' };
 const LOCAL = (href) => href && !/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(href);
 const attr = (tag, name) => tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))?.slice(1).find((v) => v != null);
 export async function inlineLocal(html, pagePath, read) {
@@ -110,11 +111,34 @@ export async function inlineLocal(html, pagePath, read) {
     }
     return files.get(path);
   };
-  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script\s*>/gi)];
+  // A picture next to the page (the model saved cat.jpg and wrote <img src="cat.jpg">) goes into the page as data:
+  // a published page is one file, so a picture left beside it would show as a broken image.
+  const picture = async (src) => {
+    const path = dir + src.replace(/^\.\//, '').replace(/[?#].*$/, '');
+    const type = IMAGE_TYPES[path.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]];
+    const r = type ? await read(path) : { error: 'not a picture' };
+    const content = r.error ? '' : r.data?.content;
+    // Only an SVG is text: any other picture read as text has lost its bytes.
+    const data = !content ? '' : r.data.encoding === 'base64' ? String(content).replace(/\s+/g, '') : type === 'image/svg+xml' ? btoa(String.fromCharCode(...new TextEncoder().encode(content))) : '';
+    if (!data) missing.push(src);
+    return data ? `data:${type};base64,${data}` : '';
+  };
+  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script\s*>|<img\b[^>]*>/gi)];
   let out = '';
   let at = 0;
+  let pictures = 0;
   for (const m of tags) {
     const tag = m[0];
+    if (/^<img/i.test(tag)) {
+      const src = attr(tag, 'src');
+      if (!LOCAL(src)) continue;
+      const uri = await picture(src);
+      if (!uri) continue;
+      pictures++;
+      out += html.slice(at, m.index) + tag.replace(/(\ssrc\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${uri}"`);
+      at = m.index + tag.length;
+      continue;
+    }
     const isLink = /^<link/i.test(tag);
     const href = attr(tag, isLink ? 'href' : 'src');
     if (!LOCAL(href) || (isLink && !/stylesheet/i.test(attr(tag, 'rel') || ''))) continue;
@@ -134,7 +158,12 @@ export async function inlineLocal(html, pagePath, read) {
     const end = out.search(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i);
     out = end < 0 ? `${out}\n${deferred.join('\n')}` : `${out.slice(0, end)}${deferred.join('\n')}\n${out.slice(end)}`;
   }
-  return { html: out, missing };
+  return { html: out, missing, pictures };
+}
+
+// Pictures a page shows that are not in the page and not on the web: each is a broken image for the visitor.
+export function localImages(html) {
+  return [...String(html ?? '').matchAll(/<img\b[^>]*>/gi)].map((m) => attr(m[0], 'src')).filter((src) => src == null || src === '' || LOCAL(src));
 }
 
 // Files Flisk writes itself (the same list as flisk's cli/src/utils/generated-paths.ts). Flisk rewrites them on the
@@ -766,7 +795,8 @@ export async function runTask({ task, history = [], github = undefined, origin =
         else if (!page) shown = { error: 'that file is not text' };
         else if (page.missing.length) shown = { error: `the page links ${page.missing.join(', ')}, which could not be read next to it: write ${page.missing.length === 1 ? 'that file' : 'those files'} first, then publish again` };
         else {
-          const made = await publish(page.html);
+          // A page that carries its pictures is bigger than a plain one: it gets the room a layout page with a photo has.
+          const made = await publish(page.html, page.pictures ? { limit: MAX_LAYOUT_BYTES } : undefined);
           if (made.error) shown = { error: made.error };
           else {
             links.push(made.url);

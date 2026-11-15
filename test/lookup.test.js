@@ -122,3 +122,9 @@ test('a page whose text is about something else is not a source', () => {
   expect(about({ title: 'Sleep', text: 'Sleep is a state of reduced activity. Adults need seven hours or more.' }, q)).toBe(true);
   expect(about({ title: 'Inception', text: 'Inception is a 2010 science fiction film.' }, 'is Inception a good movie?')).toBe(true);
 });
+
+test('a request to make a picture is not looked up (2026-11-15: "Sources: Selfie" under a cat photo)', () => {
+  for (const q of ['generate a photo of cat taking a mirror selfie', 'can you draw a dragon in the Alps', 'please make a logo for Hearth Bakery', 'a photo of a red fox in snow', 'згенеруй фото кота на дивані']) expect(wantsLookup(q)).toBe(false);
+  // Questions that only share a word with those still get their facts.
+  for (const q of ['who created Linux and when?', 'The Picture of Dorian Gray summary', 'makeup history in ancient Egypt', 'what makes Rome a great city to visit']) expect(wantsLookup(q)).toBe(true);
+});
