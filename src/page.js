@@ -128,7 +128,7 @@ a{color:var(--green)}button{font:inherit;color:inherit}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,163,59,.45)}70%{box-shadow:0 0 0 6px rgba(232,163,59,0)}}
 .sep{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--soft);letter-spacing:.02em}.sep::before,.sep::after{content:'';flex:1;height:1px;background:var(--line)}
 .result{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius);padding:12px 14px}
-.result .rt{flex:1;min-width:0}.result b{display:block;font-weight:500}.result .url{font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.result .rt{flex:1;min-width:0}.result b{display:block;font-weight:500}.result .url{font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result .keep{display:block;font-size:12px;color:var(--dim)}
 .optwrap{display:flex;flex-direction:column;width:100%}
 .optin{display:block;margin:6px 2px 0;color:var(--dim);font-size:12px;line-height:1.35}
 .byor{display:block;margin:6px 0 2px;padding:0;border:0;background:none;color:var(--ink);text-decoration:underline;font-size:13px;cursor:pointer}
@@ -660,7 +660,9 @@ function newChat(){history=[];go.disabled=false;treeAnswer=null;box.placeholder=
 // Result cards for a finished website or video. Built in run() and again when a saved chat is reopened, from the link in its answer.
 function siteCard(link){const r=node('div','result');r.innerHTML=IC.website.replace('<svg ','<svg width="34" height="34" style="border-radius:var(--radius);flex:none" aria-hidden="true" ')+'<div class="rt"><b></b><div class="url"></div></div>';r.querySelector('b').textContent=link.indexOf('/s/')>0&&link.indexOf('chat.flisk.si')>0?'Your page is live':'Your app is live: the real website and API';r.querySelector('.url').textContent=link.replace(/^https?:\\/\\//,'');
   const cp=node('button','btn','Copy link');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(link).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy link',1500);});};
-  const op=node('a','btn go','Open');op.href=link;op.target='_blank';op.rel='noopener';r.append(cp,op);return r;}
+  const op=node('a','btn go','Open');op.href=link;op.target='_blank';op.rel='noopener';
+  if(link.indexOf(location.origin+'/s/')===0){r.querySelector('.rt').appendChild(node('small','keep','Kept 7 days. Download the page to keep it.'));const dl=node('a','btn','Download');dl.href=link;dl.download='index.html';r.append(cp,dl,op);return r;}
+  r.append(cp,op);return r;}
 function videoCard(video){const v=node('div','vres'),pl=document.createElement('video');pl.controls=true;pl.preload='metadata';pl.playsInline=true;pl.src=video+'#t=0.8';pl.style.aspectRatio='16/9';pl.addEventListener('loadedmetadata',down);
   const vb=node('div','vb');vb.innerHTML=svgAt(IC.video,30);vb.appendChild(node('b','','Your video is ready'));
   const dl=node('a','btn go','Download mp4');dl.href=video;dl.download='flisk-video.mp4';
@@ -1100,6 +1102,7 @@ async function run(task){
     else if(ev.type==='write'){step('Wrote '+code(ev.path)+' '+txt('('+Number(ev.bytes||0).toLocaleString()+' characters)'),'','pen');ws.textContent='Writing files';}
     else if(ev.type==='read')step('Read '+code(ev.path),'','file');
     else if(ev.type==='publish'){step('Publishing '+code(ev.path),'','upload');ws.textContent='Publishing';}
+    else if(ev.type==='site'){step('Drawing a '+txt(ev.layout)+' page: '+txt(ev.title),'','layers');ws.textContent='Publishing';}
     else if(ev.type==='share'){step('Giving the running app a public link (port '+Number(ev.port)+')','','upload');ws.textContent='Sharing the app';}
     else if(ev.type==='system_plan'){step('Building a system of '+ev.services.length+' services: '+txt(ev.services.join(', ')),'','app');ws.textContent='Building a system';}
     else if(ev.type==='system_start'){step('Starting all services with Flisk','','app');}
