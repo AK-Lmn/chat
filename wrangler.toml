@@ -10,6 +10,7 @@ crons = ["17 * * * *"]
 
 [vars]
 PUBLIC_ORIGIN = "https://chat.flisk.si"
+LOGIN_PUBLIC_KEY = "g_3cGlqaMDf4mM4Bgfv8EO6js7yW_bcSW7cOUpSwLc0"
 FLEET_URL = "https://fleet.flisk.si"
 INFERENCE_URL = "https://inference.flisk.si/v1/chat/completions"
 INFERENCE_MODEL = "flisk-wolf-chat"

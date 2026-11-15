@@ -82,6 +82,20 @@ describe('browser computer', () => {
 });
 
 describe('a task over the socket', () => {
+  test('a plain question in the tab is looked up too: the answer ends with its sources', async () => {
+    const t = tab();
+    const s = fakeSocket(t.page);
+    const gate = async () => ({ model: scripted(['{"say":"It came out in 2010."}']), maxSteps: 8, modelName: 'Flisk Wolf', vision: false });
+    const asked = [];
+    const lookupFacts = async (q) => (asked.push(q), [{ title: 'Inception', url: 'https://en.wikipedia.org/wiki/Inception', text: 'Inception is a 2010 film.' }]);
+    const job = runOverSocket(s, { gate, origin: ORIGIN, publish: async () => ({ error: 'no' }), lookupFacts });
+    s.say({ type: 'task', task: 'is Inception a good movie?', history: [], files: [] });
+    await job;
+    expect(asked).toEqual(['is Inception a good movie?']);
+    expect(s.sent.find((e) => e.type === 'sources').sources[0].title).toBe('Inception');
+    expect(s.sent.find((e) => e.type === 'answer').text).toMatch(/Sources: \[Inception\]\(https:\/\/en\.wikipedia\.org\/wiki\/Inception\)$/);
+  });
+
   test('"make a coffee website": written in the tab, published by chat, answered, computer stopped', async () => {
     const t = tab();
     const s = fakeSocket(t.page);

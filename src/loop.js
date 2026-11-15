@@ -1,9 +1,12 @@
+import { ANALYSIS_NOTE, ANALYSIS_STYLE, asksAnalysis } from './analysis-style.js';
+import { ANSWER_STYLE } from './answer-style.js';
 import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
 import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
 import { cleanShare, KEEP_DAYS, shareApp } from './share.js';
 import { cleanSite, LAYOUTS, photoPrompt, renderSite, SITE_HELP } from './sites.js';
 import { githubNote, scrub, setupGithub } from './github.js';
+import { sourcesNote, splitPoints, wantsLookup, withSources } from './lookup.js';
 
 // A layout page carries its fonts and a photo, so it may be bigger than a hand-written page.
 export const MAX_LAYOUT_BYTES = 1536 * 1024;
@@ -64,7 +67,9 @@ ${SITE_HELP}
 - Widgets draw a card for the user from data. Prefer one whenever it fits; the computer is only for work a widget cannot do:
 ${widgetPrompt()}
 - In "say", give the result itself (numbers, the content, the link), not a description of the steps.
-- "say" is shown as Markdown: **bold**, [text](https://link) links, "- " lists, and "| a | b |" tables. For weather, prices, schedules or any comparison over days or items, give one line with the current state, then a table (for weather: Day | Sky | High / Low | Rain chance, for the next 7 days), then 2 or 3 bullets with what it means for the user. Keep plain questions short with no table.
+- "say" is shown as Markdown: **bold**, [text](https://link) links, "- " lists, and "| a | b |" tables. For weather, prices, schedules or any comparison over days or items, give one line with the current state, then a table (for weather: Day | Sky | High / Low | Rain chance, for the next 7 days), then 2 or 3 bullets with what it means for the user.
+${ANSWER_STYLE}
+${ANALYSIS_STYLE}
 
 Remember: reply is only the JSON object. Nothing else.`;
 
@@ -89,6 +94,7 @@ function firstObject(s, start) {
 // A published page is one file. A site written as index.html plus its own styles.css and app.js (the user asked for
 // separate files) is bundled here: each stylesheet <link> and <script src> that names a file next to the page is
 // replaced by that file's text. Links to other sites, to / paths and to data: stay as they are.
+const IMAGE_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', svg: 'image/svg+xml' };
 const LOCAL = (href) => href && !/^(?:[a-z][a-z0-9+.-]*:|\/|#)/i.test(href);
 const attr = (tag, name) => tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))?.slice(1).find((v) => v != null);
 export async function inlineLocal(html, pagePath, read) {
@@ -105,11 +111,34 @@ export async function inlineLocal(html, pagePath, read) {
     }
     return files.get(path);
   };
-  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script\s*>/gi)];
+  // A picture next to the page (the model saved cat.jpg and wrote <img src="cat.jpg">) goes into the page as data:
+  // a published page is one file, so a picture left beside it would show as a broken image.
+  const picture = async (src) => {
+    const path = dir + src.replace(/^\.\//, '').replace(/[?#].*$/, '');
+    const type = IMAGE_TYPES[path.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]];
+    const r = type ? await read(path) : { error: 'not a picture' };
+    const content = r.error ? '' : r.data?.content;
+    // Only an SVG is text: any other picture read as text has lost its bytes.
+    const data = !content ? '' : r.data.encoding === 'base64' ? String(content).replace(/\s+/g, '') : type === 'image/svg+xml' ? btoa(String.fromCharCode(...new TextEncoder().encode(content))) : '';
+    if (!data) missing.push(src);
+    return data ? `data:${type};base64,${data}` : '';
+  };
+  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script\s*>|<img\b[^>]*>/gi)];
   let out = '';
   let at = 0;
+  let pictures = 0;
   for (const m of tags) {
     const tag = m[0];
+    if (/^<img/i.test(tag)) {
+      const src = attr(tag, 'src');
+      if (!LOCAL(src)) continue;
+      const uri = await picture(src);
+      if (!uri) continue;
+      pictures++;
+      out += html.slice(at, m.index) + tag.replace(/(\ssrc\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${uri}"`);
+      at = m.index + tag.length;
+      continue;
+    }
     const isLink = /^<link/i.test(tag);
     const href = attr(tag, isLink ? 'href' : 'src');
     if (!LOCAL(href) || (isLink && !/stylesheet/i.test(attr(tag, 'rel') || ''))) continue;
@@ -129,7 +158,12 @@ export async function inlineLocal(html, pagePath, read) {
     const end = out.search(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i);
     out = end < 0 ? `${out}\n${deferred.join('\n')}` : `${out.slice(0, end)}${deferred.join('\n')}\n${out.slice(end)}`;
   }
-  return { html: out, missing };
+  return { html: out, missing, pictures };
+}
+
+// Pictures a page shows that are not in the page and not on the web: each is a broken image for the visitor.
+export function localImages(html) {
+  return [...String(html ?? '').matchAll(/<img\b[^>]*>/gi)].map((m) => attr(m[0], 'src')).filter((src) => src == null || src === '' || LOCAL(src));
 }
 
 // Files Flisk writes itself (the same list as flisk's cli/src/utils/generated-paths.ts). Flisk rewrites them on the
@@ -469,13 +503,26 @@ export const PLAYBOOKS = [
   { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: {"widget": {"kind": "web", "url": "https://open.er-api.com/v6/latest/USD"}} (no key).' },
   { when: /\b(search|look up|find out|who is|what is|wiki)\b/i, text: 'Lookup: {"widget": {"kind": "web", "url": "https://en.wikipedia.org/api/rest_v1/page/summary/<Title>"}} or {"widget": {"kind": "web", "url": "https://html.duckduckgo.com/html/?q=<words>"}} (no key).' },
 ];
+// A GitHub org or user the task points at: "flisk-sh org in github", "github.com/flisk-sh". The page or app must be made from what is
+// really there, so the model reads the repositories first (public API, no key) instead of building an empty shell.
+export function githubSourceIn(task) {
+  const t = String(task);
+  const m = t.match(/github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})/i) || t.match(/\b([A-Za-z0-9][A-Za-z0-9-]{0,38})\s+(?:org|organi[sz]ation)\b[^.\n]{0,40}\bgithub\b/i) || t.match(/\bgithub\b[^.\n]{0,40}\b([A-Za-z0-9][A-Za-z0-9-]{0,38})\s+(?:org|organi[sz]ation)\b/i);
+  const name = m?.[1];
+  return name && !/^(the|an?|our|my|this|that|your)$/i.test(name) ? name : '';
+}
+export function sourceNote(task) {
+  const org = githubSourceIn(task);
+  if (!org) return '';
+  return `\n\nThe user points at the GitHub account "${org}". Build from what is really there, never an empty shell and never "add your projects here": FIRST {"run": "curl -fsS 'https://api.github.com/orgs/${org}/repos?per_page=100&sort=pushed' || curl -fsS 'https://api.github.com/users/${org}/repos?per_page=100&sort=pushed'"} (public, no key) and read name, description, language, stargazers_count and html_url of the repositories (skip forks and archived ones, take the most useful ones; if the user said a number such as 10, take that many). A portfolio or showcase only shows things, so send ONE "site" action (layout "portfolio") with one project per repository: its real name as "title", its real description as "text", its language as "tag". Do not build an app for it. In "say", give the link and name the repositories you used.`;
+}
 export function playbooksFor(task) {
   const hits = PLAYBOOKS.filter((p) => p.when.test(String(task))).map((p) => `- ${p.text}`);
   return hits.length ? `\n\nKnown ways for this task (use these first; if one fails, try the next):\n${hits.join('\n')}` : '';
 }
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -491,10 +538,17 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
-  const messages = [{ role: 'system', content: system }, ...cleanHistory(past), { role: 'user', content: first }];
+  const analysis = asksAnalysis(task);
+  // A plain question about the world: chat looks the subject up first, so the model has facts to take instead of inventing them.
+  let sources = [];
+  if (lookupFacts && wantsLookup(task, { building, files: files.length })) {
+    sources = await Promise.resolve(lookupFacts(task)).catch(() => []) || [];
+    if (sources.length) emit({ type: 'sources', sources: sources.map((x) => ({ title: x.title, url: x.url })) });
+  }
+  const messages = [{ role: 'system', content: system + sourcesNote(sources) }, ...cleanHistory(past), { role: 'user', content: first }];
   let podId = null;
   let provider = null;
   const steps = [];
@@ -587,7 +641,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
       }
       if (action.type === 'say' || last) {
         // Out of steps with an action still planned: never show that raw JSON as the answer.
-        const text = action.type === 'say' ? noteDeadLinks(action.text, !!podId) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
+        const text = action.type === 'say' ? withSources(splitPoints(noteDeadLinks(action.text, !!podId)), sources) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
         emit({ type: 'answer', text });
         return await finish(text);
       }
@@ -611,6 +665,11 @@ export async function runTask({ task, history = [], github = undefined, origin =
           }
           continue;
         }
+      }
+      // A research question never needs a computer: refuse run and write, so no computer starts and the model answers from the page it read.
+      if (analysis && (action.type === 'run' || action.type === 'write')) {
+        messages.push({ role: 'user', content: 'Refused: this is a research question and needs no computer. Read the site with the web widget, then reply with "say" in the full report format. Next action as JSON only.' });
+        continue;
       }
       // A layout page is made on the Worker: it needs no computer.
       if (!podId && action.type !== 'site') {
@@ -736,7 +795,8 @@ export async function runTask({ task, history = [], github = undefined, origin =
         else if (!page) shown = { error: 'that file is not text' };
         else if (page.missing.length) shown = { error: `the page links ${page.missing.join(', ')}, which could not be read next to it: write ${page.missing.length === 1 ? 'that file' : 'those files'} first, then publish again` };
         else {
-          const made = await publish(page.html);
+          // A page that carries its pictures is bigger than a plain one: it gets the room a layout page with a photo has.
+          const made = await publish(page.html, page.pictures ? { limit: MAX_LAYOUT_BYTES } : undefined);
           if (made.error) shown = { error: made.error };
           else {
             links.push(made.url);

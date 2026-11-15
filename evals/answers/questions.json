@@ -1,0 +1,18 @@
+[
+  { "id": "rising-sun", "q": "The Animals - House Of The Rising Sun - this is the best song yes not??", "facts": [["1964"], ["Burdon"], ["folk", "traditional"]] },
+  { "id": "hello", "q": "hi", "kind": "small" },
+  { "id": "eiffel", "q": "who built the Eiffel Tower and why?", "facts": [["1889"], ["Gustave Eiffel", "Eiffel's company", "Koechlin"], ["World's Fair", "Exposition", "exhibition"]] },
+  { "id": "python-vs-js", "q": "python or javascript for a first language?", "facts": [["web", "browser"], ["data", "science", "machine learning", "AI"]] },
+  { "id": "borscht-uk", "q": "що таке борщ і звідки він?", "facts": [["буряк"], ["Україн"], ["ЮНЕСКО", "UNESCO", "2022"]] },
+  { "id": "thanks", "q": "thanks!", "kind": "small" },
+  { "id": "inception", "q": "is Inception a good movie?", "facts": [["Nolan"], ["2010"], ["DiCaprio"]] },
+  { "id": "sky-blue", "q": "why is the sky blue?", "facts": [["Rayleigh", "scatter"], ["wavelength"]] },
+  { "id": "docker", "q": "what is Docker?", "facts": [["container"], ["image"], ["2013"]] },
+  { "id": "sleep", "q": "how much sleep do adults need?", "facts": [["7"], ["hours"]] },
+  { "id": "kyiv-uk", "q": "що варто подивитися в Києві?", "facts": [["Лавр"], ["Софі"], ["Хрещатик", "Андріївськ", "Поділ", "Майдан"]] },
+  { "id": "beatles", "q": "who were the Beatles?", "facts": [["Lennon"], ["McCartney"], ["Liverpool"], ["Harrison"], ["Ringo", "Starr"]] },
+  { "id": "ok", "q": "ok cool", "kind": "small" },
+  { "id": "everest", "q": "how tall is mount everest and who climbed it first?", "facts": [["8,848", "8848", "8,849", "8849", "29,03"], ["Hillary"], ["Tenzing"], ["1953"]] },
+  { "id": "postgres-mysql", "q": "postgres vs mysql, which should I pick?", "facts": [["JSON", "extension", "PostGIS"], ["replication", "read-heavy", "simple", "WordPress"]] },
+  { "id": "madrid-es", "q": "¿cuál es la mejor época para visitar Madrid?", "facts": [["primavera"], ["otoño"], ["verano", "calor"]] }
+]

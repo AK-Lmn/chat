@@ -1,9 +1,11 @@
 import { OG_PNG } from './og.js';
+import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
 import { THREE_SRC, TEXTURES } from './earth.js';
 import { fleetClient } from './fleet.js';
 import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, modelFrom, modelLabel, resolveModel, runTask, WORKERS_AI_PER_DAY } from './loop.js';
+import { lookup } from './lookup.js';
 import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
@@ -550,11 +552,30 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     // ?again=1: someone who signed in before chat asked for GitHub access goes through GitHub once more to allow it.
     if (have && !isAnon(have.login) && !url.searchParams.get('again')) return redirect('/');
     if (env.DEV_LOGIN) return redirect('/', { 'set-cookie': await makeSession(env, env.DEV_LOGIN) });
+    if (env.LOGIN_PUBLIC_KEY && !url.searchParams.get('again')) {
+      // Identity comes from login.flisk.si (one GitHub app for every Flisk site). GitHub repo access is a separate step: ?again=1.
+      const state = crypto.randomUUID();
+      const back = new URL('/auth/done', origin);
+      back.searchParams.set('s', state);
+      const headers = new Headers({ location: `${env.LOGIN_ORIGIN || 'https://login.flisk.si'}/start?return=${encodeURIComponent(back.href)}` });
+      headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+      return new Response(null, { status: 302, headers });
+    }
     if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return html(messagePage('Sign-in is not set up', 'GitHub sign-in has not been connected yet.'), 503);
     const state = crypto.randomUUID();
     const headers = new Headers({ location: githubAuthorizeUrl({ ...env, PUBLIC_ORIGIN: origin }, state) });
     headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
     return new Response(null, { status: 302, headers });
+  }
+  if (request.method === 'GET' && path === '/auth/done') {
+    const cookie = /(?:^|;\s*)chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
+    const st = url.searchParams.get('s') || '';
+    const who = env.LOGIN_PUBLIC_KEY && env.SESSION_SECRET && st && st === cookie ? await verifyLoginToken(url.searchParams.get('flisk_token'), env.LOGIN_PUBLIC_KEY, origin) : null;
+    if (!who || !/^[A-Za-z0-9-]{1,39}$/.test(who.login) || /^anon-/i.test(who.login)) return html(messagePage('Sign-in failed', 'The sign-in link expired. Start again.'), 400);
+    const headers = new Headers({ location: '/' });
+    headers.append('set-cookie', await makeSession(env, who.login));
+    headers.append('set-cookie', 'chat_state=; Path=/auth; Max-Age=0');
+    return new Response(null, { status: 303, headers });
   }
   if (request.method === 'GET' && path === '/auth/callback') {
     const state = url.searchParams.get('state') || '';
@@ -668,7 +689,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const refund = async () => chosen.free && !m.answered() && refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
       return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
-    const job = runOverSocket(server, { gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
+    const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
     return socketPair ? json(200, { socket: true }) : new Response(null, { status: 101, webSocket: client });
   }
@@ -775,7 +796,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ lookupFacts: (q) => lookup(q), task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
