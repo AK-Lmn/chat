@@ -1,4 +1,4 @@
-import { ANALYSIS_NOTE, ANALYSIS_STYLE, asksAnalysis } from './analysis-style.js';
+import { ANALYSIS_NOTE, ANALYSIS_STYLE, STATS_NOTE, asksAnalysis, asksStats } from './analysis-style.js';
 import { ANSWER_STYLE } from './answer-style.js';
 import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -270,7 +270,7 @@ export function cleanImage(raw) {
 const IMG_WORD = '(?:photos?|photographs?|pictures?|pics?|images?|drawings?|illustrations?|paintings?|portraits?|wallpapers?|avatars?|sketch(?:es)?|artworks?)';
 const ASK_IMAGE = new RegExp(`^\\s*(?:(?:please|pls|hey|can you|could you|would you|i want|i'd like)\\s+)*(?:generate|create|make|draw|paint|render|imagine|give me|show me|produce)\\s+(?:me\\s+|us\\s+)?(?:(?:a|an|the|one|some)\\s+)?(?:[\\w-]+\\s+){0,3}?${IMG_WORD}\\s+(?:of|showing|with|where)\\s+(.+)$`, 'i');
 const ASK_DRAW = /^\s*(?:please\s+)?(?:draw|paint|sketch)\s+(?:me\s+|us\s+)?(.+)$/i;
-const NOT_IMAGE = /\b(web ?sites?|web ?pages?|landing|pages?|site|videos?|clips?|apps?|html|charts?|graphs?|diagrams?|plots?|tables?|slides?|deck|logo for (?:my|our|the) (?:site|website|app))\b/i;
+const NOT_IMAGE = /\b(web ?sites?|web ?pages?|landing|pages?|site|videos?|clips?|apps?|html|charts?|graphs?|diagrams?|plots?|tables?|stat|stats|statistics|data|numbers|metrics|figures|trends?|dashboards?|infographics?|slides?|deck|logo for (?:my|our|the) (?:site|website|app))\b/i;
 export function asksImage(task) {
   const t = String(task || '').trim();
   if (!t || t.length > 600 || t.includes('\n') || NOT_IMAGE.test(t)) return null;
@@ -608,7 +608,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note;
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (asksStats(task) ? STATS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
   const analysis = asksAnalysis(task);
