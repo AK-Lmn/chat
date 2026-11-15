@@ -1103,6 +1103,7 @@ async function run(task){
     else if(ev.type==='read')step('Read '+code(ev.path),'','file');
     else if(ev.type==='publish'){step('Publishing '+code(ev.path),'','upload');ws.textContent='Publishing';}
     else if(ev.type==='site'){step('Drawing a '+txt(ev.layout)+' page: '+txt(ev.title),'','layers');ws.textContent='Publishing';}
+    else if(ev.type==='photo'){step('Drawing the photo for the page','','image');ws.textContent='Drawing the photo';}
     else if(ev.type==='share'){step('Giving the running app a public link (port '+Number(ev.port)+')','','upload');ws.textContent='Sharing the app';}
     else if(ev.type==='system_plan'){step('Building a system of '+ev.services.length+' services: '+txt(ev.services.join(', ')),'','app');ws.textContent='Building a system';}
     else if(ev.type==='system_start'){step('Starting all services with Flisk','','app');}

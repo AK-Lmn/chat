@@ -2,8 +2,11 @@ import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
 import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
 import { cleanShare, KEEP_DAYS, shareApp } from './share.js';
-import { cleanSite, LAYOUTS, renderSite, SITE_HELP } from './sites.js';
+import { cleanSite, LAYOUTS, photoPrompt, renderSite, SITE_HELP } from './sites.js';
 import { githubNote, scrub, setupGithub } from './github.js';
+
+// A layout page carries its fonts and a photo, so it may be bigger than a hand-written page.
+export const MAX_LAYOUT_BYTES = 1536 * 1024;
 // One task: a model plans, a computer from fleet does the work, the answer comes back. One task = one computer,
 // started on the first action and always stopped at the end.
 export const MAX_STEPS = 8;
@@ -446,8 +449,8 @@ export function cleanHistory(history) {
     });
 }
 
-// computer: { start, run, write, read, share, stop } (fleet.js, or the visitor's browser: browserpod.js). note: extra instructions about that computer. track: optional { started(podId), kept(podId, url), stopped(podId) }. publish(html) -> url. emit(event) gets every step.
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+// computer: { start, run, write, read, share, stop } (fleet.js, or the visitor's browser: browserpod.js). note: extra instructions about that computer. track: optional { started(podId), kept(podId, url), stopped(podId) }. publish(html, { limit }) -> url. photo(prompt) -> a data: URL or ''. emit(event) gets every step.
+export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -666,7 +669,10 @@ export async function runTask({ task, history = [], github = undefined, origin =
       } else if (action.type === 'site' && !ranApp) {
         stats.copy = true;
         emit({ type: 'site', layout: action.spec.layout, title: action.spec.title });
-        const made = await publish(renderSite(action.spec));
+        // The photo is a nice extra: when it cannot be drawn the page is published with its plain hero.
+        emit({ type: 'photo', title: action.spec.title });
+        const pic = await photo(photoPrompt(action.spec)).catch(() => '');
+        const made = await publish(renderSite(action.spec, pic || ''), { limit: MAX_LAYOUT_BYTES });
         if (made.error) shown = { error: made.error };
         else {
           links.push(made.url);

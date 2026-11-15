@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { MAX_LAYOUT_BYTES, parseAction, runTask, SYSTEM } from '../src/loop.js';
 import { BROWSER_NOTE } from '../src/browserpod.js';
-import { cleanSite, LAYOUTS, renderSite } from '../src/sites.js';
+import { ACCENTS, cleanSite, LAYOUTS, photoPrompt, renderSite } from '../src/sites.js';
+import { PHOTOS_PER_DAY, PHOTOS_PER_LOGIN, sitePhoto } from '../src/photo.js';
+
+const PHOTO = `data:image/jpeg;base64,${'A'.repeat(800 * 1024)}`;
+const bytes = (h) => new TextEncoder().encode(h).length;
 
 const scripted = (...texts) => { let i = 0; return async () => ({ text: texts[Math.min(i++, texts.length - 1)] }); };
 
@@ -19,17 +23,18 @@ describe('every layout draws a full page', () => {
   });
 
   for (const [name, raw] of Object.entries(SAMPLES)) {
-    test(`${name}: a whole page with its title, phone styles, no scripts, under 200 KB`, () => {
+    test(`${name}: a whole page with its title, phone styles, no scripts, nothing from elsewhere`, () => {
       const html = renderSite(cleanSite(raw));
       expect(html.startsWith('<!doctype html>')).toBe(true);
       expect(html).toContain('<meta name="viewport" content="width=device-width,initial-scale=1">');
-      expect(html).toContain('@media (max-width:560px)');
+      expect(html).toMatch(/@media \(max-width:7[26]0px\)/);
       expect(html).toContain('<title>');
       expect(html).toContain('id="contact"');
       expect(html).not.toMatch(/<script/i);
-      // Nothing is loaded from elsewhere: no outside images, fonts or stylesheets.
-      expect(html).not.toMatch(/src="https?:|<link|@import|url\(/i);
-      expect(new TextEncoder().encode(html).length).toBeLessThan(200 * 1024);
+      // Nothing is loaded from elsewhere: fonts and pictures are built in as data: URLs.
+      expect(html).not.toMatch(/src="https?:|<link|@import|url\(\s*['"]?(https?:|\/\/)/i);
+      expect(html).toContain('url(data:font/woff2;base64,');
+      expect(bytes(html)).toBeLessThan(MAX_LAYOUT_BYTES);
     });
   }
 
@@ -43,10 +48,46 @@ describe('every layout draws a full page', () => {
     expect(renderSite(cleanSite(SAMPLES.landing))).toContain('Roasted this week.');
   });
 
-  test('the biggest allowed page is still under 200 KB', () => {
+  test('the biggest allowed page, with a big photo, is still under the layout limit', () => {
     const long = 'x'.repeat(5000);
-    const raw = { layout: 'menu', title: long, tagline: long, about: long, hours: Array(50).fill(long), sections: Array(50).fill({ name: long, items: Array(50).fill({ name: long, price: long, text: long }) }) };
-    expect(new TextEncoder().encode(renderSite(cleanSite(raw))).length).toBeLessThan(200 * 1024);
+    const raw = { layout: 'menu', look: 'editorial', title: long, tagline: long, about: long, photo: long, hours: Array(50).fill(long), sections: Array(50).fill({ name: long, items: Array(50).fill({ name: long, price: long, text: long }) }) };
+    expect(bytes(renderSite(cleanSite(raw), PHOTO))).toBeLessThan(MAX_LAYOUT_BYTES);
+  });
+});
+
+describe('looks, accents and the photo', () => {
+  test('each layout has a look and an accent of its own, and the model can pick others', () => {
+    expect(cleanSite(SAMPLES.menu)).toMatchObject({ look: 'cinematic', accent: 'forest' });
+    expect(cleanSite(SAMPLES.portfolio)).toMatchObject({ look: 'editorial', accent: 'graphite' });
+    expect(cleanSite({ ...SAMPLES.menu, look: 'Editorial', accent: 'flisk' })).toMatchObject({ look: 'editorial', accent: 'flisk' });
+    expect(cleanSite({ ...SAMPLES.menu, colour: 'midnight' }).accent).toBe('midnight');
+    expect(cleanSite({ ...SAMPLES.menu, look: 'pink', accent: 'neon' })).toMatchObject({ look: 'cinematic', accent: 'forest' });
+  });
+
+  test('the accent colour is used on the page', () => {
+    for (const look of ['cinematic', 'editorial']) expect(renderSite(cleanSite({ ...SAMPLES.prices, look, accent: 'forest' }))).toContain(ACCENTS.forest[0]);
+  });
+
+  test('the photo is written once and used by the hero', () => {
+    for (const look of ['cinematic', 'editorial']) {
+      const html = renderSite(cleanSite({ ...SAMPLES.landing, look }), PHOTO);
+      expect(html.split(PHOTO).length - 1).toBe(1);
+      expect(html).toContain('var(--photo)');
+    }
+  });
+
+  test('without a photo, or with something that is not one, the hero has no photo', () => {
+    expect(renderSite(cleanSite(SAMPLES.landing))).not.toContain('--photo:');
+    const html = renderSite(cleanSite(SAMPLES.landing), 'https://evil.example/x.jpg);background:red');
+    expect(html).not.toContain('evil.example');
+  });
+
+  test('the photo prompt has the scene and asks for no text', () => {
+    const p = photoPrompt(cleanSite({ ...SAMPLES.menu, photo: 'a loaf of sourdough on a dark oak table' }));
+    expect(p).toContain('a loaf of sourdough on a dark oak table');
+    expect(p).toContain('no text');
+    expect(p).toMatch(/Cinematic 8k HDR/);
+    expect(photoPrompt(cleanSite(SAMPLES.portfolio))).toContain('Ana Ruiz');
   });
 });
 
@@ -111,5 +152,56 @@ describe('the model can ask for a layout', () => {
     expect(published[0]).toContain('Sourdough');
     expect(r.stats.errors).toBe(0);
     expect(events.some((e) => e.type === 'site' && e.layout === 'menu')).toBe(true);
+  });
+
+  test('the page gets the drawn photo, and is still published when the photo fails', async () => {
+    for (const photo of [async () => PHOTO, async () => { throw new Error('no neurons'); }]) {
+      const published = [];
+      const model = scripted(JSON.stringify({ site: SAMPLES.menu }), '{"say": "Done"}');
+      const computer = { start: async () => ({ status: 201, data: { id: 'p1' } }), stop: async () => ({ status: 200, data: {} }), run: async () => ({ status: 200, data: {} }) };
+      await runTask({ task: 'a menu page', model, computer, photo, publish: async (html, o) => (published.push([html, o]), { url: 'https://chat.flisk.si/s/abc' }) });
+      expect(published).toHaveLength(1);
+      expect(published[0][1].limit).toBe(MAX_LAYOUT_BYTES);
+      expect(published[0][0].includes(PHOTO)).toBe(photo.toString().includes('PHOTO'));
+    }
+  });
+});
+
+describe('drawing the photo', () => {
+  const fakeDb = () => {
+    const rows = new Map();
+    const prep = (sql) => ({
+      bind: (...a) => ({
+        all: async () => ({ results: [a[1], a[2]].filter((l) => rows.has(`${a[0]}|${l}`)).map((l) => ({ login: l, n: rows.get(`${a[0]}|${l}`) })) }),
+        run: async () => { const k = `${a[0]}|${a[1]}`; rows.set(k, (rows.get(k) || 0) + 1); },
+      }),
+    });
+    return { rows, prepare: prep, batch: async (st) => { for (const x of st) await x.run(); } };
+  };
+  const ai = (image) => ({ run: async (model, input) => (expect(input.prompt).toBeTruthy(), { image }) });
+
+  test('a drawn photo comes back as a data: URL and is counted', async () => {
+    const env = { DB: fakeDb(), AI: ai('B'.repeat(4000)) };
+    expect(await sitePhoto(env, 'ana', 'bread')).toBe(`data:image/jpeg;base64,${'B'.repeat(4000)}`);
+    const day = new Date().toISOString().slice(0, 10);
+    expect(env.DB.rows.get(`${day}|ana`)).toBe(1);
+    expect(env.DB.rows.get(`${day}|*`)).toBe(1);
+  });
+
+  test('over the cap per login, or for everybody, there is no photo', async () => {
+    const env = { DB: fakeDb(), AI: ai('B'.repeat(4000)) };
+    const day = new Date().toISOString().slice(0, 10);
+    env.DB.rows.set(`${day}|ana`, PHOTOS_PER_LOGIN);
+    expect(await sitePhoto(env, 'ana', 'bread')).toBe('');
+    env.DB.rows.set(`${day}|*`, PHOTOS_PER_DAY);
+    expect(await sitePhoto(env, 'bo', 'bread')).toBe('');
+  });
+
+  test('a failed, slow or empty model gives no photo instead of an error', async () => {
+    expect(await sitePhoto({ DB: fakeDb(), AI: { run: async () => { throw new Error('3036'); } } }, 'a', 'x')).toBe('');
+    expect(await sitePhoto({ DB: fakeDb(), AI: { run: () => new Promise(() => {}) } }, 'a', 'x', { ms: 20 })).toBe('');
+    expect(await sitePhoto({ DB: fakeDb(), AI: ai('') }, 'a', 'x')).toBe('');
+    expect(await sitePhoto({ DB: { prepare: () => { throw new Error('no such table'); } }, AI: ai('B'.repeat(4000)) }, 'a', 'x')).toBe('');
+    expect(await sitePhoto({ DB: fakeDb() }, 'a', 'x')).toBe('');
   });
 });
