@@ -8,3 +8,11 @@ export const ANALYSIS_STYLE = `- Research or analysis questions (competitors or 
   4. Say plainly which parts are your own judgment and not measured data ("qualitative, not market share"), and which come from the page you read. Never invent a number, star count, price or date; leave it out instead.
   5. Last line: one specific offer of the deeper next step ("Want a feature-by-feature matrix with pricing and target customers?").
   Do this without a computer: use the web widget, never curl, install or run anything for a question like this.`;
+
+// Chat decides this itself: a small or hurried model otherwise picks the short answer, or starts a computer and curls the site.
+export const ANALYSIS_ASK = /\b(competitors?|alternatives?|rivals?|compare|comparison|versus|vs\.?|market|positioning|swot|pros and cons|differentiate|конкурент\p{L}*|альтернатив\p{L}*)\b/iu;
+export function asksAnalysis(task) {
+  const t = String(task ?? '');
+  return t.length <= 500 && ANALYSIS_ASK.test(t) && !/\b(build|make|create|scaffold|deploy|code|implement)\b/i.test(t);
+}
+export const ANALYSIS_NOTE = '\n\nThis question is a research or analysis question: use the full report format above (headline sentence, numbered sections, the two tables, recommendation, one next-step offer). If it names a site or product, first read its page with {"widget": {"kind": "web", "url": "https://<that site>"}}, then reply with "say". Do NOT use run or write: no computer is needed.';
