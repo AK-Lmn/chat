@@ -683,10 +683,11 @@ function newChat(){history=[];go.disabled=false;treeAnswer=null;box.placeholder=
 function siteCard(link){const r=node('div','result');r.innerHTML=IC.website.replace('<svg ','<svg width="34" height="34" style="border-radius:var(--radius);flex:none" aria-hidden="true" ')+'<div class="rt"><b></b><div class="url"></div></div>';r.querySelector('b').textContent=link.indexOf('/s/')>0&&link.indexOf('chat.flisk.si')>0?'Your page is live':'Your app is live: the real website and API';r.querySelector('.url').textContent=link.replace(/^https?:\\/\\//,'');
   const cp=node('button','btn','Copy link');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(link).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy link',1500);});};
   const op=node('a','btn go','Open');op.href=link;op.target='_blank';op.rel='noopener';
-  const gw=growButton(link);
-  if(link.indexOf(location.origin+'/s/')===0){r.querySelector('.rt').appendChild(node('small','keep','Kept 7 days. Download the page to keep it.'));const dl=node('a','btn','Download');dl.href=link;dl.download='index.html';r.append(gw,cp,dl,op);return r;}
-  r.append(gw,cp,op);return r;}
+  const gw=growButton(link),gl=growLink(link);
+  if(link.indexOf(location.origin+'/s/')===0){r.querySelector('.rt').appendChild(node('small','keep','Kept 7 days. Download the page to keep it.'));const dl=node('a','btn','Download');dl.href=link;dl.download='index.html';r.append(gw,gl,cp,dl,op);return r;}
+  r.append(gw,gl,cp,op);return r;}
 // Grow it: the next step after a live link. A new turn in the same chat, so the model knows what was built.
+function growLink(link){const a=node('a','btn','Find customers');a.href='https://grow.flisk.si/?url='+encodeURIComponent(link);a.target='_blank';a.rel='noopener';a.title='Open Flisk Grow: a plan to find the first customers, then track the people and places in your cabinet';return a;}
 function growButton(link){const b=node('button','btn','Grow it');b.type='button';b.title='Find the first customers: who would buy, where they are, emails to send';b.onclick=()=>{if(go.disabled)return;const t='Grow it: find the first customers for '+link;dropLimit();userMsg(t);history.push({role:'user',content:t});saveChat();run(t);};return b;}
 function videoCard(video){const v=node('div','vres'),pl=document.createElement('video');pl.controls=true;pl.preload='metadata';pl.playsInline=true;pl.src=video+'#t=0.8';pl.style.aspectRatio='16/9';pl.addEventListener('loadedmetadata',down);
   const vb=node('div','vb');vb.innerHTML=svgAt(IC.video,30);vb.appendChild(node('b','','Your video is ready'));

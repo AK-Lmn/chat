@@ -55,6 +55,9 @@ describe('grow widget', () => {
     const html = appPage({});
     expect(html).toContain('function growButton(link)');
     expect(html).toContain("'Grow it: find the first customers for '+link");
+    // Find customers opens grow.flisk.si with the link filled in (the plan and the cabinet live there).
+    expect(html).toContain("'https://grow.flisk.si/?url='+encodeURIComponent(link)");
+    expect(html).toContain('r.append(gw,gl,cp,op)');
     expect(html).toContain('https://mail.google.com/mail/?view=cm&fs=1&su=');
     expect(html).toContain('Nothing is sent for you');
     expect(html).toContain("'https://grow.flisk.si/?url='+encodeURIComponent(d.url)");
