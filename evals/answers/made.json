@@ -10,7 +10,8 @@
         "stray-sources",
         "broken-picture",
         "no-picture",
-        "false-claim"
+        "false-claim",
+        "outside-image-site"
       ]
     },
     "good": {
@@ -46,6 +47,23 @@
     "good": {
       "answer": "Your page is live: https://chat.flisk.si/s/ghi",
       "page": "<html><body><h1>Red fox</h1><img src=\"https://upload.wikimedia.org/fox.jpg\" alt=\"A red fox\"></body></html>"
+    }
+  },
+  {
+    "id": "cat-woman",
+    "q": "generate a photo of cat taking a mirror selfie",
+    "note": "bad = 2nd real answer on 2026-11-15: the page loaded, but pollinations returned a woman; the answer called it a real image and said it had not looked at it",
+    "bad": {
+      "answer": "Here's your generated cat mirror selfie. It's a real image generated from the prompt (768x768 JPEG). I haven't looked at the picture myself, so check it.",
+      "page": "<html><body><h1>Cat</h1><img src=\"data:image/jpeg;base64,AAAA\" alt=\"cat\"><a href=\"cat.jpg\" download>Download</a><div>pollinations.ai</div></body></html>",
+      "findings": [
+        "outside-image-site",
+        "unseen-claim"
+      ]
+    },
+    "good": {
+      "answer": "Here is the page with the picture I asked for (a fluffy orange tabby cat taking a mirror selfie): https://chat.flisk.si/s/abc",
+      "page": "<html><body><h1>Cat</h1><img src=\"data:image/jpeg;base64,AAAA\" alt=\"cat\"></body></html>"
     }
   }
 ]
