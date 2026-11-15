@@ -60,3 +60,12 @@ test('"could not be retrieved" is a give-up', async () => {
   const r = await runTask({ task: 'bitcoin price', model: async () => ({ text: replies[i++] }), computer, publish: async () => ({}) });
   expect(r.answer).toBe('BTC is $90,000');
 });
+
+test('a GitHub org named in the task is read before anything is built', async () => {
+  const { githubSourceIn, sourceNote } = await import('../src/loop.js');
+  expect(githubSourceIn('we build portfoliw with 10 tabs, see flisk-sh org in github buld portfolio for flisk-sh org')).toBe('flisk-sh');
+  expect(githubSourceIn('make a site from https://github.com/acme-co')).toBe('acme-co');
+  expect(githubSourceIn('build me a todo app')).toBe('');
+  expect(sourceNote('portfolio for flisk-sh org on github')).toContain('api.github.com/orgs/flisk-sh/repos');
+  expect(sourceNote('hello')).toBe('');
+});
