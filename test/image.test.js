@@ -40,6 +40,18 @@ describe('a picture the user asks for is drawn and shown in the chat, like ChatG
     expect(r.error).toBeNull();
   });
 
+  test('a model that reaches for an image website is refused, and the prompt rules it out', async () => {
+    expect(SYSTEM).toContain('Never fetch a picture from an image website');
+    expect(SYSTEM).toContain('never call it "real"');
+    let ran = 0;
+    const computer = { start: async () => ({ ok: true, data: { podId: 'p' } }), run: async () => (ran++, { data: { exitCode: 0, stdout: '', stderr: '' } }), stop: async () => ({}) };
+    const msgs = [];
+    const model = async (m) => { msgs.push(m); return { text: msgs.length === 1 ? '{"run":"curl -o cat.jpg https://image.pollinations.ai/prompt/cat"}' : '{"say":"ok"}' }; };
+    await runTask({ task: 'put a cat photo into my notes file', model, computer });
+    expect(ran).toBe(0);
+    expect(JSON.stringify(msgs[1])).toContain('Refused: do not fetch pictures from an image website');
+  });
+
   test('no picture (daily limit, busy model): a calm sentence, never a page or a computer', async () => {
     const r = await runTask({ task: 'generate a picture of a lighthouse at night', model: scripted('{"say":"x"}'), computer: noComputer, photo: async () => '' });
     expect(r.answer).toMatch(/^Sorry, the picture could not be drawn right now/);

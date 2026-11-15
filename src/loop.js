@@ -45,7 +45,7 @@ Rules:
 - Put files under your home folder and write it as ~ (for example ~/site/index.html). Never type /home/<name> or /root: the user name differs per computer.
 - For more than one line of code, "write" a file first, then "run" it. Never put several lines into python3 -c.
 - Escape every " inside a string as \\" and every newline as \\n so the JSON is valid.
-- When the user asks for a photo, a picture, an image, a drawing, an illustration, a wallpaper or an avatar (and not a website): send ONE "image" action. Chat draws it in a few seconds and shows it right in the chat, like ChatGPT does. Never make a site or a page for a picture, never start the computer for it, and never download a picture with curl.
+- When the user asks for a photo, a picture, an image, a drawing, an illustration, a wallpaper or an avatar (and not a website): send ONE "image" action. Chat draws it in a few seconds and shows it right in the chat, like ChatGPT does. Never make a site or a page for a picture, never start the computer for it, and never download a picture with curl. Never fetch a picture from an image website (pollinations, picsum, unsplash...): you cannot control what comes back, and a cat request once returned a person. You cannot see the picture, so never describe what it shows and never call it "real": say what you asked it to draw.
 - To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): send ONE "site" action: chat draws a finished, good-looking, phone-friendly page from your words and publishes it (no computer needed), then "say" the link in one sentence. The "site" shapes:
 ${SITE_HELP}
 - Only when no layout fits the page, or the user asks for their own HTML, CSS or separate files: "write" ONE self-contained index.html (inline CSS and JS, no CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence. If the user asks for separate files, "write" index.html, styles.css and app.js into one folder (for example ~/site), link them from index.html with <link rel="stylesheet" href="styles.css"> and <script src="app.js" defer></script>, and "publish" the index.html: chat puts the files next to it into the published page. Write each file once; never copy files to a second place.
@@ -252,6 +252,8 @@ export function parseAction(text) {
 
   return { type: 'say', text: s || '(no answer)' };
 }
+
+const IMAGE_SITE = /pollinations|picsum\.photos|source\.unsplash|loremflickr|placekitten|placeimg/i;
 
 // A picture the user asked for: drawn by Workers AI and shown in the chat, the way ChatGPT and Claude show one.
 export function cleanImage(raw) {
@@ -776,6 +778,9 @@ export async function runTask({ task, history = [], github = undefined, origin =
           emit({ type: 'widget', kind: widget.widget.id, data: r.data });
           shown = { widget: widget.widget.id, summary: r.summary };
         }
+      } else if (action.type === 'run' && IMAGE_SITE.test(action.command)) {
+        shown = { error: 'Refused: do not fetch pictures from an image website, it cannot be controlled and once returned a person for a cat. Send an "image" action and chat draws the picture itself.' };
+        ours = true;
       } else if (action.type === 'run' && !building && SCAFFOLD.test(action.command)) {
         shown = { error: 'Refused: the user asked a question, not for an app, so do not install Flisk or make a project. Answer the question itself (curl, gh api or a widget), then "say".' };
         ours = true;
