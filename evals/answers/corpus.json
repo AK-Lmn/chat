@@ -1,0 +1,26 @@
+[
+  {
+    "id": "rising-sun",
+    "note": "bad = the answer chat gave on 2026-11-15 that started this eval",
+    "good": "Taste differs, but it has a strong case: The Animals' **House of the Rising Sun** is regularly ranked among the greatest rock songs ever recorded, though plenty of listeners would put Dylan or the Beatles above it.\n\n- **A folk song turned rock hit.** It is a traditional American ballad; the band's 1964 version took it to number one in both the UK and the US.\n- **Eric Burdon's voice.** Raw and worn far beyond his 23 years, it carries the story of a ruined life in New Orleans.\n- **Hilton Valentine's arpeggio.** The opening A minor guitar figure is one of the first things many guitarists learn.\n- **Alan Price's organ.** The Vox Continental solo builds the tension through the whole track.\n- **What it changed.** It is often credited as the first folk rock hit, a year before the style took off.\n\nWant a few songs from the same years with that sound, or the story of the older versions before 1964?",
+    "bad": "The Animals' *House of the Rising Sun* is a classic and widely regarded as one of the greatest rock songs of all time. It's a powerful, haunting track with a rich history. What's your favorite part of the song?"
+  },
+  {
+    "id": "borscht-uk",
+    "note": "bad = right facts, wrong language",
+    "good": "Борщ — це густий суп на буряку, і його батьківщиною вважають Україну.\n\n- **Основа.** Буряк дає колір і смак; до нього додають капусту, картоплю, моркву, цибулю і часто м'ясо чи квасолю.\n- **Походження.** Перші згадки про борщ у Києві датують 1584 роком.\n- **Визнання.** У 2022 році ЮНЕСКО внесла культуру приготування українського борщу до списку нематеріальної спадщини.\n- **Варіанти.** Є червоний, зелений зі щавлем і холодний літній; у кожному регіоні України свій рецепт.\n- **Подача.** Зі сметаною, часником і пампушками.\n\nДати простий рецепт на 6 порцій чи розповісти, чим відрізняється полтавський борщ від львівського?",
+    "bad": "Borscht is a beetroot soup that comes from Ukraine.\n\n- **Base.** Beetroot, cabbage, potato, carrot and often meat.\n- **Origin.** First mentioned in Kyiv in 1584.\n- **Recognition.** UNESCO listed the culture of cooking Ukrainian borscht in 2022.\n\nWant a simple recipe for 6 portions?"
+  },
+  {
+    "id": "hello",
+    "note": "control: for a greeting the short answer is the good one",
+    "good": "Hi! Ask me anything, or tell me what to make: a website, an app, a video.",
+    "bad": "Hello! Greetings are an old human custom.\n\n- **Origin.** The word hello became common after 1877, when Thomas Edison proposed it for answering the telephone.\n- **Before that.** People said hail, good day or how do you do.\n- **Around the world.** Hola in Spain, Bonjour in France, Konnichiwa in Japan.\n\nThe handshake is older still and is shown on Greek reliefs from the 5th century BC, and bowing remains the usual greeting across East Asia today.\n\nWant the history of other everyday words?"
+  },
+  {
+    "id": "docker",
+    "note": "bad = long but generic: no names, no numbers, hands the conversation back",
+    "good": "Docker is a tool that packs an app with everything it needs into a **container**, so it runs the same on your laptop, a teammate's and a server.\n\n- **Image.** A read-only package built from a Dockerfile: your code, its libraries and a small Linux userland.\n- **Container.** A running copy of an image, isolated by Linux namespaces and cgroups; it starts in about a second because it shares the host's kernel.\n- **Not a virtual machine.** A VM boots a whole operating system; a container is one isolated process, so 20 of them fit where 3 VMs would.\n- **History.** Solomon Hykes showed it at PyCon in March 2013; the image format is now an open standard (OCI).\n- **Everyday use.** docker run postgres:16 gives you a database in one line, and Docker Compose starts several containers together.\n\nWant the 5 commands that cover most daily use, or how it differs from Kubernetes?",
+    "bad": "Great question! Docker is a really popular and powerful technology that many developers and companies use today. It helps make software development easier and more consistent, and it solves a lot of common problems that teams run into when they build and ship their applications. Many people find it very useful and it has become an important part of modern software work, with a large community and many resources to learn from. It is widely used and well supported across the whole industry. Let me know if there is anything else you would like to know!"
+  }
+]
