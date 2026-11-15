@@ -565,7 +565,12 @@ const LI=/^\\s*([-*]|\\d+[.)])\\s+(.*)/;
 // A picture chat drew: shown big in the answer, the way ChatGPT shows one, with a button to save it.
 const picture=(src,alt)=>{const f=node('figure','gimg'),a=document.createElement('a'),im=document.createElement('img');a.href=src;a.target='_blank';a.rel='noopener';im.src=src;im.alt=alt||'';im.loading='lazy';im.onload=down;a.appendChild(im);
   const bar=node('div','gimgbar'),sv=node('button','btn','Save picture');sv.type='button';
-  sv.onclick=async()=>{try{const b=await (await fetch(src)).blob(),u=URL.createObjectURL(b),x=document.createElement('a');x.href=u;x.download='flisk-picture.'+((b.type.split('/')[1]||'jpg').replace('jpeg','jpg'));document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);}catch(e){window.open(src,'_blank','noopener');}};
+  const give=(b,ext)=>{const u=URL.createObjectURL(b),x=document.createElement('a');x.href=u;x.download='flisk-picture.'+ext;document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);};
+  sv.onclick=async()=>{try{const b=await (await fetch(src)).blob();
+    if(b.type.indexOf('svg')<0){give(b,(b.type.split('/')[1]||'jpg').replace('jpeg','jpg'));return;}
+    // A drawn (SVG) picture is saved as a PNG, which every app opens.
+    const u=URL.createObjectURL(b),im2=new Image();im2.onload=()=>{const c=document.createElement('canvas');c.width=c.height=1024;c.getContext('2d').drawImage(im2,0,0,1024,1024);URL.revokeObjectURL(u);c.toBlob((p)=>p?give(p,'png'):give(b,'svg'),'image/png');};im2.onerror=()=>give(b,'svg');im2.src=u;
+  }catch(e){window.open(src,'_blank','noopener');}};
   bar.appendChild(sv);f.append(a,bar);return f;};
 const md=(n,text)=>{n.textContent='';const L=String(text).split('\\n');let i=0;
   const cells=(l)=>l.trim().replace(/^\\|/,'').replace(/\\|$/,'').split('|').map(c=>c.trim());
@@ -1173,9 +1178,10 @@ async function run(task){
   }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err','You stopped this task.'));else errCard(turn,String(err.message||err),err.kind||'other',task);}
   end(!failed||answer!==null);
   if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
+    const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);
     const sv=node('div','asave'),dl2=node('button','btn','Save as file'),cp2=node('button','btn','Copy');dl2.type=cp2.type='button';
     dl2.onclick=()=>{const u=URL.createObjectURL(new Blob([answer],{type:'text/markdown'})),x=document.createElement('a');x.href=u;x.download='flisk-chat-answer.md';document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);dl2.textContent='Saved ✓';setTimeout(()=>dl2.textContent='Save as file',1500);};
-    cp2.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(answer).then(()=>{cp2.textContent='Copied';setTimeout(()=>cp2.textContent='Copy',1500);});};sv.append(dl2,cp2);turn.appendChild(sv);}
+    cp2.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(answer).then(()=>{cp2.textContent='Copied';setTimeout(()=>cp2.textContent='Copy',1500);});};sv.append(dl2,cp2);if(!onlyPic)turn.appendChild(sv);}
   if(link)turn.appendChild(siteCard(link));
   if(video)turn.appendChild(videoCard(video));
   down();go.disabled=false;box.focus();
