@@ -450,6 +450,23 @@ export async function freeOpenRouterModels(fetchImpl = fetch, now = Date.now()) 
   return ids;
 }
 
+// Does this message ask for a picture to be drawn (and nothing else)? One cheap Workers AI call, one word back.
+// Anything unclear, any error, any missing binding answers null, and the main model handles the message as usual.
+export function imageIntent(env) {
+  if (!env?.AI) return null;
+  return async (task) => {
+    const r = await env.AI.run(WORKERS_AI_FALLBACK, {
+      messages: [
+        { role: 'system', content: 'Decide what the user wants. Answer with ONE word. "image" = they want a picture, photo, drawing or illustration generated for them, and nothing else. "other" = anything else: writing or text about pictures, plans, code, websites, videos, charts, questions, edits, analysis. When unsure answer "other".' },
+        { role: 'user', content: String(task).slice(0, 600) },
+      ],
+      max_tokens: 3, temperature: 0,
+    });
+    const raw = r?.response ?? r?.choices?.[0]?.message?.content ?? '';
+    return /^\W*image\b/i.test(String(raw)) ? 'image' : 'other';
+  };
+}
+
 function workersAiModel(env, overLimit) {
   return async (messages) => {
     if (!env.AI) return { error: 'no Workers AI binding', kind: 'provider' };
@@ -592,7 +609,7 @@ export function playbooksFor(task) {
 }
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -613,7 +630,10 @@ export async function runTask({ task, history = [], github = undefined, origin =
   const building = asksToBuild(task, history);
   const analysis = asksAnalysis(task);
   // A plain question about the world: chat looks the subject up first, so the model has facts to take instead of inventing them.
-  const direct = files.length ? null : asksImage(task);
+  let direct = files.length ? null : asksImage(task);
+  // The wording match above only nominates a message. A small model decides: anything but a clear "picture" (or a failed
+  // call) sends the message to the main model, so a text that merely mentions a picture is never drawn by mistake.
+  if (direct && classify) direct = (await Promise.resolve(classify(task)).catch(() => null)) === 'image' ? direct : null;
   let sources = [];
   if (!direct && lookupFacts && wantsLookup(task, { building, files: files.length })) {
     sources = await Promise.resolve(lookupFacts(task)).catch(() => []) || [];
