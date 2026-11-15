@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/loop.js';
+import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, POLLINATIONS_TEXT_URL, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/loop.js';
 
 const WOLF = 'https://inf.test/v1/chat/completions';
 const msgs = [{ role: 'user', content: 'hi' }];
@@ -202,4 +202,20 @@ test('Workers AI answering in the newer OpenAI-style shape (choices) is read, no
   delete w.env.OPENROUTER_KEY;
   w.env.AI = { run: async () => ({ object: 'chat.completion', model: '@cf/meta/llama-3.1-8b-fast-v2', choices: [{ index: 0, message: { role: 'assistant', content: 'from the new shape' } }] }) };
   expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ text: 'from the new shape', by: WORKERS_AI_FALLBACK });
+});
+
+test('the account out of neurons (Wolf and Workers AI both fail): Pollinations answers with no key', async () => {
+  const w = world({ ai: new Error('4006: you have used up your daily free allocation of 10,000 neurons') });
+  delete w.env.OPENROUTER_KEY;
+  const base = w.fetchImpl;
+  w.fetchImpl = async (u, init) => (String(u) === POLLINATIONS_TEXT_URL ? (w.calls.push({ url: String(u) }), answer('pollinations here')) : base(u, init));
+  expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ text: 'pollinations here', by: 'pollinations' });
+  expect(w.calls.map((c) => c.url)).toEqual([WOLF, POLLINATIONS_TEXT_URL]);
+});
+
+test('Pollinations can be switched off', async () => {
+  const w = world({ ai: new Error('neurons used up') });
+  w.env.NO_POLLINATIONS = '1';
+  expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ error: FREE_BUSY, kind: 'busy' });
+  expect(w.calls.some((c) => c.url === POLLINATIONS_TEXT_URL)).toBe(false);
 });

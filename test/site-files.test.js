@@ -61,7 +61,7 @@ describe('a site written as separate files is published as one page', () => {
     const page = '<html><body><h1>Cat Mirror Selfie</h1><img src="cat.jpg" alt="A cat taking a mirror selfie"></body></html>';
     const published = [];
     const out = await runTask({
-      task: 'generate a photo of cat taking a mirror selfie', computer, origin: 'https://chat.test',
+      task: 'make a web page with a photo of my cat taking a mirror selfie', computer, origin: 'https://chat.test',
       model: scripted(JSON.stringify({ write: { path: '~/site/index.html', content: page } }), '{"publish": "~/site/index.html"}', '{"say": "Your page is live: https://chat.test/s/abc"}'),
       publish: async (html, o) => (published.push({ html, limit: o?.limit }), { url: 'https://chat.test/s/abc' }),
     });

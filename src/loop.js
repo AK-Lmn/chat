@@ -32,6 +32,7 @@ Pick exactly one of these shapes:
 {"write": {"path": "<file>", "content": "<text>"}}
 {"read": "<file>"}
 {"publish": "<path to an index.html>"}
+{"image": {"prompt": "<what the picture shows, in English, with subject, setting, style and light>", "caption": "<one short sentence for the user>"}}
 {"site": {"layout": "<landing|portfolio|menu|event|prices>", "title": "<name>", ...}}
 {"video": {"title": "<short title>", "scenes": [{"text": "<words on screen, at most 10>", "say": "<one spoken sentence>"}]}}
 {"system": {"title": "<name>", "services": [{"name": "<lowercase-name>", "does": "<one short phrase>", "fields": ["<column>"]}]}}
@@ -44,6 +45,7 @@ Rules:
 - Put files under your home folder and write it as ~ (for example ~/site/index.html). Never type /home/<name> or /root: the user name differs per computer.
 - For more than one line of code, "write" a file first, then "run" it. Never put several lines into python3 -c.
 - Escape every " inside a string as \\" and every newline as \\n so the JSON is valid.
+- When the user asks for a photo, a picture, an image, a drawing, an illustration, a wallpaper or an avatar (and not a website): send ONE "image" action. Chat draws it in a few seconds and shows it right in the chat, like ChatGPT does. Never make a site or a page for a picture, never start the computer for it, and never download a picture with curl.
 - To make a website that only shows things (a landing page, a portfolio, a menu, an event page: nothing for the visitor to add, save or delete): send ONE "site" action: chat draws a finished, good-looking, phone-friendly page from your words and publishes it (no computer needed), then "say" the link in one sentence. The "site" shapes:
 ${SITE_HELP}
 - Only when no layout fits the page, or the user asks for their own HTML, CSS or separate files: "write" ONE self-contained index.html (inline CSS and JS, no CDNs, under 200 KB, good looking: a hero section, a calm colour palette, system fonts, cards or sections with spacing and rounded corners; mobile friendly. Never invent a phone number, email address or street address: write "Add your address here" style placeholders), then "publish" it, then "say" the link in one sentence. If the user asks for separate files, "write" index.html, styles.css and app.js into one folder (for example ~/site), link them from index.html with <link rel="stylesheet" href="styles.css"> and <script src="app.js" defer></script>, and "publish" the index.html: chat puts the files next to it into the published page. Write each file once; never copy files to a second place.
@@ -226,6 +228,11 @@ export function parseAction(text) {
         if (spec) return { type: 'site', spec };
         return { type: 'bad', text: s, why: `A "site" needs "layout" (one of ${LAYOUTS.join(', ')}) and a "title". Send it again with both, or write and publish an index.html if no layout fits.` };
       }
+      if (a?.image) {
+        const spec = cleanImage(a.image);
+        if (spec) return { type: 'image', spec };
+        return { type: 'bad', text: s, why: 'An "image" needs a "prompt": what the picture shows. Send it again.' };
+      }
       if (a?.share !== undefined) {
         const spec = cleanShare(a.share);
         if (spec) return { type: 'share', spec };
@@ -236,7 +243,7 @@ export function parseAction(text) {
   }
   // An action that starts but never closes (the answer was cut off at the length limit, often a long file with no } in
   // it) is a bad reply to retry, never an answer to show.
-  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
+  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|image|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
 
   // If it still looks like a tool call or XML, force a retry.
   if (/DSML|<invoke|<parameter|tool_call|function_call/i.test(String(text))) {
@@ -245,6 +252,34 @@ export function parseAction(text) {
 
   return { type: 'say', text: s || '(no answer)' };
 }
+
+// A picture the user asked for: drawn by Workers AI and shown in the chat, the way ChatGPT and Claude show one.
+export function cleanImage(raw) {
+  const o = typeof raw === 'string' ? { prompt: raw } : raw && typeof raw === 'object' ? raw : {};
+  const prompt = String(o.prompt || o.description || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
+  if (!prompt) return null;
+  const caption = String(o.caption || '').replace(/\s+/g, ' ').trim().slice(0, 300) || 'Here is your picture.';
+  return { prompt, caption };
+}
+
+// "generate a photo of a cat taking a mirror selfie", "draw me a dragon": a picture and nothing else. Chat draws these at
+// once, without asking the model first, so the picture comes in seconds even when the free model is busy. Anything about a
+// website, a page, a video or a chart goes to the model as before.
+const IMG_WORD = '(?:photos?|photographs?|pictures?|pics?|images?|drawings?|illustrations?|paintings?|portraits?|wallpapers?|avatars?|sketch(?:es)?|artworks?)';
+const ASK_IMAGE = new RegExp(`^\\s*(?:(?:please|pls|hey|can you|could you|would you|i want|i'd like)\\s+)*(?:generate|create|make|draw|paint|render|imagine|give me|show me|produce)\\s+(?:me\\s+|us\\s+)?(?:(?:a|an|the|one|some)\\s+)?(?:[\\w-]+\\s+){0,3}?${IMG_WORD}\\s+(?:of|showing|with|where)\\s+(.+)$`, 'i');
+const ASK_DRAW = /^\s*(?:please\s+)?(?:draw|paint|sketch)\s+(?:me\s+|us\s+)?(.+)$/i;
+const NOT_IMAGE = /\b(web ?sites?|web ?pages?|landing|pages?|site|videos?|clips?|apps?|html|charts?|graphs?|diagrams?|plots?|tables?|slides?|deck|logo for (?:my|our|the) (?:site|website|app))\b/i;
+export function asksImage(task) {
+  const t = String(task || '').trim();
+  if (!t || t.length > 600 || t.includes('\n') || NOT_IMAGE.test(t)) return null;
+  const m = ASK_IMAGE.exec(t) || ASK_DRAW.exec(t);
+  const what = m ? m[1].replace(/[\s.!?]+$/, '').trim() : '';
+  if (what.length < 3) return null;
+  const real = /\b(photo|photograph|realistic|selfie)/i.test(t);
+  return { prompt: `${what}, ${real ? 'a photorealistic photo, natural light, sharp detail' : 'high detail'}`, caption: `Here is ${what}.` };
+}
+const imageAlt = (s) => String(s).replace(/[[\]()\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'picture';
+export const imageAnswer = (spec, url) => `![${imageAlt(spec.caption)}](${url})\n\n${spec.caption}`;
 
 const clip = (s, n = OUT_CHARS) => {
   const t = String(s ?? '');
@@ -365,6 +400,9 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const OPENROUTER_PREFERRED = ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3.5-lightning:free', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'nvidia/nemotron-3.5-super-vl:free'];
 export const WORKERS_AI_FALLBACK = '@cf/meta/llama-3.1-8b-instruct-fast';
+// The last fallback needs no key and no Cloudflare neurons: when the account's free 10,000 daily neurons are used up,
+// Wolf and Workers AI both fail at once, and without it every free chat said "busy" until midnight UTC.
+export const POLLINATIONS_TEXT_URL = 'https://text.pollinations.ai/openai';
 export const WORKERS_AI_PER_DAY = 300; // about 1,500 neurons at most: chat's share of the account's free 10,000
 export const FREE_BUSY = 'The free AI is busy right now. Try again in a minute, or keep going free with your own OpenRouter account.';
 const WOLF_REST_MS = 10 * 60 * 1000;
@@ -443,6 +481,11 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const r = await workers(messages);
     if (!r.error) return { ...r, by: WORKERS_AI_FALLBACK };
     tried.push(`workers-ai: ${r.error}`);
+    if (env.NO_POLLINATIONS !== '1') {
+      const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true })(messages);
+      if (!p.error) return { ...p, by: 'pollinations' };
+      tried.push(`pollinations: ${p.error}`);
+    }
     log(tried);
     return { error: FREE_BUSY, kind: 'busy' };
   };
@@ -522,7 +565,7 @@ export function playbooksFor(task) {
 }
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -543,8 +586,9 @@ export async function runTask({ task, history = [], github = undefined, origin =
   const building = asksToBuild(task, history);
   const analysis = asksAnalysis(task);
   // A plain question about the world: chat looks the subject up first, so the model has facts to take instead of inventing them.
+  const direct = files.length ? null : asksImage(task);
   let sources = [];
-  if (lookupFacts && wantsLookup(task, { building, files: files.length })) {
+  if (!direct && lookupFacts && wantsLookup(task, { building, files: files.length })) {
     sources = await Promise.resolve(lookupFacts(task)).catch(() => []) || [];
     if (sources.length) emit({ type: 'sources', sources: sources.map((x) => ({ title: x.title, url: x.url })) });
   }
@@ -576,6 +620,23 @@ export async function runTask({ task, history = [], github = undefined, origin =
   let appPort = null; // the website port a bigger app answered with
   let shareRefused = false; // the provider cannot give this computer a public link
   let askedForLink = false;
+  // Draws the picture and keeps it at its own link (saveImage), so the chat history holds a short link, not the picture.
+  const drawImage = async (spec) => {
+    emit({ type: 'image_start', prompt: spec.prompt });
+    const pic = await Promise.resolve(photo(spec.prompt)).catch(() => '');
+    if (!pic) return { error: 'the picture could not be drawn right now: the daily picture limit is used up or the drawing model is busy. Try again later' };
+    const saved = saveImage ? await Promise.resolve(saveImage(pic, spec.prompt)).catch((e) => ({ error: String(e?.message || e) })) : { url: pic };
+    if (saved?.error || !saved?.url) return { error: saved?.error || 'the picture could not be saved' };
+    links.push(saved.url);
+    return { url: saved.url };
+  };
+  if (direct) {
+    stats.firstAction = 'image';
+    const r = await drawImage(direct);
+    const text = r.error ? `Sorry, ${r.error}.` : imageAnswer(direct, r.url);
+    emit({ type: 'answer', text });
+    return await finish(text);
+  }
   try {
     for (let step = 1; step <= maxSteps; step++) {
       emit({ type: 'thinking', step });
@@ -672,7 +733,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
         continue;
       }
       // A layout page is made on the Worker: it needs no computer.
-      if (!podId && action.type !== 'site') {
+      if (!podId && action.type !== 'site' && action.type !== 'image') {
         emit({ type: 'pod_starting' });
         const made = await computer.start(order);
         if (made.error) {
@@ -696,7 +757,17 @@ export async function runTask({ task, history = [], github = undefined, origin =
       }
       let shown;
       let ours = false; // chat itself refused the action (a rule, not a broken computer or file)
-      if (widget) {
+      if (action.type === 'image') {
+        // The picture is the answer: show it with its caption at once, with no further step.
+        const r = await drawImage(action.spec);
+        if (!r.error) {
+          steps.push({ action, image: r.url });
+          const text = imageAnswer(action.spec, r.url);
+          emit({ type: 'answer', text });
+          return await finish(text);
+        }
+        shown = { error: r.error };
+      } else if (widget) {
         const r = await widget.widget.run(widget.input, { fetch: fetchImpl, citable, computer, podId });
         if (r.error) shown = { error: r.error };
         else {
