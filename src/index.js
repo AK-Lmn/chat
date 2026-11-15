@@ -1,4 +1,5 @@
 import { OG_PNG } from './og.js';
+import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
 import { THREE_SRC, TEXTURES } from './earth.js';
@@ -551,11 +552,30 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     // ?again=1: someone who signed in before chat asked for GitHub access goes through GitHub once more to allow it.
     if (have && !isAnon(have.login) && !url.searchParams.get('again')) return redirect('/');
     if (env.DEV_LOGIN) return redirect('/', { 'set-cookie': await makeSession(env, env.DEV_LOGIN) });
+    if (env.LOGIN_PUBLIC_KEY && !url.searchParams.get('again')) {
+      // Identity comes from login.flisk.si (one GitHub app for every Flisk site). GitHub repo access is a separate step: ?again=1.
+      const state = crypto.randomUUID();
+      const back = new URL('/auth/done', origin);
+      back.searchParams.set('s', state);
+      const headers = new Headers({ location: `${env.LOGIN_ORIGIN || 'https://login.flisk.si'}/start?return=${encodeURIComponent(back.href)}` });
+      headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+      return new Response(null, { status: 302, headers });
+    }
     if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return html(messagePage('Sign-in is not set up', 'GitHub sign-in has not been connected yet.'), 503);
     const state = crypto.randomUUID();
     const headers = new Headers({ location: githubAuthorizeUrl({ ...env, PUBLIC_ORIGIN: origin }, state) });
     headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
     return new Response(null, { status: 302, headers });
+  }
+  if (request.method === 'GET' && path === '/auth/done') {
+    const cookie = /(?:^|;\s*)chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
+    const st = url.searchParams.get('s') || '';
+    const who = env.LOGIN_PUBLIC_KEY && env.SESSION_SECRET && st && st === cookie ? await verifyLoginToken(url.searchParams.get('flisk_token'), env.LOGIN_PUBLIC_KEY, origin) : null;
+    if (!who || !/^[A-Za-z0-9-]{1,39}$/.test(who.login) || /^anon-/i.test(who.login)) return html(messagePage('Sign-in failed', 'The sign-in link expired. Start again.'), 400);
+    const headers = new Headers({ location: '/' });
+    headers.append('set-cookie', await makeSession(env, who.login));
+    headers.append('set-cookie', 'chat_state=; Path=/auth; Max-Age=0');
+    return new Response(null, { status: 303, headers });
   }
   if (request.method === 'GET' && path === '/auth/callback') {
     const state = url.searchParams.get('state') || '';
