@@ -11,7 +11,7 @@ export const MAX_LAYOUT_BYTES = 1536 * 1024;
 // started on the first action and always stopped at the end.
 export const MAX_STEPS = 8;
 // A "say" that gives up or hands the problem back to the user.
-const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|you need to (provide|sign|log)|i (can't|cannot|couldn't|could not|am unable|was unable|'m unable)|unable to|failed to|not able to)\b/i;
+const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|you need to (provide|sign|log)|i (can't|cannot|couldn't|could not|am unable|was unable|'m unable)|unable to|failed to|not able to|could not be|couldn't be|cannot be|can't be|is not available|isn't available|not available right now|try again later|check your internet)\b/i;
 // The visitor's own key pays for its own steps, so a bigger app (install, write several files, start, check) fits.
 export const BYO_STEPS = 16;
 export const GITHUB_STEPS = 20; // a fork-to-PR run needs more than 16 actions, but Workers Free stops at 50 subrequests per run (a 32-action run died at 25)
@@ -464,10 +464,10 @@ export function asksToBuild(task, history = []) {
 // Playbooks ("skills") matched to the task: known keyless sources, so the model does not reach for an API that needs a key.
 export const PLAYBOOKS = [
   { when: /\b(news|headlines?|today'?s? stories)\b/i, text: 'News: {"widget": {"kind": "web", "url": "https://feeds.bbci.co.uk/news/rss.xml"}} first (or curl -s https://feeds.bbci.co.uk/news/rss.xml (or https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en, https://hnrss.org/frontpage) and pull <title> and <link> with grep/sed or python3 xml.etree. No key needed. Never use newsapi.org.' },
-  { when: /\b(bitcoin|btc|eth|crypto|coin)\b/i, text: 'Crypto prices: curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd" (no key).' },
-  { when: /\b(stock|share price|ticker|nasdaq|s&p)\b/i, text: 'Stocks: curl -s "https://stooq.com/q/l/?s=aapl.us&f=sd2t2ohlcv&h&e=csv" (no key; ticker.us).' },
-  { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: curl -s https://open.er-api.com/v6/latest/USD (no key).' },
-  { when: /\b(search|look up|find out|who is|what is|wiki)\b/i, text: 'Lookup: curl -s "https://en.wikipedia.org/api/rest_v1/page/summary/<Title>" or "https://html.duckduckgo.com/html/?q=<words>" with a browser User-Agent (no key).' },
+  { when: /\b(bitcoin|btc|eth|crypto|coin)\b/i, text: 'Crypto prices: {"widget": {"kind": "web", "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd"}} (no key; if it fails, https://api.coinbase.com/v2/prices/BTC-USD/spot).' },
+  { when: /\b(stock|share price|ticker|nasdaq|s&p)\b/i, text: 'Stocks: {"widget": {"kind": "web", "url": "https://stooq.com/q/l/?s=aapl.us&f=sd2t2ohlcv&h&e=csv"}} (no key; ticker.us).' },
+  { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: {"widget": {"kind": "web", "url": "https://open.er-api.com/v6/latest/USD"}} (no key).' },
+  { when: /\b(search|look up|find out|who is|what is|wiki)\b/i, text: 'Lookup: {"widget": {"kind": "web", "url": "https://en.wikipedia.org/api/rest_v1/page/summary/<Title>"}} or {"widget": {"kind": "web", "url": "https://html.duckduckgo.com/html/?q=<words>"}} (no key).' },
 ];
 export function playbooksFor(task) {
   const hits = PLAYBOOKS.filter((p) => p.when.test(String(task))).map((p) => `- ${p.text}`);
