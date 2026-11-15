@@ -556,7 +556,7 @@ const lg=(p,h)=>{try{const i=document.createElement('img');i.className='lg';i.al
 const inl=(p,s)=>{String(s).split(/(\\[[^\\]]+\\]+\\(https?:\\/\\/[^\\s)]+\\)|\\*\\*[^*]+\\*\\*|\\x60[^\\x60]+\\x60|https?:\\/\\/[^\\s)|]+|(?<![\\w@/.-])[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9-]+)*\\.(?:com|dev|io|sh|org|net|ai|app|si|so|co)(?:\\/[^\\s)|,;]*)?(?![\\w@-]))/i).forEach(t=>{if(!t)return;
   const ml=/^\\[([^\\]]+)\\]+\\((https?:\\/\\/[^\\s)]+)\\)$/.exec(t);
   if(ml){const a=document.createElement('a');lg(p,ml[2]);a.href=ml[2];a.target='_blank';a.rel='noopener';a.textContent=ml[1];p.appendChild(a);}
-  else if(t.slice(0,2)==='**'&&t.length>4)p.appendChild(node('b','',t.slice(2,-2)));
+  else if(t.slice(0,2)==='**'&&t.length>4){const b=document.createElement('b');inl(b,t.slice(2,-2));p.appendChild(b);}
   else if(t.charCodeAt(0)===96&&t.length>2)p.appendChild(node('code','',t.slice(1,-1)));
   else if(/^https?:\\/\\//.test(t)){const a=document.createElement('a');lg(p,t);a.href=t;a.target='_blank';a.rel='noopener';a.textContent=t;p.appendChild(a);}
   else if(/^[a-z0-9][a-z0-9.-]*\\.(com|dev|io|sh|org|net|ai|app|si|so|co)(\\/[^\\s)|,;]*)?$/i.test(t)){const a=document.createElement('a');lg(p,'https://'+t);a.href='https://'+t;a.target='_blank';a.rel='noopener';a.textContent=t+' \u2197';p.appendChild(a);}

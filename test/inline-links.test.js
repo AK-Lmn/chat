@@ -51,3 +51,12 @@ describe('logos next to links', () => {
     expect(k[0].src).toBe('/logo/tilt.dev');
   });
 });
+
+describe('links inside bold', () => {
+  it('renders [Garden](url) and [DevSpace](url) inside ** as links', () => {
+    const k = render('**[Garden](https://garden.io) and [DevSpace](https://devspace.sh)**: dev flows');
+    const b = k.find((n) => n.tag === 'b');
+    const links = b.kids.filter((n) => n.tag === 'a');
+    expect(links.map((a) => a.href)).toEqual(['https://garden.io', 'https://devspace.sh']);
+  });
+});
