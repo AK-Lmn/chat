@@ -27,6 +27,17 @@ CREATE TABLE IF NOT EXISTS videos (
 );
 CREATE INDEX IF NOT EXISTS videos_login ON videos (login, created);
 
+-- Pictures a task drew (the "image" action), served at /i/<id>.jpg: 30 days, the newest 50 per login.
+CREATE TABLE IF NOT EXISTS images (
+  id TEXT PRIMARY KEY,          -- 16 random hex characters: the link is unguessable
+  login TEXT NOT NULL,
+  type TEXT NOT NULL,           -- jpeg | png | webp
+  prompt TEXT NOT NULL,
+  data TEXT NOT NULL,           -- base64
+  created TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS images_login ON images (login, created);
+
 -- The AI a person picked for PR reviews. The key is encrypted with the KEY_SECRET Worker secret; one button deletes it.
 CREATE TABLE IF NOT EXISTS ai_settings (
   login TEXT PRIMARY KEY,

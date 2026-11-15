@@ -18,11 +18,40 @@ export async function takePhotoSlot(env, login, day = new Date().toISOString().s
   return true;
 }
 
+// When FLUX cannot draw (the account's daily neurons are used up), the picture comes from Pollinations, which needs no key.
+export const POLLINATIONS_IMAGE_URL = 'https://image.pollinations.ai/prompt/';
+const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
+
+export async function pollinationsPhoto(prompt, { fetchImpl = fetch, ms = PHOTO_MS, base = POLLINATIONS_IMAGE_URL } = {}) {
+  try {
+    const url = `${base}${encodeURIComponent(String(prompt).slice(0, 800))}?width=1024&height=1024&nologo=true&private=true`;
+    const res = await fetchImpl(url, { signal: AbortSignal.timeout(ms) });
+    const type = (res.headers.get('content-type') || '').split(';')[0].trim();
+    if (!res.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return '';
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.length < 1000 || bytes.length > MAX_PHOTO_BYTES) return '';
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `data:${type};base64,${btoa(bin)}`;
+  } catch {
+    return '';
+  }
+}
+
 // A data: URL of the photo, or '' when there is none.
-export async function sitePhoto(env, login, prompt, { ms = PHOTO_MS } = {}) {
-  if (!env.AI || !prompt) return '';
+export async function sitePhoto(env, login, prompt, { ms = PHOTO_MS, fetchImpl = fetch } = {}) {
+  if (!prompt || !env.DB) return '';
   try {
     if (!(await takePhotoSlot(env, login))) return '';
+  } catch {
+    return '';
+  }
+  const flux = env.AI ? await fluxPhoto(env, prompt, ms) : '';
+  return flux || (env.NO_POLLINATIONS === '1' ? '' : pollinationsPhoto(prompt, { fetchImpl, ms }));
+}
+
+async function fluxPhoto(env, prompt, ms) {
+  try {
     let timer;
     const out = await Promise.race([
       env.AI.run(PHOTO_MODEL, { prompt: String(prompt).slice(0, 2000), steps: 4 }),
