@@ -70,7 +70,9 @@ export function scoreAnswer(question, answer) {
     const missed = facts.filter((f) => !hit.includes(f)).map((f) => f[0]);
     total += check('facts', 20, hit.length / facts.length, `missing known facts: ${missed.join(', ')}`);
   }
-  const last = ls[ls.length - 1] || '';
+  // The line of sources that chat adds after a lookup is not part of what the model wrote: the question before it counts.
+  const said = ls.filter((l) => !/^Sources: \[/.test(l));
+  const last = said[said.length - 1] || '';
   const asks = /[?？]\s*$/.test(last.replace(/[*_]+$/g, ''));
   total += check('follow-up', 15, asks ? (HAND_BACK.test(last) ? 0.3 : 1) : 0, asks ? 'the closing question only hands the conversation back' : 'no closing follow-up question');
   return done();
@@ -83,4 +85,12 @@ export function summarize(rows) {
   const lost = {};
   for (const r of scored) for (const f of r.findings) lost[f.split(':')[0]] = (lost[f.split(':')[0]] || 0) + 1;
   return { mean, scored, lost: Object.entries(lost).sort((a, b) => b[1] - a[1]) };
+}
+
+// Years in an answer that neither the question nor the looked-up sources contain: the cheapest sign of an invented
+// fact. It reports, it does not score: a right year can simply be missing from the first paragraph of a source.
+export function unsupportedYears(question, answer, sources = []) {
+  const known = `${question?.q || ''} ${sources.map((s) => s.text).join(' ')}`;
+  const years = String(answer ?? '').replace(/\]\([^)]*\)/g, ']').match(/\b(1[0-9]{3}|20[0-9]{2})\b/g) || [];
+  return [...new Set(years)].filter((y) => !known.includes(y));
 }

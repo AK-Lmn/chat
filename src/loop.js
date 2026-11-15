@@ -5,6 +5,7 @@ import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
 import { cleanShare, KEEP_DAYS, shareApp } from './share.js';
 import { cleanSite, LAYOUTS, photoPrompt, renderSite, SITE_HELP } from './sites.js';
 import { githubNote, scrub, setupGithub } from './github.js';
+import { sourcesNote, splitPoints, wantsLookup, withSources } from './lookup.js';
 
 // A layout page carries its fonts and a photo, so it may be bigger than a hand-written page.
 export const MAX_LAYOUT_BYTES = 1536 * 1024;
@@ -477,7 +478,7 @@ export function playbooksFor(task) {
 }
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
-export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -496,7 +497,13 @@ export async function runTask({ task, history = [], github = undefined, origin =
   const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
-  const messages = [{ role: 'system', content: system }, ...cleanHistory(past), { role: 'user', content: first }];
+  // A plain question about the world: chat looks the subject up first, so the model has facts to take instead of inventing them.
+  let sources = [];
+  if (lookupFacts && wantsLookup(task, { building, files: files.length })) {
+    sources = await Promise.resolve(lookupFacts(task)).catch(() => []) || [];
+    if (sources.length) emit({ type: 'sources', sources: sources.map((x) => ({ title: x.title, url: x.url })) });
+  }
+  const messages = [{ role: 'system', content: system + sourcesNote(sources) }, ...cleanHistory(past), { role: 'user', content: first }];
   let podId = null;
   let provider = null;
   const steps = [];
@@ -589,7 +596,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
       }
       if (action.type === 'say' || last) {
         // Out of steps with an action still planned: never show that raw JSON as the answer.
-        const text = action.type === 'say' ? noteDeadLinks(action.text, !!podId) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
+        const text = action.type === 'say' ? withSources(splitPoints(noteDeadLinks(action.text, !!podId)), sources) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
         emit({ type: 'answer', text });
         return await finish(text);
       }

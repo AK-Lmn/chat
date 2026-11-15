@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { scoreAnswer, script, specifics, summarize } from './score.mjs';
+import { unsupportedYears } from './score.mjs';
 
 const here = (f) => new URL(f, import.meta.url);
 const questions = JSON.parse(readFileSync(here('questions.json'), 'utf8'));
@@ -48,4 +49,19 @@ test('summarize gives the mean and the checks that lose most', () => {
   const s = summarize(corpus.map((c) => ({ question: byId[c.id], answer: c.bad })));
   assert.ok(s.mean < 60);
   assert.ok(s.lost.length > 0 && s.lost[0][1] >= s.lost[s.lost.length - 1][1]);
+});
+
+test('a year that is in neither the question nor the sources is reported', () => {
+  const src = [{ text: 'The Animals recorded it in 1964.' }];
+  assert.deepEqual(unsupportedYears({ q: 'best song?' }, 'Recorded in 1964, written in 1933. [x](https://a.b/1999)', src), ['1933']);
+  assert.deepEqual(unsupportedYears({ q: 'what happened in 1933?' }, 'In 1933 it began.', []), []);
+});
+
+test('a closing question still counts when chat adds its line of sources after it', () => {
+  const q = { q: 'is Inception a good movie?' };
+  const body = 'Yes, it is.\n\n- **Plot:** a heist in dreams\n\nWhich part did you like?';
+  const plain = scoreAnswer(q, body);
+  const sourced = scoreAnswer(q, `${body}\n\nSources: [Inception](https://en.wikipedia.org/wiki/Inception)`);
+  assert.equal(sourced.checks['follow-up'], plain.checks['follow-up']);
+  assert.equal(plain.checks['follow-up'], 15);
 });

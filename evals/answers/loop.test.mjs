@@ -57,7 +57,7 @@ test('answerFor asks with the candidate block in the real system prompt and nudg
   const seen = [];
   const replies = ['{"run": "curl example.com"}', '{"say": "the answer"}'];
   const ask = async (messages) => { seen.push(messages); return replies[seen.length - 1]; };
-  assert.equal(await answerFor({ q: 'why?' }, style('zz'), ask), 'the answer');
+  assert.equal((await answerFor({ q: 'why?' }, style('zz'), ask)).answer, 'the answer');
   assert.ok(seen[0][0].content.includes('Quality of a plain answer zz.'));
   assert.ok(seen[0][0].content.includes('You are Flisk Chat'));
   assert.match(seen[1][3].content, /no computer/);
@@ -74,4 +74,16 @@ test('writeStyle replaces only the block and the file still imports', async () =
   writeStyle(style('new'), file);
   assert.ok(readFileSync(file, 'utf8').startsWith('// keep this comment\n'));
   assert.equal((await import(file)).ANSWER_STYLE, style('new'));
+});
+
+test('with a lookup the model is handed the sources and the answer ends with them', async () => {
+  const seen = [];
+  const ask = async (messages) => { seen.push(messages[0].content); return '{"say": "It came out in 2010."}'; };
+  const facts = async () => [{ title: 'Inception', url: 'https://en.wikipedia.org/wiki/Inception', text: 'Inception is a 2010 film.' }];
+  const got = await answerFor({ q: 'is Inception a good movie?' }, style('zz'), ask, facts);
+  assert.match(seen[0], /Inception is a 2010 film/);
+  assert.match(got.answer, /Sources: \[Inception\]/);
+  assert.equal(got.sources.length, 1);
+  const hello = await answerFor({ q: 'hello' }, style('zz'), ask, async () => { throw new Error('a greeting must not be looked up'); });
+  assert.equal(hello.sources.length, 0);
 });

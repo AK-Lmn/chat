@@ -1122,6 +1122,7 @@ async function run(task){
   // One event of the task, from the cloud stream or from the line to the computer in this tab.
   const onEv=(ev)=>{
     if(ev.type==='thinking')ws.textContent='Thinking, step '+ev.step;
+    else if(ev.type==='sources')ws.textContent='Read '+ev.sources.length+(ev.sources.length>1?' sources':' source')+' on Wikipedia';
     else if(ev.type==='pod_starting'){step('Starting a computer','','server');ws.textContent='Starting a computer';}
     else if(ev.type==='pod_started'){if(live)live.querySelector('.t').textContent='Computer ready on '+ev.provider;}
     else if(ev.type==='run'){step('Ran '+code(ev.command),'',cmdIcon(ev.command));ws.textContent='Running a command';}
