@@ -214,3 +214,10 @@ describe('a bigger app is one Flisk project in ~/app', () => {
     expect(r.answer).toContain('no live link');
   });
 });
+
+test('research questions get the structured report format', async () => {
+  const { SYSTEM } = await import('../src/loop.js');
+  expect(SYSTEM).toContain('Research or analysis questions');
+  expect(SYSTEM).toContain('Positioning');
+  expect(SYSTEM).toContain('web widget');
+});
