@@ -49,3 +49,14 @@ test('the web widget reads an RSS feed as titles with links', async () => {
   expect((await web({ url: 'http://localhost/x' }, { fetch })).error).toContain('public');
   expect((await web({ url: 'https://x.test' }, { fetch: async () => new Response('', { status: 403 }) })).error).toContain('another address');
 });
+
+test('passive give-ups are caught and price playbooks use the web reader', () => {
+  expect(playbooksFor('bitcoin price')).toContain('"kind": "web"');
+  expect(playbooksFor('usd to eur exchange rate')).toContain('"kind": "web"');
+});
+test('"could not be retrieved" is a give-up', async () => {
+  const replies = ['{"say": "The Bitcoin price could not be retrieved at this time."}', '{"say": "BTC is $90,000"}'];
+  let i = 0;
+  const r = await runTask({ task: 'bitcoin price', model: async () => ({ text: replies[i++] }), computer, publish: async () => ({}) });
+  expect(r.answer).toBe('BTC is $90,000');
+});
