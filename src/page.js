@@ -15,7 +15,7 @@ export const PROVIDER_CARDS = [
 ];
 
 // Every provider fleet can use. Only some can be connected here with one key; the rest are connected in fleet's own cabinet.
-export const PROVIDER_NAMES = { daytona: 'Daytona', blaxel: 'Blaxel', upstash: 'Upstash Box', e2b: 'E2B', isorun: 'Isorun', vercel: 'Vercel Sandbox', boat: 'boat', hopx: 'Hopx', runloop: 'Runloop', sprites: 'Fly Sprites', morph: 'Morph', tensorlake: 'Tensorlake', freestyle: 'Freestyle', langsmith: 'LangSmith' };
+export const PROVIDER_NAMES = { daytona: 'Daytona', blaxel: 'Blaxel', upstash: 'Upstash Box', e2b: 'E2B', isorun: 'Isorun', vercel: 'Vercel Sandbox', boat: 'boat', hopx: 'Hopx', runloop: 'Runloop', sprites: 'Fly Sprites', morph: 'Morph', tensorlake: 'Tensorlake', freestyle: 'Freestyle', langsmith: 'LangSmith', anona: 'Anona Compute' };
 export const AI_CHOICES = [['wolf', 'Flisk Wolf (free)'], ['anthropic', 'Claude (my API key)'], ['openai', 'OpenAI (my API key)'], ['openrouter', 'OpenRouter (my API key)']];
 
 // The model picker's list when inference.flisk.si/v1/catalog cannot be read. Same shape as that catalogue.
@@ -1280,16 +1280,16 @@ if(window.__SIGNED__){try{const t=sessionStorage.getItem('chat_pending');if(t){s
 
 const bare = (name) => icon(name, 10).replace(/ width="10" height="10" aria-hidden="true" focusable="false"/, '');
 // A company's logo on a small white tile, or its initials when flisk-emoji has no logo for it.
-const logo = (id, size = 16) =>
-  LOGOS[id] ? `<span class="lg" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="${LOGOS[id]}" alt=""></span>` : `<span class="lt" style="width:${size}px;height:${size}px" aria-hidden="true">${esc(String(PROVIDER_NAMES[id] || id).slice(0, 2))}</span>`;
+const logo = (id, size = 16, names = PROVIDER_NAMES) =>
+  LOGOS[id] ? `<span class="lg" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="${LOGOS[id]}" alt=""></span>` : `<span class="lt" style="width:${size}px;height:${size}px" aria-hidden="true">${esc(String(names[id] || id).slice(0, 2))}</span>`;
 
-export function appPage({ login, anon = false, connected = [], models = DEFAULT_MODELS, theme = 'earth', here = null, pod = '' }) {
+export function appPage({ login, anon = false, connected = [], models = DEFAULT_MODELS, theme = 'earth', here = null, pod = '', names = PROVIDER_NAMES }) {
   if (!THEME_IDS.includes(theme)) theme = 'earth';
   const list = cleanModels(models);
   const cards = PROVIDER_CARDS.map(
     (p) => `<div class="card"><b>${esc(p.label)}</b><small>${esc(p.note)} <a href="${esc(p.url)}" target="_blank" rel="noopener">Get a key</a></small><form data-p="${esc(p.id)}"><input type="password" autocomplete="off" placeholder="Paste the API key" aria-label="${esc(p.label)} API key"><button class="btn go" type="submit">Connect</button></form></div>`,
   ).join('');
-  const comps = login && connected.length ? connected.map((id) => `<li class="on">${logo(id)}${esc(PROVIDER_NAMES[id] || id)}</li>`).join('') : `<li class="off">${login ? 'None connected yet' : 'Sign in to see yours'}</li>`;
+  const comps = login && connected.length ? connected.map((id) => `<li class="on">${logo(id, 16, names)}${esc(names[id] || id)}</li>`).join('') : `<li class="off">${login ? 'None connected yet' : 'Sign in to see yours'}</li>`;
   const sub = !login
     ? 'Type a task or a website idea. It runs on a real computer and gives you the result and a live link. You sign in with GitHub only when you press Run.'
     : connected.length
@@ -1297,17 +1297,17 @@ export function appPage({ login, anon = false, connected = [], models = DEFAULT_
       : pod
         ? 'No key needed: websites and file tasks run on a small Linux inside this browser tab. Connect a cloud computer for apps, Python or the internet.'
         : 'No computer connected yet: the first task asks you for one key.';
-  const on = Object.keys(PROVIDER_NAMES).filter((id) => connected.includes(id));
+  const on = Object.keys(names).filter((id) => connected.includes(id));
   const pill = on.length ? `${on.length} computer${on.length === 1 ? '' : 's'} connected · Fleet picks the cheapest` : 'Runs on a real computer · Fleet picks the cheapest';
-  const off = Object.keys(PROVIDER_NAMES).filter((id) => !connected.includes(id));
+  const off = Object.keys(names).filter((id) => !connected.includes(id));
   const connectLink = (id) =>
     !login
       ? '<a class="cbtn" href="/auth/start">Sign in</a>'
       : PROVIDER_CARDS.some((c) => c.id === id) ? (login ? '<a class="cbtn" href="#setup">Connect</a>' : '<a class="cbtn" href="/auth/start">Sign in</a>') : '<a class="cbtn" href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">Connect</a>';
   const menu = `<label class="crow auto">${icon('fleet', 26)}<span class="nm"><b style="font-weight:500">Fleet, automatic</b><small>Cheapest first, falls back to the next</small></span><input type="checkbox" class="sw" id="auto" checked aria-label="Fleet picks the computer"></label>${
     on.length ? `<div class="mhead">Connected · ${on.length}</div>` : ''
-  }${on.map((id) => `<label class="crow">${logo(id, 26)}<span class="nm">${esc(PROVIDER_NAMES[id])}</span><span class="ready">ready</span><input type="checkbox" class="sw" name="sb" value="${esc(id)}" data-label="${esc(PROVIDER_NAMES[id])}" aria-label="Use ${esc(PROVIDER_NAMES[id])}"></label>`).join('')}<div class="mhead">Not connected · ${off.length}</div>${off
-    .map((id) => `<div class="crow off">${logo(id, 26)}<span class="nm">${esc(PROVIDER_NAMES[id])}</span>${connectLink(id)}</div>`)
+  }${on.map((id) => `<label class="crow">${logo(id, 26, names)}<span class="nm">${esc(names[id])}</span><span class="ready">ready</span><input type="checkbox" class="sw" name="sb" value="${esc(id)}" data-label="${esc(names[id])}" aria-label="Use ${esc(names[id])}"></label>`).join('')}<div class="mhead">Not connected · ${off.length}</div>${off
+    .map((id) => `<div class="crow off">${logo(id, 26, names)}<span class="nm">${esc(names[id])}</span>${connectLink(id)}</div>`)
     .join('')}`;
   return shell(
     'Flisk Chat',
@@ -1353,7 +1353,7 @@ ${earthUsers(esc)}
 </div></form>
 <p class="fine">${pod ? 'Runs on a small Linux in this tab, or on a real computer from your own sandbox account.' : 'Runs on a real computer from your own sandbox account.'} Your keys stay encrypted and are never shown. Enter sends, Shift+Enter adds a line. <label class="look">Look <select id="look" aria-label="Look of the page">${THEMES.map(([id, label]) => `<option value="${id}"${id === theme ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label></p>
 </div></div></div>
-<aside class="thx rcol" aria-label="Computers and ideas"><h5>Computers · ${on.length} <a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">manage</a></h5>${on.length ? on.map((id) => `<div class="rc"><span class="wdot ok"></span>${esc(PROVIDER_NAMES[id])}<small>ready</small></div>`).join('') : `<div class="rc off"><span class="wdot"></span>${login && !anon ? 'None connected yet' : 'Sign in to see yours'}<small>—</small></div>`}<h5>Try saying</h5>${CATS[0].ideas.map((i) => `<button type="button" data-idea="${esc(i)}">“${esc(i)}”</button>`).join('')}</aside></div>
+<aside class="thx rcol" aria-label="Computers and ideas"><h5>Computers · ${on.length} <a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">manage</a></h5>${on.length ? on.map((id) => `<div class="rc"><span class="wdot ok"></span>${esc(names[id])}<small>ready</small></div>`).join('') : `<div class="rc off"><span class="wdot"></span>${login && !anon ? 'None connected yet' : 'Sign in to see yours'}<small>—</small></div>`}<h5>Try saying</h5>${CATS[0].ideas.map((i) => `<button type="button" data-idea="${esc(i)}">“${esc(i)}”</button>`).join('')}</aside></div>
 <div id="oracle" class="oracle" hidden role="dialog" aria-modal="true" aria-label="Voice talk">
 <div class="otop"><span class="otitle">Flisk Oracle</span><span class="ohint">Talk. Pause when you are done. Tap the circle to interrupt.</span></div>
 <button type="button" id="orb" class="orb" aria-label="Tap to talk or interrupt"><span class="oring"></span><span class="ocore"><canvas id="oearth" aria-hidden="true"></canvas></span></button>
