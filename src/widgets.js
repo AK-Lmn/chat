@@ -1,3 +1,4 @@
+import { CAPABILITIES } from './capabilities.generated.js';
 // Widgets: cards the chat draws from data, instead of one paragraph of text.
 //
 // One widget = one entry in WIDGETS below. The task loop (loop.js) lists them in the model's prompt, validates what the
@@ -162,6 +163,9 @@ export async function web({ url }, { fetch }) {
   return { data: { url: u.href, host: u.hostname, count: items.length }, summary: `${u.href}:\n${text}` };
 }
 
+// What visitors say to ask for a capability, from the service's own capabilities.json (see scripts/sync-capabilities.mjs).
+const asksOf = (id) => CAPABILITIES.flatMap((m) => m.capabilities).find((c) => c.id === id)?.asks || [];
+
 export const WIDGETS = {
   web: {
     id: 'web', title: 'Web',
@@ -189,7 +193,7 @@ export const WIDGETS = {
   },
   grow: {
     id: 'grow', title: 'Grow it',
-    prompt: '{"widget": {"kind": "grow", "url": "<the live link from this chat>", "product": "<what it is, one line>", "buyers": "<who would pay for it and why, two sentences, specific: role, size of business, the problem>", "pitch": "<one line that would make them reply>", "places": [{"name": "<a real community, directory, subreddit, newsletter or event where those buyers are>", "why": "<one short line>", "url": "<its address if you are sure, else leave it out>"}], "emails": [{"to": "<the kind of person, never a name or address>", "subject": "<short>", "body": "<under 90 words, plain, one question at the end, sign off with [Your name]>"}]}} when the user says "Grow it", or asks to promote, market or advertise their website or app, or asks how to find customers, users or visitors for it (also in the same message that asks for a site: build the site first, then this card with its published link): 5 to 8 places, 5 emails, each to a different kind of buyer. Use what you know of the product from this chat; no computer is needed. The card also checks whether AI search can read the live page. Then "say" the first step to take today in one or two sentences.',
+    prompt: '{"widget": {"kind": "grow", "url": "<the live link from this chat>", "product": "<what it is, one line>", "buyers": "<who would pay for it and why, two sentences, specific: role, size of business, the problem>", "pitch": "<one line that would make them reply>", "places": [{"name": "<a real community, directory, subreddit, newsletter or event where those buyers are>", "why": "<one short line>", "url": "<its address if you are sure, else leave it out>"}], "emails": [{"to": "<the kind of person, never a name or address>", "subject": "<short>", "body": "<under 90 words, plain, one question at the end, sign off with [Your name]>"}]}} when the user says "Grow it", or asks to promote, market or advertise their website or app, or asks how to find customers, users or visitors for it (also in the same message that asks for a site: build the site first, then this card with its published link): 5 to 8 places, 5 emails, each to a different kind of buyer. Use what you know of the product from this chat; no computer is needed. The card also checks whether AI search can read the live page. Then "say" the first step to take today in one or two sentences. Any of these asks means this card: ' + asksOf('grow').map((a) => `"${a}"`).join(', ') + '.',
     clean: growClean,
     run: grow,
   },
