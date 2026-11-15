@@ -165,7 +165,7 @@ export async function web({ url }, { fetch }) {
 export const WIDGETS = {
   web: {
     id: 'web', title: 'Web',
-    prompt: '{"widget": {"kind": "web", "url": "<public https address>"}} reads a web page, an RSS feed or a JSON API without a key and gives you its text (feeds as titles with links). Works with no computer and with the in-tab computer that has no internet. Use it for news (https://feeds.bbci.co.uk/news/rss.xml, https://hnrss.org/frontpage, https://news.google.com/rss), prices, lookups and any page; if one address fails, try another.',
+    prompt: '{"widget": {"kind": "web", "url": "<public https address>"}} reads a web page, an RSS feed or a JSON API without a key and gives you its text (feeds as titles with links). Works with no computer and with the in-tab computer that has no internet. Use it for news (https://feeds.bbci.co.uk/news/rss.xml, https://hnrss.org/frontpage, https://news.google.com/rss), prices, lookups and any page; if one address fails, try another. In "say", write each item as a "- [title](link)" line so the user can open it.',
     clean: (i) => (str(i.url, 500) ? { url: str(i.url, 500) } : null),
     run: web,
   },
