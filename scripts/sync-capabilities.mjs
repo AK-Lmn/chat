@@ -2,7 +2,7 @@
 // (name, what the visitor says to ask for it, its link or endpoint). This copies those files into capabilities/ and
 // writes src/capabilities.generated.js, which the model's prompt is built from, so a new way of asking is added in ONE
 // place (the service's file) and chat cannot drift from it. test/capabilities.test.js checks the result.
-//   bun scripts/sync-capabilities.mjs            reads ~/tdk-pr-work/<service>/capabilities.json (or $CAPS_ROOT)
+//   bun scripts/sync-capabilities.mjs            reads ~/tdk-pr-work/<service>/docs/capabilities.json (or $CAPS_ROOT)
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +13,7 @@ const services = (process.env.CAPS_SERVICES || 'grow,citable').split(',');
 mkdirSync(join(here, 'capabilities'), { recursive: true });
 const all = [];
 for (const name of services) {
-  const src = [join(root, name, 'capabilities.json'), join(here, 'capabilities', `${name}.json`)].find(existsSync);
+  const src = [join(root, name, 'docs', 'capabilities.json'), join(root, name, 'capabilities.json'), join(here, 'capabilities', `${name}.json`)].find(existsSync);
   if (!src) { console.error(`no capabilities.json for ${name}`); process.exit(1); }
   const m = JSON.parse(readFileSync(src, 'utf8'));
   for (const c of m.capabilities) if (!c.id || !c.title || !Array.isArray(c.asks) || !c.asks.length) { console.error(`${name}: a capability needs id, title and asks`); process.exit(1); }
