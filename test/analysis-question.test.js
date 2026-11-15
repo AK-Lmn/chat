@@ -28,3 +28,18 @@ describe('research questions get the full report and no computer', () => {
     expect(r.answer).toContain('Compose');
   });
 });
+
+import { asksStats, STATS_NOTE } from '../src/analysis-style.js';
+import { asksImage } from '../src/loop.js';
+describe('stats requests', () => {
+  test('"draw me stats" is a data request, not a picture', () => {
+    const t = 'draw me stats from openstas aboioy openx laucnes rockets';
+    expect(asksImage(t)).toBeNull();
+    expect(asksStats(t)).toBe(true);
+    expect(STATS_NOTE).toContain('never invent numbers');
+  });
+  test('a real picture request still draws', () => {
+    expect(asksImage('draw me a rocket on the moon')).not.toBeNull();
+    expect(asksStats('draw me a rocket on the moon')).toBe(false);
+  });
+});

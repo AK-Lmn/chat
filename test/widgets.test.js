@@ -43,6 +43,13 @@ describe('widgets registry', () => {
     expect((await WIDGETS.weather.run({ place: 'Nowhereville', units: 'c' }, { fetch: fakeFetch })).error).toContain('Nowhereville');
     expect(calls.some((c) => c.includes('fahrenheit'))).toBe(false);
   });
+  test('chart: area type, source and up to six series', () => {
+    const series = Array.from({ length: 8 }, (_, i) => ({ name: 's' + i, values: [1, 2] }));
+    const r = parseWidget({ kind: 'chart', type: 'area', source: 'SpaceX API', labels: ['2019', '2020'], series });
+    expect(r.input.type).toBe('area');
+    expect(r.input.source).toBe('SpaceX API');
+    expect(r.input.series.length).toBe(6);
+  });
   test('chart: validates length, caps series, keeps numbers', () => {
     const ok = parseWidget({ kind: 'chart', type: 'bar', title: 'Sales', labels: ['Mon', 'Tue', 'Wed'], series: [{ name: 'a', values: [1, 2, 3] }] });
     expect(ok.input.type).toBe('bar');

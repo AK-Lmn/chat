@@ -64,11 +64,11 @@ async function weather({ place, units }, { fetch }) {
 }
 
 function chartClean(i) {
-  const type = i.type === 'bar' ? 'bar' : 'line';
+  const type = i.type === 'bar' ? 'bar' : i.type === 'area' ? 'area' : 'line';
   const labels = Array.isArray(i.labels) ? i.labels.slice(0, 60).map((l) => str(l, 24)) : [];
-  const series = (Array.isArray(i.series) ? i.series : []).slice(0, 4).map((s) => ({ name: str(s?.name, 40), values: Array.isArray(s?.values) ? s.values.slice(0, 60).map(num) : [] }));
+  const series = (Array.isArray(i.series) ? i.series : []).slice(0, 6).map((s) => ({ name: str(s?.name, 40), values: Array.isArray(s?.values) ? s.values.slice(0, 60).map(num) : [] }));
   if (labels.length < 2 || !series.length || series.some((s) => s.values.length !== labels.length || s.values.every((v) => v === null))) return null;
-  return { type, title: str(i.title, 80), unit: str(i.unit, 12), labels, series };
+  return { type, title: str(i.title, 80), unit: str(i.unit, 12), source: str(i.source, 120), labels, series };
 }
 
 // flisk status only sees a project from inside its folder, and the computer starts in the home folder: go to the
@@ -181,7 +181,7 @@ export const WIDGETS = {
   },
   chart: {
     id: 'chart', title: 'Chart',
-    prompt: '{"widget": {"kind": "chart", "type": "line", "title": "<title>", "unit": "<unit>", "labels": ["Mon", "Tue"], "series": [{"name": "<name>", "values": [1, 2]}]}} to draw a line or bar ("type": "bar") chart of numbers you have already (up to 60 points, 4 series, every series as long as labels). For big data compute it on the computer first and send only the points to plot. Then "say" what the chart shows in one or two sentences.',
+    prompt: '{"widget": {"kind": "chart", "type": "line", "title": "<title>", "unit": "<unit>", "source": "<where the numbers come from>", "labels": ["Mon", "Tue"], "series": [{"name": "<name>", "values": [1, 2]}]}} to draw a colourful interactive chart (hover shows the numbers, the legend hides a series): "type" is "line", "bar" or "area". Use it for any stats, numbers, trends or data request, with real numbers you have read (up to 60 points, 6 series, every series as long as labels). For big data compute it on the computer first and send only the points to plot. Then "say" what the chart shows in one or two sentences.',
     clean: chartClean,
     run: (input) => ({ data: input, summary: `Chart "${input.title}" shown with ${input.labels.length} points.` }),
   },
