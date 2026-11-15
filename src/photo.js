@@ -4,8 +4,8 @@
 // no photo, and the page is drawn with its dark glow instead: a photo never stops a page from being published.
 
 export const PHOTO_MODEL = '@cf/black-forest-labs/flux-1-schnell';
-export const PHOTOS_PER_LOGIN = 10; // a day
-export const PHOTOS_PER_DAY = 80; // a day, for everybody
+export const PHOTOS_PER_LOGIN = 6; // a day
+export const PHOTOS_PER_DAY = 40; // a day, for everybody: 40 x 55 = 2,200 neurons, so the text model keeps its share of the 10,000
 const PHOTO_MS = 25_000;
 
 // Counts one photo for the login and for everybody today; false when either count is already at its cap.
