@@ -10,6 +10,8 @@ export const MAX_LAYOUT_BYTES = 1536 * 1024;
 // One task: a model plans, a computer from fleet does the work, the answer comes back. One task = one computer,
 // started on the first action and always stopped at the end.
 export const MAX_STEPS = 8;
+// A "say" that gives up or hands the problem back to the user.
+const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|you need to (provide|sign|log)|i (can't|cannot|couldn't|could not|am unable|was unable|'m unable)|unable to|failed to|not able to)\b/i;
 // The visitor's own key pays for its own steps, so a bigger app (install, write several files, start, check) fits.
 export const BYO_STEPS = 16;
 export const GITHUB_STEPS = 20; // a fork-to-PR run needs more than 16 actions, but Workers Free stops at 50 subrequests per run (a 32-action run died at 25)
@@ -57,6 +59,7 @@ ${SITE_HELP}
 - Every app ends with a shared live link and every show-only page with a published link, in the same answer. Never end with an offer to publish later or with only a localhost address.
 - Each task starts on a fresh computer: files and servers from earlier answers are gone. If the user asks for the link to something built earlier, build it again, then publish it.
 - Flisk is only for building an app the user asked for. A question, a lookup or research (stars, traffic, referring sites, issues of a GitHub repo, even a repo named flisk; a web page; a number) is never an app: answer it with curl, gh api or a widget, never install Flisk and never run flisk create for it.
+- Never give up and never ask the user for an API key, a token or a login. If a source needs a key or fails (an error, "apiKeyMissing", 401, 403, 429, empty output), switch to another way at once: a keyless source (RSS or Atom feeds such as https://feeds.bbci.co.uk/news/rss.xml, https://hnrss.org/frontpage, https://news.google.com/rss, Wikipedia or Open-Meteo APIs, the Hacker News API at https://hacker-news.firebaseio.com/v0/topstories.json), another URL, or another tool. Never invent an API key. Try at least three different ways before you say you could not. For news, use the RSS feeds and "say" 5 headlines with their links.
 - After at most ${MAX_STEPS - 1} actions, reply with "say". If the task needs no computer, reply with "say" at once.
 - Widgets draw a card for the user from data. Prefer one whenever it fits; the computer is only for work a widget cannot do:
 ${widgetPrompt()}
@@ -458,6 +461,18 @@ export function asksToBuild(task, history = []) {
   const said = [task, ...(Array.isArray(history) ? history.filter((h) => h?.role === 'user').map((h) => h.content) : [])];
   return said.some((t) => BUILD_WORDS.test(typeof t === 'string' ? t : JSON.stringify(t ?? '')));
 }
+// Playbooks ("skills") matched to the task: known keyless sources, so the model does not reach for an API that needs a key.
+export const PLAYBOOKS = [
+  { when: /\b(news|headlines?|today'?s? stories)\b/i, text: 'News: curl -s https://feeds.bbci.co.uk/news/rss.xml (or https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en, https://hnrss.org/frontpage) and pull <title> and <link> with grep/sed or python3 xml.etree. No key needed. Never use newsapi.org.' },
+  { when: /\b(bitcoin|btc|eth|crypto|coin)\b/i, text: 'Crypto prices: curl -s "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd" (no key).' },
+  { when: /\b(stock|share price|ticker|nasdaq|s&p)\b/i, text: 'Stocks: curl -s "https://stooq.com/q/l/?s=aapl.us&f=sd2t2ohlcv&h&e=csv" (no key; ticker.us).' },
+  { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: curl -s https://open.er-api.com/v6/latest/USD (no key).' },
+  { when: /\b(search|look up|find out|who is|what is|wiki)\b/i, text: 'Lookup: curl -s "https://en.wikipedia.org/api/rest_v1/page/summary/<Title>" or "https://html.duckduckgo.com/html/?q=<words>" with a browser User-Agent (no key).' },
+];
+export function playbooksFor(task) {
+  const hits = PLAYBOOKS.filter((p) => p.when.test(String(task))).map((p) => `- ${p.text}`);
+  return hits.length ? `\n\nKnown ways for this task (use these first; if one fails, try the next):\n${hits.join('\n')}` : '';
+}
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
 export async function runTask({ task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
@@ -476,7 +491,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + (github === undefined ? '' : githubNote(github, origin)) + note;
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
   const messages = [{ role: 'system', content: system }, ...cleanHistory(past), { role: 'user', content: first }];
@@ -498,6 +513,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
     return { answer, error, steps, links, provider, ms: Date.now() - t0, stats };
   };
   let emptyRetries = 0;
+  let giveUps = 0;
   let providerRetries = 0;
   let kept = null; // the public URL of the running app: the computer is kept, not stopped
   let startedServer = false;
@@ -554,6 +570,19 @@ export async function runTask({ task, history = [], github = undefined, origin =
         askedForLink = true;
         emit({ type: 'retry' });
         messages.push({ role: 'user', content: `No public link yet, and the computer stops when you answer unless the app is shared. Send {"share": ${appPort || '<the website port>'}} so the running app gets a public link. Never make a copy of the app. Next action as JSON only.` });
+        continue;
+      }
+      // The model gave up or asked the user for a key: make it try another way (twice per task) instead of failing in front of the user.
+      if (action.type === 'say' && !last && giveUps < 3 && GIVE_UP.test(String(action.text || ''))) {
+        giveUps++;
+        emit({ type: 'retry' });
+        const hint = [
+          'Do not give up and do not ask the user for a key or a login. Find another way now: a keyless source (an RSS feed, a public API without a key, another website), a different command, or another URL.',
+          'Still not done. Install what you need (pip install -q <pkg>, npm i -g <pkg>, or apt-get install -y <pkg>) or use a different public source, and try again.',
+          'Last try: pick the simplest keyless source you know (an RSS feed or a plain web page through curl) and give the user a real result, even a partial one.',
+        ][giveUps - 1];
+        messages.push({ role: 'user', content: `${hint} Next action as JSON only.` });
+        step--; // a retry for a give-up does not use up a step
         continue;
       }
       if (action.type === 'say' || last) {
