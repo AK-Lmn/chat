@@ -62,7 +62,7 @@ export function browserComputer(send, { callMs = CALL_MS, wait = (ms) => new Pro
 // One task over one socket. The first message is the task ({ task, history, files, ai }); after that the page only sends
 // pod_reply messages. gate(body) -> { refuse: { status, ... } } or { model, maxSteps, modelName, vision }.
 // socket: { send(text), close(), addEventListener('message' | 'close' | 'error', fn) }.
-export function runOverSocket(socket, { gate, origin, publish, photo, saveVideo, fetchImpl = fetch, callMs, wait, run = runTask }) {
+export function runOverSocket(socket, { gate, origin, publish, photo, saveVideo, fetchImpl = fetch, callMs, wait, run = runTask, lookupFacts = null }) {
   const send = (e) => {
     try {
       socket.send(JSON.stringify(e));
@@ -108,7 +108,7 @@ export function runOverSocket(socket, { gate, origin, publish, photo, saveVideo,
       }
       // A closed tab cannot run anything: stop asking the model too.
       const model = async (messages) => (pod.closed ? { error: 'the browser tab closed', kind: 'other' } : ok.model(messages));
-      const r = await run({ task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, photo, saveVideo, emit: send });
+      const r = await run({ lookupFacts, task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, photo, saveVideo, emit: send });
       send({ type: 'done', ms: r.ms, error: r.error });
     } catch (e) {
       send({ type: 'error', error: String(e?.message || e).slice(0, 200) });
