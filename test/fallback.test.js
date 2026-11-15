@@ -219,3 +219,13 @@ test('Pollinations can be switched off', async () => {
   expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ error: FREE_BUSY, kind: 'busy' });
   expect(w.calls.some((c) => c.url === POLLINATIONS_TEXT_URL)).toBe(false);
 });
+
+test('a Pollinations call that hangs ends with the busy line instead of hanging the chat', async () => {
+  const w = world({ ai: new Error('neurons used up') });
+  delete w.env.OPENROUTER_KEY;
+  const base = w.fetchImpl;
+  let signal;
+  w.fetchImpl = async (u, init) => (String(u) === POLLINATIONS_TEXT_URL ? ((signal = init.signal), new Promise((_, no) => init.signal.addEventListener('abort', () => no(init.signal.reason)))) : base(u, init));
+  expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ error: FREE_BUSY, kind: 'busy' });
+  expect(signal).toBeInstanceOf(AbortSignal);
+}, 30_000);

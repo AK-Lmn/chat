@@ -364,6 +364,7 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'user-agent': 'flisk-chat', ...(chosen.referer ? { 'http-referer': 'https://chat.flisk.si', 'x-title': 'Flisk Chat' } : {}) },
         body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}) }),
+        ...(chosen.ms ? { signal: AbortSignal.timeout(chosen.ms) } : {}),
       });
       return { res: r, body: await r.json().catch(() => null) };
     };
@@ -403,6 +404,7 @@ export const WORKERS_AI_FALLBACK = '@cf/meta/llama-3.1-8b-instruct-fast';
 // The last fallback needs no key and no Cloudflare neurons: when the account's free 10,000 daily neurons are used up,
 // Wolf and Workers AI both fail at once, and without it every free chat said "busy" until midnight UTC.
 export const POLLINATIONS_TEXT_URL = 'https://text.pollinations.ai/openai';
+export const POLLINATIONS_MS = 25_000; // it queues anonymous callers: a stuck call must end, not hang the chat
 export const WORKERS_AI_PER_DAY = 300; // about 1,500 neurons at most: chat's share of the account's free 10,000
 export const FREE_BUSY = 'The free AI is busy right now. Try again in a minute, or keep going free with your own OpenRouter account.';
 const WOLF_REST_MS = 10 * 60 * 1000;
@@ -482,7 +484,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     if (!r.error) return { ...r, by: WORKERS_AI_FALLBACK };
     tried.push(`workers-ai: ${r.error}`);
     if (env.NO_POLLINATIONS !== '1') {
-      const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true })(messages);
+      const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
       if (!p.error) return { ...p, by: 'pollinations' };
       tried.push(`pollinations: ${p.error}`);
     }
