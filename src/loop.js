@@ -471,6 +471,19 @@ export const PLAYBOOKS = [
   { when: /\b(exchange rate|currency|usd|eur|convert)\b/i, text: 'Exchange rates: {"widget": {"kind": "web", "url": "https://open.er-api.com/v6/latest/USD"}} (no key).' },
   { when: /\b(search|look up|find out|who is|what is|wiki)\b/i, text: 'Lookup: {"widget": {"kind": "web", "url": "https://en.wikipedia.org/api/rest_v1/page/summary/<Title>"}} or {"widget": {"kind": "web", "url": "https://html.duckduckgo.com/html/?q=<words>"}} (no key).' },
 ];
+// A GitHub org or user the task points at: "flisk-sh org in github", "github.com/flisk-sh". The page or app must be made from what is
+// really there, so the model reads the repositories first (public API, no key) instead of building an empty shell.
+export function githubSourceIn(task) {
+  const t = String(task);
+  const m = t.match(/github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})/i) || t.match(/\b([A-Za-z0-9][A-Za-z0-9-]{0,38})\s+(?:org|organi[sz]ation)\b[^.\n]{0,40}\bgithub\b/i) || t.match(/\bgithub\b[^.\n]{0,40}\b([A-Za-z0-9][A-Za-z0-9-]{0,38})\s+(?:org|organi[sz]ation)\b/i);
+  const name = m?.[1];
+  return name && !/^(the|an?|our|my|this|that|your)$/i.test(name) ? name : '';
+}
+export function sourceNote(task) {
+  const org = githubSourceIn(task);
+  if (!org) return '';
+  return `\n\nThe user points at the GitHub account "${org}". Build from what is really there, never an empty shell and never "add your projects here": FIRST {"run": "curl -fsS 'https://api.github.com/orgs/${org}/repos?per_page=100&sort=pushed' || curl -fsS 'https://api.github.com/users/${org}/repos?per_page=100&sort=pushed'"} (public, no key) and read name, description, language, stargazers_count and html_url of the repositories (skip forks and archived ones, take the most useful ones; if the user said a number such as 10, take that many). A portfolio or showcase only shows things, so send ONE "site" action (layout "portfolio") with one project per repository: its real name as "title", its real description as "text", its language as "tag". Do not build an app for it. In "say", give the link and name the repositories you used.`;
+}
 export function playbooksFor(task) {
   const hits = PLAYBOOKS.filter((p) => p.when.test(String(task))).map((p) => `- ${p.text}`);
   return hits.length ? `\n\nKnown ways for this task (use these first; if one fails, try the next):\n${hits.join('\n')}` : '';
@@ -493,7 +506,7 @@ export async function runTask({ task, history = [], github = undefined, origin =
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (github === undefined ? '' : githubNote(github, origin)) + note;
   const token = github?.token || '';
   const building = asksToBuild(task, history);
   const messages = [{ role: 'system', content: system }, ...cleanHistory(past), { role: 'user', content: first }];
