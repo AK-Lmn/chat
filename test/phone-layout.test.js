@@ -81,3 +81,13 @@ test('Earth pills stay readable over the globe and the picker focus never scroll
   expect(page).toContain('html[data-theme=earth] .excta button:not(:first-child):not([aria-expanded=true]){background:rgba(8,8,10,.82)');
   expect(page).toContain('mq.focus({preventScroll:true})');
 });
+
+test('phone + menu is a bottom sheet, the plus glyph is centered, key buttons are centered', () => {
+  const pg = appPage({ login: 'ann', connected: [] });
+  expect(pg).toContain('html.plus .plusmenu{position:fixed!important');
+  expect(pg).toContain('html.plus .composer{backdrop-filter:none!important');
+  expect(pg).toContain('html.plus .plusmenu #mppop{position:static!important');
+  expect(pg).toContain('#plus{display:inline-flex;align-items:center;justify-content:center;padding:0}');
+  expect(pg).toContain('e.target.isConnected&&!e.target.closest(\'#plus,#plusmenu\')');
+  expect(pg).toContain('#byo .byacts button{flex:1;height:44px;font-size:13px;justify-content:center');
+});
