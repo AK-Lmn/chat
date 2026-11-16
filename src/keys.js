@@ -22,10 +22,18 @@ export async function open(secret, sealed) {
   }
 }
 
+// One sealed secret per login, with its plain companion columns: INSERT, or replace on the same login.
+// Table and column names come from this repo's own callers, never from a request.
+export async function upsertSealed(env, table, login, secretCol, secret, fields = {}) {
+  const cols = ['login', ...Object.keys(fields), secretCol, 'updated'];
+  const vals = [login, ...Object.values(fields), await seal(env.KEY_SECRET, secret), new Date().toISOString()];
+  const set = cols.slice(1).map((c) => `${c} = excluded.${c}`).join(', ');
+  await env.DB.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ON CONFLICT(login) DO UPDATE SET ${set}`).bind(...vals).run();
+}
+
 export async function saveSettings(env, login, { ai, model, key }) {
   if (!env.KEY_SECRET) return { error: 'key storage is not set up yet' };
-  await env.DB.prepare('INSERT INTO ai_settings (login, ai, model, key_enc, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT(login) DO UPDATE SET ai = excluded.ai, model = excluded.model, key_enc = excluded.key_enc, updated = excluded.updated')
-    .bind(login, ai, model, await seal(env.KEY_SECRET, key), new Date().toISOString()).run();
+  await upsertSealed(env, 'ai_settings', login, 'key_enc', key, { ai, model });
   return { ok: true };
 }
 

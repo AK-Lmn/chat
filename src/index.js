@@ -6,7 +6,7 @@ import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
 import { THREE_SRC, TEXTURES } from './earth.js';
 import { fleetClient } from './fleet.js';
-import { BYO_STEPS, GITHUB_STEPS, cleanFiles, imageIntent, MAX_STEPS, MAX_TASK, modelFrom, modelLabel, resolveModel, runTask, WORKERS_AI_PER_DAY } from './loop.js';
+import { BYO_STEPS, GITHUB_STEPS, cleanFiles, imageIntent, MAX_STEPS, MAX_TASK, modelFrom, modelLabel, resolveModel, runTask } from './loop.js';
 import { lookup } from './lookup.js';
 import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
