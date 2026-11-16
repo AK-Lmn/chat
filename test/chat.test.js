@@ -400,16 +400,41 @@ test('the page uses the Flisk icons and shows the four kinds of task', () => {
   expect(page).toContain('aria-label="Run"');
 });
 
-import { cleanVideo, makeVideo, VIDEO_PY } from '../src/video.js';
+import { cleanVideo, makeVideo, VIDEO_PY, detectLang, videoVoice } from '../src/video.js';
 import { parseAction as parseVideoAction } from '../src/loop.js';
 import { saveVideo, handle as handleVideo } from '../src/index.js';
 
 describe('video', () => {
   test('a video action is parsed and cleaned', () => {
     const a = parseVideoAction('{"video": {"title": "Moon Roast", "scenes": [{"text": "Fresh beans", "say": "We roast every morning."}, {"text": ""}]}}');
-    expect(a).toEqual({ type: 'video', spec: { title: 'Moon Roast', scenes: [{ text: 'Fresh beans', say: 'We roast every morning.' }] } });
+    expect(a).toEqual({ type: 'video', spec: { title: 'Moon Roast', lang: 'en', voice: 'en-US-AvaMultilingualNeural', scenes: [{ text: 'Fresh beans', say: 'We roast every morning.' }] } });
     expect(cleanVideo({ scenes: [] })).toBeNull();
     expect(cleanVideo({ scenes: Array.from({ length: 20 }, () => ({ text: 'x'.repeat(500) })) }).scenes).toHaveLength(8);
+  });
+
+  test('a Ukrainian video gets a Ukrainian voice, never Ava (who read it with a Belarusian accent)', () => {
+    const scenes = [{ text: 'Фонтан у місті', say: 'Вода піднімається високо і сяє на сонці.' }];
+    expect(cleanVideo({ title: 'Фонтан', scenes })).toMatchObject({ lang: 'uk', voice: 'uk-UA-PolinaNeural' });
+    // the model said ru or en, the letters (і, ї, є) say Ukrainian
+    expect(cleanVideo({ title: 'Фонтан', lang: 'ru', scenes }).voice).toBe('uk-UA-PolinaNeural');
+    expect(cleanVideo({ title: 'Фонтан', lang: 'en', scenes }).lang).toBe('uk');
+    expect(cleanVideo({ title: 'Фонтан', lang: 'uk', scenes: [{ text: 'Вода', say: 'Вода' }] }).lang).toBe('uk');
+    expect(cleanVideo({ title: 'Фонтан', scenes: [{ text: 'Вода', say: 'Вода' }] }).lang).toBe('uk');
+  });
+
+  test('language detection: Russian-only letters win for Russian, Polish accents, English stays Ava', () => {
+    expect(detectLang('Привет, это съёмка')).toBe('ru');
+    expect(detectLang('Zażółć gęślą jaźń')).toBe('pl');
+    expect(detectLang('A fountain in the city')).toBe('en');
+    expect(videoVoice('en')).toBe('en-US-AvaMultilingualNeural');
+    expect(videoVoice('ja')).toBe('en-US-AvaMultilingualNeural');
+    expect(cleanVideo({ title: 'A fountain', lang: 'es', scenes: [{ text: 'Una fuente', say: 'Agua' }] })).toMatchObject({ lang: 'es', voice: 'es-ES-ElviraNeural' });
+  });
+
+  test('the video script uses a font with Cyrillic and the voice from the spec', () => {
+    expect(VIDEO_PY).toContain('DejaVuSans-Bold.ttf');
+    expect(VIDEO_PY).toContain("spec.get('voice')");
+    expect(VIDEO_PY).not.toContain("Communicate(text, 'en-US-AvaMultilingualNeural'");
   });
 
   test('makeVideo writes the script, waits for it, reads the mp4 back in parts and saves it', async () => {
