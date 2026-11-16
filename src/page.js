@@ -575,7 +575,7 @@ const inl=(p,s)=>{String(s).split(/(\\[[^\\]]+\\]+\\(https?:\\/\\/[^\\s)]+\\)|\\
   else p.appendChild(document.createTextNode(t));});};
 const LI=/^\\s*([-*]|\\d+[.)])\\s+(.*)/;
 // A picture chat drew: shown big in the answer, the way ChatGPT shows one, with a button to save it.
-const picture=(src,alt)=>{const f=node('figure','gimg'),a=document.createElement('a'),im=document.createElement('img');a.href=src;a.target='_blank';a.rel='noopener';im.src=src;im.alt=alt||'';im.loading='lazy';im.onload=()=>{f.scrollIntoView({block:'nearest'});};a.appendChild(im);
+const picture=(src,alt)=>{const f=node('figure','gimg'),a=document.createElement('a'),im=document.createElement('img');a.href=src;a.target='_blank';a.rel='noopener';im.src=src;im.alt=alt||'';im.loading='lazy';a.appendChild(im);
   const bar=node('div','gimgbar'),sv=node('button','btn','Save picture');sv.type='button';
   const give=(b,ext)=>{const u=URL.createObjectURL(b),x=document.createElement('a');x.href=u;x.download='flisk-picture.'+ext;document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);};
   sv.onclick=async()=>{try{const b=await (await fetch(src)).blob();
@@ -1220,7 +1220,7 @@ async function run(task){
     cp2.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(answer).then(()=>{cp2.textContent='Copied';setTimeout(()=>cp2.textContent='Copy',1500);});};sv.append(dl2,cp2);if(!onlyPic)turn.appendChild(sv);}
   if(link)turn.appendChild(siteCard(link));
   if(video)turn.appendChild(videoCard(video));
-  down();go.disabled=false;box.focus();
+  if(turn.offsetHeight>scroller.clientHeight-60)turn.scrollIntoView({block:'start'});else down();go.disabled=false;box.focus();
 }
 // The computer in this tab (fleet's browser pod): a small Linux on WebAssembly. Loaded on the first task that needs it.
 const podOk=()=>!!window.__POD__&&typeof WebAssembly==='object'&&typeof WebSocket==='function';

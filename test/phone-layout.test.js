@@ -61,7 +61,8 @@ test('phone composer keeps only + , mic and send; modes and model move into the 
 
 test('generated pictures reserve a square and keep their top in view when they load', () => {
   expect(page).toContain('.gimg img{aspect-ratio:1/1');
-  expect(page).toContain("f.scrollIntoView({block:'nearest'})");
+  expect(page).toContain("turn.scrollIntoView({block:'start'})");
+  expect(page).not.toContain("im.onload=()=>{f.scrollIntoView");
   expect(page).not.toContain('im.onload=down');
 });
 

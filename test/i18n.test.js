@@ -25,3 +25,8 @@ test('the Ukrainian script swaps text and placeholders in a browser-like documen
   expect(src).toContain('attributeFilter:ATTRS');
   expect(src).toContain("document.documentElement.lang=on?'uk':'en'");
 });
+
+test('the four modes have four different Ukrainian labels', () => {
+  const labels = ['Chat', 'Build', 'Create', 'Voice'].map((k) => UK[k]);
+  expect(new Set(labels).size).toBe(4);
+});
