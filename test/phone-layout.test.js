@@ -49,3 +49,7 @@ test('every page carries the keyboard fit and hides the top bar while typing on 
 test('on a phone the sidebar drawer is opaque on the Earth home (the page text must not show through it)', () => {
   expect(page).toContain('@media (max-width:860px){html[data-theme=earth].home .side{background:#0b0b0c;backdrop-filter:none}}');
 });
+
+test('touch screens get 44px tap targets on the box buttons, menu button and mode switch', () => {
+  expect(page).toContain('@media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}');
+});
