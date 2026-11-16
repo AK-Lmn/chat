@@ -54,8 +54,17 @@ test('touch screens get 44px tap targets on the box buttons, menu button and mod
   expect(page).toContain('@media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}');
 });
 
-test('phone composer puts the modes on their own row and shrinks the model picker to an icon', () => {
-  const src = require('fs').readFileSync(new URL('../src/page.js', import.meta.url), 'utf8');
-  expect(src).toContain('.composer .bar .modes{order:-1;width:100%;margin:0;display:flex}');
-  expect(src).toContain('.composer .bar .mpname,.composer .bar #mpbtn .chev{display:none}');
+test('phone composer keeps only + , mic and send; modes and model move into the + menu', () => {
+  expect(page).toContain("pm.prepend(md);pm.insertBefore(mp,md.nextSibling)");
+  expect(page).toContain('.plusmenu .modes{display:flex;flex:none;width:100%');
+});
+
+test('generated pictures reserve a square and keep their top in view when they load', () => {
+  expect(page).toContain('.gimg img{aspect-ratio:1/1');
+  expect(page).toContain("f.scrollIntoView({block:'nearest'})");
+  expect(page).not.toContain('im.onload=down');
+});
+
+test('the shared top bar scrolls instead of clipping on narrow phones', () => {
+  expect(page).toContain('flisk-bar{display:block;max-width:100vw;overflow-x:auto}');
 });
