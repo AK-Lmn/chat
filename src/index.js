@@ -649,7 +649,13 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const spot = placeFrom(request.cf);
     const here = spot ? { lat: Math.round(spot.latitude), lng: Math.round(spot.longitude) } : null;
     const pod = podBase(env);
-    const page = (opts) => html(appPage({ ...opts, models, theme, here, pod, names }), 200, { 'content-security-policy': cspWithPod(pod, origin) });
+    // The visitor's country goes to the page so a visit from Ukraine opens in Ukrainian (a saved choice or the browser language still decide first).
+    const geo = /^[A-Z]{2}$/.test(String(request.cf?.country || '')) ? request.cf.country : '';
+    const page = (opts) => {
+      let body = appPage({ ...opts, models, theme, here, pod, names });
+      if (geo === 'UA') body = body.replace('<head>', `<head><script>window.__GEO="UA"</script>`);
+      return html(body, 200, { 'content-security-policy': cspWithPod(pod, origin) });
+    };
     if (!session) {
       if (!env.SESSION_SECRET) return withLook(page({ login: null, connected: [] }));
       const login = newAnonLogin();
