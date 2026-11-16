@@ -19,6 +19,7 @@ export const MAX_STEPS = 8;
 const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|you need to (provide|sign|log)|i (can't|cannot|couldn't|could not|am unable|was unable|'m unable)|unable to|failed to|not able to|could not be|couldn't be|cannot be|can't be|is not available|isn't available|not available right now|try again later|check your internet)\b/i;
 // The visitor's own key pays for its own steps, so a bigger app (install, write several files, start, check) fits.
 export const BYO_STEPS = 16;
+export const MAX_WORKER = 100_000;
 export const GITHUB_STEPS = 20; // a fork-to-PR run needs more than 16 actions, but Workers Free stops at 50 subrequests per run (a 32-action run died at 25)
 export const MAX_TASK = 2000;
 const OUT_CHARS = 1500;
@@ -217,6 +218,7 @@ export function parseAction(text) {
       if (a?.write && typeof a.write.path === 'string' && typeof a.write.content === 'string') return { type: 'write', path: a.write.path, content: a.write.content };
       if (typeof a?.read === 'string' && a.read.trim()) return { type: 'read', path: a.read.trim() };
       if (typeof a?.publish === 'string' && a.publish.trim()) return { type: 'publish', path: a.publish.trim() };
+      if (typeof a?.worker === 'string' && a.worker.trim()) return { type: 'worker', path: a.worker.trim() };
       if (a?.video) {
         const spec = cleanVideo(a.video);
         if (spec) return { type: 'video', spec };
@@ -245,7 +247,7 @@ export function parseAction(text) {
   }
   // An action that starts but never closes (the answer was cut off at the length limit, often a long file with no } in
   // it) is a bad reply to retry, never an answer to show.
-  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|image|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
+  if (start >= 0 && /^\s*\{\s*"(run|write|read|publish|worker|image|site|video|system|share|widget)"\s*:/.test(s.slice(start))) return { type: 'bad', text: s };
 
   // If it still looks like a tool call or XML, force a retry.
   if (/DSML|<invoke|<parameter|tool_call|function_call/i.test(String(text))) {
@@ -957,6 +959,17 @@ export async function runTask({ classify = null, task, history = [], github = un
         shown = { error: shareRefused
           ? 'do not publish a copy of the app. This computer cannot have a public link, so "say" that plainly: the app was built and checked here, and a provider that can share (for example Upstash Box) gives a live link next time.'
           : `this task runs an app with an API, so do not publish a copy of it. Send {"share": ${appPort || '<the website port>'}} for a live link to the real app.` };
+      } else if (action.type === 'worker') {
+        // A Cloudflare Worker (one ES module) that runs in the visitor's own tab (cfworker2browser): nothing is deployed.
+        emit({ type: 'read', path: action.path });
+        const r = await computer.read(podId, action.path);
+        if (r.error) shown = { error: scrub(r.error, token) };
+        else if (r.data.encoding !== 'utf8' || !/export\s+default/.test(r.data.content)) shown = { error: 'a Worker is one text file that has `export default { async fetch(request, env) { ... } }` (module syntax, no imports from packages)' };
+        else if (r.data.content.length > MAX_WORKER) shown = { error: `the Worker is over ${MAX_WORKER} characters: make it smaller` };
+        else {
+          emit({ type: 'worker', path: action.path, code: r.data.content });
+          shown = { summary: 'The Worker now runs in the user\'s own browser tab: a card in the chat lets them send requests to it. Reply with "say" now: what it does and which paths to try (for example GET /api/items).' };
+        }
       } else if (action.type === 'publish') {
         stats.copy = true;
         emit({ type: 'publish', path: action.path });

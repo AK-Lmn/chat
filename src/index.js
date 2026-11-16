@@ -216,7 +216,7 @@ export function cspWithPod(pod, origin) {
   if (!pod) return SECURITY['content-security-policy'];
   const from = new URL(pod).href;
   const ws = origin.replace(/^http/, 'ws');
-  return SECURITY['content-security-policy'].replace("script-src 'unsafe-inline'", `script-src 'unsafe-inline' 'wasm-unsafe-eval' ${from}`).replace("connect-src 'self'", `connect-src 'self' ${ws} ${from}`) + '; worker-src blob:';
+  return SECURITY['content-security-policy'].replace("script-src 'unsafe-inline'", `script-src 'unsafe-inline' 'wasm-unsafe-eval' blob: ${from} ${new URL('../cfworker2browser/', from).href}`).replace("connect-src 'self'", `connect-src 'self' ${ws} ${from}`) + `; worker-src blob: ${new URL('../cfworker2browser/', from).href}`;
 }
 const html = (body, status = 200, extra = {}) => new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...SECURITY, ...extra } });
 // The backup voice when Ava (Microsoft) is slow: MeloTTS on the account's Workers AI. It costs about 18 neurons per

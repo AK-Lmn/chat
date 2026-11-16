@@ -225,9 +225,9 @@ describe('the page', () => {
     const e = env();
     const res = await handle(new Request(`${ORIGIN}/`), e);
     const csp = res.headers.get('content-security-policy');
-    expect(csp).toMatch(/script-src [^;]*'wasm-unsafe-eval' https:\/\/fleet\.test\/browserpod\/( |;)/);
+    expect(csp).toMatch(/script-src [^;]*'wasm-unsafe-eval' blob: https:\/\/fleet\.test\/browserpod\/ https:\/\/fleet\.test\/cfworker2browser\/( |;)/);
     expect(csp).toMatch(/connect-src 'self' wss:\/\/chat\.test https:\/\/fleet\.test\/browserpod\/ /);
-    expect(csp).toEndWith('; worker-src blob:');
+    expect(csp).toEndWith('; worker-src blob: https://fleet.test/cfworker2browser/');
     expect(csp).not.toContain("'unsafe-eval'");
     expect(await res.text()).toContain('window.__POD__="https://fleet.test/browserpod/";');
     const off = await handle(new Request(`${ORIGIN}/`), env({ BROWSER_POD_URL: '' }));

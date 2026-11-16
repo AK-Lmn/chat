@@ -21,7 +21,15 @@ const SITE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta n
 <body><header><h1>Moon Roast</h1><p>Small-batch coffee, roasted every morning.</p></header>
 <main><article><h2>Espresso</h2><p>Dark, short and sweet.</p></article><article><h2>Filter</h2><p>Bright and slow, by the cup.</p></article><article><h2>Beans</h2><p>Take a bag home.</p></article></main></body></html>`;
 // The stand-in model: write the page, look at it, publish it, say so. One step per answer it has already given.
-const SCRIPT = [JSON.stringify({ write: { path: 'site/index.html', content: SITE } }), '{"run":"uname -sm && ls -la site && wc -c site/index.html"}', '{"publish":"site/index.html"}', '{"say":"Your coffee website is live. It was made on the small Linux inside this browser tab."}'];
+const API = `export default {
+  async fetch(req, env) {
+    const url = new URL(req.url);
+    if (url.pathname === '/hello') return Response.json({ hello: 'from a Worker running in your tab', at: new Date().toISOString() });
+    if (url.pathname === '/count') { globalThis.n = (globalThis.n || 0) + 1; return Response.json({ visits: globalThis.n }); }
+    return new Response('Not found. Try GET /hello or GET /count', { status: 404, headers: { 'content-type': 'text/plain' } });
+  }
+};`;
+const SCRIPT = process.env.API ? [JSON.stringify({ write: { path: 'worker.js', content: API } }), '{"worker":"worker.js"}', '{"say":"Your small API is running in this tab. Use the card above: send GET /hello or GET /count."}'] : [JSON.stringify({ write: { path: 'site/index.html', content: SITE } }), '{"run":"uname -sm && ls -la site && wc -c site/index.html"}', '{"publish":"site/index.html"}', '{"say":"Your coffee website is live. It was made on the small Linux inside this browser tab."}'];
 const fetchImpl = async (url, init = {}) => {
   const u = new URL(url);
   if (u.host === 'model.invalid') {
