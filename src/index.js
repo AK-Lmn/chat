@@ -798,6 +798,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       }
       const history = Array.isArray(body?.history) ? body.history.slice(-12) : [];
       if (heard) history.push({ role: 'user', content: heard });
+      // A typed turn has no Whisper hint, so the words of the last message settle the language, not a stale one from the page.
+      else { const last = history[history.length - 1]; if (last?.role === 'user') lang = resolveLang({ text: String(last.content || ''), sticky: lang, ui: body?.ui }); }
       const messages = talkMessages(history, lang);
       const note = await weatherNote(messages[messages.length - 1]?.content, fetchImpl, placeFrom(request.cf));
       if (note) messages[0] = { role: 'system', content: `${messages[0].content}\n${note}` };
