@@ -695,7 +695,8 @@ const linkify=(n,text)=>{n.textContent='';String(text).split(/(https?:\\/\\/[^\\
 const add=(n)=>{talk.appendChild(n);down();return n;};
 const userMsg=(t)=>add(node('div','u',t));
 const asstMsg=(t)=>{const d=node('div','a');md(d,t);return add(d);};
-const errMsg=(t)=>add(node('div','err',t));
+const T=(x)=>window.__t?window.__t(x):x;
+const errMsg=(t)=>add(node('div','err',T(t)));
 const chatting=(on)=>{welcome.classList.toggle('gone',on);layout();};
 const ROOT=document.documentElement,TH=['classic','ivory','glow','focus','voice','earth'],marks=new Map();
 const MV={fine:document.querySelector('.fine'),search:document.querySelector('.side .search'),hw:document.querySelector('.side .histwrap'),secs:[...document.querySelectorAll('.side .sidesec')]};
@@ -899,7 +900,7 @@ let attached=[];const fileBox=$('files'),fileIn=$('fileIn');
 const drawFiles=()=>{fileBox.textContent='';attached.forEach((f,i)=>{const c=node('span','fchip',f.name+' ');const x=node('button','','×');x.type='button';x.title='Remove '+f.name;x.onclick=()=>{attached.splice(i,1);drawFiles();};c.appendChild(x);fileBox.appendChild(c);});};
 const TEXTY=['txt','md','csv','json','js','ts','py','html','css','xml','yml','yaml','log','sh','sql','tsv','toml','ini','rb','go','rs','java','c','cpp','h'];
 $('attach').onclick=()=>fileIn.click();
-const fileNote=(t)=>{const n=node('span','fnote',t);fileBox.appendChild(n);setTimeout(()=>n.remove(),5000);};
+const fileNote=(t)=>{const n=node('span','fnote',T(t));fileBox.appendChild(n);setTimeout(()=>n.remove(),5000);};
 fileIn.onchange=()=>{[...fileIn.files].forEach(f=>{if(attached.length>=3){fileNote('You can attach up to 3 files.');return;}if(f.size>150*1024){fileNote(f.name+' is over 150 KB.');return;}
   const ext=(f.name.split('.').pop()||'').toLowerCase(),text=TEXTY.indexOf(ext)>=0||(f.type||'').indexOf('text/')===0,r=new FileReader();
   r.onload=()=>{let c=String(r.result||'');if(!text)c=c.slice(c.indexOf(',')+1);attached.push({name:f.name,type:f.type||'',content:c,b64:!text});drawFiles();};r.onerror=()=>fileNote('Could not read '+f.name+'.');
@@ -1093,7 +1094,7 @@ async function oLoop(){
     const redo=()=>talkSend(got.blob).p;
     try{const r=await (got.early?got.early.p.then(x=>(x.ok&&String(x.b.heard||'').trim())||x.status===401||x.status===429?x:redo(),redo):redo());
       b=r.b;if(r.status===401){oClose();signin.hidden=false;signin.scrollIntoView({block:'center'});return;}if(!r.ok)throw new Error(b.error||('Voice talk answered '+r.status));}
-    catch(e){oSet('idle',String(e.message||e));return;}
+    catch(e){oSet('idle',T(String(e.message||e)));return;}
     await acked;
     if(!oOn)return;const said=String(b.heard||'').trim(),reply=String(b.text||'').trim();
     if(!said){oSet('idle','I did not catch that. Tap the circle and try again.');return;}
@@ -1194,7 +1195,7 @@ async function run(task){
     else if(ev.type==='system_start'){step('Starting all services with Flisk','','app');}
     else if(ev.type==='video_start'){step('Making a video: '+txt(ev.title)+' '+txt('('+ev.scenes+' scenes)'),'','film');ws.textContent='Making a video';}
     else if(ev.type==='note'){if(ev.text!==lastNote){lastNote=ev.text;step(txt(ev.text),'',noteIcon(ev.text));}}
-    else if(ev.type==='output'){if(ev.error)out(ev.error,true);else{if(ev.published)link=ev.published;if(ev.live)link=ev.live;if(ev.video)video=ev.video;out([ev.stdout,ev.stderr,ev.content].filter(Boolean).join('\\n').replace(/\\n$/,''),ev.exitCode>0);}}
+    else if(ev.type==='output'){if(ev.error)out(T(ev.error),true);else{if(ev.published)link=ev.published;if(ev.live)link=ev.live;if(ev.video)video=ev.video;out([ev.stdout,ev.stderr,ev.content].filter(Boolean).join('\\n').replace(/\\n$/,''),ev.exitCode>0);}}
     else if(ev.type==='pod_stopped')step('Computer stopped','ok','power');
     else if(ev.type==='pod_kept')step(ev.days?'Computer kept running for the live app: it sleeps when idle, wakes on a visit, deleted after '+Number(ev.days)+' days':'Computer kept running for the live app until '+(ev.until?new Date(ev.until).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'the provider stops it'),'ok','power');
     else if(ev.type==='widget'){const w=drawWidget(ev);if(w){turn.appendChild(w);down();}}
@@ -1218,7 +1219,7 @@ async function run(task){
         onEv(ev);
       }}
     }
-  }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err','You stopped this task.'));else errCard(turn,String(err.message||err),err.kind||'other',task);}
+  }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err',T('You stopped this task.')));else errCard(turn,String(err.message||err),err.kind||'other',task);}
   end(!failed||answer!==null);
   if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
     const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);
@@ -1259,8 +1260,8 @@ function runInBrowser(payload,onEv,signal){return new Promise((resolve,reject)=>
 });}
 // An error you can act on: the real reason, then the buttons for what usually fixes it.
 function errCard(turn,msg,kind,task){
-  const c=node('div',kind==='busy'?'errbox calm':'errbox');c.appendChild(node('div','err',msg));const n=node('div','next');n.appendChild(node('small','','What to do next'));
-  const btn=(t,f,primary)=>{const b=node('button','btn'+(primary?' go':''),t);b.type='button';b.onclick=f;n.appendChild(b);};
+  const c=node('div',kind==='busy'?'errbox calm':'errbox');c.appendChild(node('div','err',T(msg)));const n=node('div','next');n.appendChild(node('small','',T('What to do next')));
+  const btn=(t,f,primary)=>{const b=node('button','btn'+(primary?' go':''),T(t));b.type='button';b.onclick=f;n.appendChild(b);};
   // Deferred: this click also reaches the document handler that closes the picker on any outside click, so opening at once would close it again.
   const openAi=(focusKey)=>setTimeout(()=>{openPop();const p=MODELS.find(x=>!x.free&&x.key===aiSel.value)||MODELS.find(x=>!x.free);if(p&&aiSel.value==='wolf')pick(p);if(!byo.hidden)(focusKey?byoKey:byoModel).focus();},0);
   const retry=()=>{turn.remove();if(history.length&&history[history.length-1].role==='assistant')history.pop();run(task);};
@@ -1296,7 +1297,7 @@ $('byor').onclick=()=>orGo('');
     if(!r.ok||!j.key)throw new Error((j.error&&j.error.message)||'OpenRouter did not send a key');
     await vaultReady;lsSet('chat_key_openrouter',j.key);const m=await orFreeModel();
     if(t){box.value=t;fit();}const ok=node('div','limit');ok.innerHTML='<div style="flex:1"><b></b><p></p></div>';ok.querySelector('b').textContent='Connected to your OpenRouter';ok.querySelector('p').textContent='Free tasks now run on '+m.name+' with your own free OpenRouter allowance. The key stays encrypted in this browser only.'+(t?' Your task is back in the box: press Run.':'');chatting(true);add(ok);
-  }catch(e){const er=node('div','errbox');er.appendChild(node('div','err','Could not connect OpenRouter: '+String(e.message||e).slice(0,160)+'. Try again, or paste a key from openrouter.ai/keys.'));chatting(true);add(er);}})();
+  }catch(e){const er=node('div','errbox');er.appendChild(node('div','err',T('Could not connect OpenRouter')+': '+T(String(e.message||e).slice(0,160))+(window.__LANG==='uk'?'. Спробуйте ще раз або вставте ключ з openrouter.ai/keys.':'. Try again, or paste a key from openrouter.ai/keys.')));chatting(true);add(er);}})();
 // The free model's daily cap: say when it comes back and offer the way round it, and keep the task.
 // The limit card said the task was back in the box; once it is sent again, drop the card and the old copy of the task above it.
 function dropLimit(){const t=document.querySelector('.turn[data-limit]');if(!t)return;const u=t.previousElementSibling;if(u&&u.classList.contains('u'))u.remove();t.remove();}
@@ -1304,12 +1305,12 @@ function limitCard(turn,task,b){
   if(history.length&&history[history.length-1].content===task)history.pop();
   const ms=Number(b.resetsIn)||0,h=Math.floor(ms/3600000),m=Math.round((ms%3600000)/60000),n=b.limit||20;
   const c=node('div','limit');c.innerHTML='<div class="ic"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M5 2h8M5 16h8M6 2c0 4 6 4 6 7s-6 3-6 7M12 2c0 4-6 4-6 7s6 3 6 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div><div style="flex:1;min-width:0"><b></b><p></p><div class="acts"></div></div><div class="ring"></div>';
-  c.querySelector('b').textContent=b.error||"You've used today's free tasks";
-  c.querySelector('p').textContent='Keep going free: log in with OpenRouter (a free account, one click) and your task runs right away on your own free share. Or they come back in '+(h?h+' h ':'')+m+' min. Your task is back in the box.';
+  c.querySelector('b').textContent=T(b.error||"You've used today's free tasks");
+  c.querySelector('p').textContent=window.__LANG==='uk'?'Продовжте безкоштовно: увійдіть через OpenRouter (безкоштовний акаунт, один клік), і завдання одразу виконається з вашої власної безкоштовної частки. Або вони повернуться через '+(h?h+' год ':'')+m+' хв. Ваше завдання знову в полі.':'Keep going free: log in with OpenRouter (a free account, one click) and your task runs right away on your own free share. Or they come back in '+(h?h+' h ':'')+m+' min. Your task is back in the box.';
   c.querySelector('.ring').textContent=n+'/'+n;
-  const fr=node('button','btn go',orLabel());fr.type='button';fr.onclick=()=>orGo(task);
-  const k=node('button','btn','Use my API key');k.type='button';k.onclick=(e)=>{e.stopPropagation();openPop();const p=MODELS.find(x=>!x.free);if(p){railOn=p.provider;drawRail();drawList();}};
-  const cp=node('button','btn','Copy my task');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(task).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy my task',1500);});};
+  const fr=node('button','btn go',T(orLabel()));fr.type='button';fr.onclick=()=>orGo(task);
+  const k=node('button','btn',T('Use my API key'));k.type='button';k.onclick=(e)=>{e.stopPropagation();openPop();const p=MODELS.find(x=>!x.free);if(p){railOn=p.provider;drawRail();drawList();}};
+  const cp=node('button','btn',T('Copy my task'));cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(task).then(()=>{cp.textContent=T('Copied');setTimeout(()=>cp.textContent=T('Copy my task'),1500);});};
   c.querySelector('.acts').append(fr,k,cp,discord());turn.setAttribute('data-limit','1');turn.appendChild(c);box.value=task;fit();down();
 }
 // Zachman questions as a tree of squares: click (or tap) one to choose it and see its smaller squares; the next
