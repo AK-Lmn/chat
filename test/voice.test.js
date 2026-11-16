@@ -570,3 +570,11 @@ test('a visitor-key model streams its reply: each piece reaches onDelta as it is
   expect(body.stream).toBeUndefined();
   expect(plain.text).toBe('ok');
 });
+
+test('voice talk keeps one voice for a whole reply', () => {
+  const page = appPage({ login: 'ann', connected: [] });
+  // uk and ru share letters: a later sentence keeps the first sentence's language instead of flipping the voice
+  expect(page).toContain("items[0].lg==='uk'||items[0].lg==='ru'");
+  // a later sentence Ava failed to give is asked again before the browser's own (different) voice reads it
+  expect(page).toContain('if(!url)url=await getBlob(it.words,it.lg);');
+});
