@@ -50,7 +50,7 @@ export const UK = {
   'Cheapest first, falls back to the next': 'Спершу найдешевший, далі наступний',
   'ready': 'готово',
   'Chat': 'Чат',
-  'Build': 'Створити',
+  'Build': 'Збудувати',
   'Create': 'Створити',
   'Flisk Wolf': 'Flisk Wolf',
   'Model name': 'Назва моделі',
