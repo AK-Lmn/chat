@@ -1,4 +1,5 @@
 import { OG_PNG } from './og.js';
+import { cleanMemo, memoMessages, memoNote } from './memo.js';
 import { LANG_NAMES, PRODUCT_FACTS, replyRule, resolveLang } from './lang.js';
 import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
@@ -39,6 +40,8 @@ export const ANON_VOICE_PARTS_PER_DAY = 120;
 export const MAX_AUDIO_B64 = 1_400_000; // about 1 MB of audio, a minute of speech
 export const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
 export const TALK_PER_DAY = 100;
+export const ANON_MEMO_PER_DAY = 40;
+export const MEMO_PER_DAY = 120;
 export const SPEAK_PER_DAY = 2000;
 // MeloTTS is robotic next to Ava, so Ava gets this long to start before the backup is asked (it was 0.8 s, and in a slow
 // spell of Microsoft's that meant Melo spoke every answer). Melo still covers a longer stall.
@@ -92,13 +95,13 @@ export function talkReply(raw, heard = '', history = []) {
 }
 // Whisper's language code -> the name the model understands, so the reply comes back in the language spoken.
 export { LANG_NAMES };
-export function talkMessages(history, lang = '') {
+export function talkMessages(history, lang = '', memo = '') {
   const turns = (Array.isArray(history) ? history : [])
     .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
     .slice(-12)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
   const rule = replyRule(lang);
-  const sys = `${TALK_SYSTEM}\n${PRODUCT_FACTS}${rule ? `\n${rule}` : ''}`;
+  const sys = `${TALK_SYSTEM}\n${PRODUCT_FACTS}${rule ? `\n${rule}` : ''}${memoNote(memo)}`;
   return [{ role: 'system', content: sys }, ...turns];
 }
 
@@ -800,7 +803,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (heard) history.push({ role: 'user', content: heard });
       // A typed turn has no Whisper hint, so the words of the last message settle the language, not a stale one from the page.
       else { const last = history[history.length - 1]; if (last?.role === 'user') lang = resolveLang({ text: String(last.content || ''), sticky: lang, ui: body?.ui }); }
-      const messages = talkMessages(history, lang);
+      const messages = talkMessages(history, lang, body?.memo);
       const note = await weatherNote(messages[messages.length - 1]?.content, fetchImpl, placeFrom(request.cf));
       if (note) messages[0] = { role: 'system', content: `${messages[0].content}\n${note}` };
       if (messages.length < 2 || messages[messages.length - 1].role !== 'user') return json(400, { error: 'say something first' });
@@ -815,6 +818,19 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (r.error) return withTiming(json(502, { error: r.error, kind: r.kind }));
       const { text, build } = talkReply(r.text, heard || String(messages[messages.length - 1]?.content || ''), messages);
       return withTiming(text ? json(200, { heard, lang, text, ...(build ? { build } : {}) }) : json(502, { error: 'the model sent an empty answer' }));
+    }
+
+    if (path === '/api/memo') {
+      const body = await readJson(request);
+      const msgs = Array.isArray(body?.msgs) ? body.msgs : [];
+      if (!msgs.length) return json(400, { error: 'nothing to remember' });
+      const chosen = resolveModel(body.ai);
+      if (chosen.error) return json(400, { error: chosen.error, kind: chosen.kind });
+      if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_MEMO_PER_DAY : MEMO_PER_DAY, scope: anon ? 'memo-anon' : 'memo-limit' }))) return json(429, { error: 'memo limit for today' });
+      const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(memoMessages(body.memo, msgs));
+      if (r.error) return json(502, { error: r.error });
+      const memo = cleanMemo(r.text);
+      return memo ? json(200, { memo }) : json(502, { error: 'empty summary' });
     }
 
     if (path === '/api/run') {
@@ -843,7 +859,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});

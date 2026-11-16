@@ -1,6 +1,7 @@
 import { ANALYSIS_NOTE, ANALYSIS_STYLE, STATS_NOTE, asksAnalysis, asksStats } from './analysis-style.js';
 import { ANSWER_STYLE } from './answer-style.js';
 import { PRODUCT_FACTS, replyRule } from './lang.js';
+import { memoNote } from './memo.js';
 import { widgetPrompt, parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
 import { cleanSystem, makeSystem, MAX_SERVICES } from './system.js';
@@ -610,7 +611,7 @@ export function playbooksFor(task) {
 }
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
-export async function runTask({ classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', memo = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -626,7 +627,7 @@ export async function runTask({ classify = null, task, history = [], github = un
   // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
   const bigApp = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i.test(String(task));
   const force = bigApp ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
-  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (asksStats(task) ? STATS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note + `\n\n${PRODUCT_FACTS}` + (replyRule(lang) ? `\n${replyRule(lang)} (This only sets the language of "say" and of the answer text.)` : '');
+  const system = SYSTEM.replace(`After at most ${MAX_STEPS - 1} actions`, `After at most ${maxSteps - 1} actions`) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (asksStats(task) ? STATS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note + `\n\n${PRODUCT_FACTS}` + (replyRule(lang) ? `\n${replyRule(lang)} (This only sets the language of "say" and of the answer text.)` : '') + memoNote(memo);
   const token = github?.token || '';
   const building = asksToBuild(task, history);
   const analysis = asksAnalysis(task);
