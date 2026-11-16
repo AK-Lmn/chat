@@ -1305,7 +1305,7 @@ function workerCard(ev){
   const row=node('div','wrow'),inp=node('input');inp.value='GET /';inp.setAttribute('aria-label','Request: method and path');
   const go=node('button','btn','Send');go.type='button';const o=node('pre','','');
   let wp=null;
-  const send=async()=>{go.disabled=true;try{const parts=inp.value.trim().split(/\s+/);const method=parts.length>1?parts[0].toUpperCase():'GET';const path=parts.length>1?parts[1]:parts[0];
+  const send=async()=>{go.disabled=true;try{const parts=inp.value.trim().split(/\\s+/);const method=parts.length>1?parts[0].toUpperCase():'GET';const path=parts.length>1?parts[1]:parts[0];
     if(!wp)wp=runWorker(ev.code);const w=await wp;
     const init={method};if(!['GET','HEAD'].includes(method)){const b=prompt('Body to send (text, usually JSON)','{}');init.body=b==null?'{}':b;init.headers={'content-type':'application/json'};}
     const r=await w.fetch('https://worker.local'+(path.startsWith('/')?path:'/'+path),init);const t=await r.text();o.textContent=r.status+' '+r.statusText+'\\n'+t.slice(0,4000);}
