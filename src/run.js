@@ -1,7 +1,7 @@
 // "@flisk-chat review run": a computer of the person who asked checks out the PR and runs its install, lint, typecheck and
 // tests in the background, then sends the output to /github/run-result, which posts it and stops the computer.
 import { fleetClient } from './fleet.js';
-import { gh, installToken } from './review.js';
+import { gh, installToken } from './github-app.js';
 
 const enc = new TextEncoder();
 const hexOf = (u) => [...new Uint8Array(u)].map((b) => b.toString(16).padStart(2, '0')).join('');
