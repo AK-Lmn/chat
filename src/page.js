@@ -569,7 +569,7 @@ const APP_JS = `
 const $=(id)=>document.getElementById(id);
 const talk=$('talk'),form=$('ask'),box=$('task'),go=$('go'),setup=$('setup'),signin=$('signin'),hist=$('hist'),scroller=$('scroll'),welcome=$('ideas');
 const MODELS=window.__MODELS__||[],IC=window.__ICONS__||{},LG=window.__LOGOS__||{};
-let history=[],chatLang='';
+let history=[],chatLang='',memo='',memoN=0,memoBusy=false;
 const down=()=>{scroller.scrollTop=scroller.scrollHeight;};
 const node=(tag,cls,text)=>{const d=document.createElement(tag);if(cls)d.className=cls;if(text!=null)d.textContent=text;return d;};
 const lg=(p,h)=>{try{const i=document.createElement('img');i.className='lg';i.alt='';i.src='/logo/'+new URL(h).hostname.replace(/^www[.]/,'');i.onerror=()=>i.remove();p.appendChild(i);}catch(e){}};
@@ -726,7 +726,7 @@ document.querySelectorAll('[data-idea]').forEach(b=>b.onclick=()=>{box.value=b.d
 const KEY='chat_history_v1';let chatId=null;
 const loadAll=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return [];}};
 const saveAll=(all)=>{try{localStorage.setItem(KEY,JSON.stringify(all.slice(0,30)));}catch(e){}};
-const saveChat=()=>{if(!history.length)return;const prev=loadAll().find(c=>c.id===chatId);const all=loadAll().filter(c=>c.id!==chatId);if(!chatId)chatId=Date.now().toString(36);all.unshift({id:chatId,at:(prev&&prev.at)||Date.now(),title:history[0].content.split('\\n')[0].slice(0,80),msgs:history});saveAll(all);drawHist();};
+const saveChat=()=>{if(!history.length)return;const prev=loadAll().find(c=>c.id===chatId);const all=loadAll().filter(c=>c.id!==chatId);if(!chatId)chatId=Date.now().toString(36);all.unshift({id:chatId,at:(prev&&prev.at)||Date.now(),title:history[0].content.split('\\n')[0].slice(0,80),msgs:history,memo,memoN});saveAll(all);drawHist();};
 function drawHist(){const q=($('q').value||'').toLowerCase();const all=loadAll().filter(c=>!q||c.title.toLowerCase().includes(q)||(c.msgs||[]).some(m=>String(m.content||'').toLowerCase().includes(q)||(m.files||[]).some(n=>String(n).toLowerCase().includes(q))));hist.textContent='';
   if(!all.length){hist.appendChild(node('li','none',q?'No chats match.':'Your chats show here. They stay in this browser.'));return;}
   const LIM=10;let showAll=!!q||hist.dataset.all==='1';const rows=showAll?all:all.slice(0,LIM);let lastDay='';
@@ -734,7 +734,9 @@ function drawHist(){const q=($('q').value||'').toLowerCase();const all=loadAll()
   rows.forEach(c=>{const dn=c.at?dayName(c.at):'';if(dn&&dn!==lastDay){lastDay=dn;hist.appendChild(node('li','day',dn));}const li=node('li',c.id===chatId?'cur':''),b=node('button','',c.title),x=node('button','x','×');b.type=x.type='button';b.title=c.title+(c.at?' · '+new Date(c.at).toLocaleString():'');b.onclick=()=>{openChat(c);closeSide();};x.title='Delete this chat';x.setAttribute('aria-label','Delete chat: '+c.title);x.onclick=()=>{saveAll(loadAll().filter(o=>o.id!==c.id));if(chatId===c.id)newChat();drawHist();};li.append(b,x);hist.appendChild(li);});
   if(!showAll&&all.length>LIM){const li=node('li','more'),m=node('button','','Show '+(all.length-LIM)+' older');m.type='button';m.onclick=()=>{hist.dataset.all='1';drawHist();};li.append(m);hist.appendChild(li);}}
 $('q').addEventListener('input',drawHist);
-function newChat(){history=[];chatLang='';go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
+// Older turns fold into one short summary kept with the chat in this browser; the model sees it plus the last few messages.
+async function roll(){const upto=history.length-6;if(memoBusy||upto-memoN<6)return;memoBusy=true;const id=chatId,from=memoN;try{const r=await fetch('/api/memo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({memo,msgs:history.slice(from,upto).map(m=>({role:m.role,content:m.content})),ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})});const b=await r.json().catch(()=>({}));if(r.ok&&b.memo&&id===chatId){memo=b.memo;memoN=upto;saveChat();}}catch(e){}memoBusy=false;}
+function newChat(){history=[];chatLang='';memo='';memoN=0;go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
 // Result cards for a finished website or video. Built in run() and again when a saved chat is reopened, from the link in its answer.
 function siteCard(link){const r=node('div','result');r.innerHTML=IC.website.replace('<svg ','<svg width="34" height="34" style="border-radius:var(--radius);flex:none" aria-hidden="true" ')+'<div class="rt"><b></b><div class="url"></div></div>';r.querySelector('b').textContent=link.indexOf('/s/')>0&&link.indexOf('chat.flisk.si')>0?'Your page is live':'Your app is live: the real website and API';r.querySelector('.url').textContent=link.replace(/^https?:\\/\\//,'');
   const cp=node('button','btn','Copy link');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(link).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy link',1500);});};
@@ -752,7 +754,7 @@ function videoCard(video){const v=node('div','vres'),pl=document.createElement('
   vb.append(cp,dl);v.append(pl,vb);return v;}
 // Own-site result links in a saved answer: /s/<16 hex> is a website, /v/<16 hex>.mp4 a video.
 function resultLinks(text){const o=location.origin.replace(/[.]/g,'[.]'),site=new RegExp(o+'/s/[a-f0-9]{16}','g'),vid=new RegExp(o+'/v/[a-f0-9]{16}[.]mp4','g'),app=/https:[/][/][a-z0-9-]+-[0-9]{2,5}[.]preview[.]box[.]upstash[.]com/g,t=String(text||'');return {site:(t.match(app)||[])[0]||(t.match(site)||[])[0]||'',video:(t.match(vid)||[])[0]||''};}
-function openChat(c){newChat();chatId=c.id;history=c.msgs.slice();chatting(true);history.forEach(m=>{if(m.role!=='user'){asstMsg(m.content);const rl=resultLinks(m.content);if(rl.site)add(siteCard(rl.site));if(rl.video)add(videoCard(rl.video));return;}const u=userMsg(m.content);if(u&&Array.isArray(m.files)&&m.files.length){const fl=node('div','ufiles');m.files.forEach(n=>fl.appendChild(node('span','fchip',String(n))));u.appendChild(fl);}});const lastM=history[history.length-1];if(lastM&&lastM.role==='user'){const ic=node('div','errbox');ic.appendChild(node('div','err','This task was interrupted: the page was closed before it finished.'));const n=node('div','next');const rb=node('button','btn go','Run it again');rb.type='button';rb.onclick=()=>{ic.remove();run(lastM.content);};n.appendChild(rb);ic.appendChild(n);add(ic);}drawHist();}
+function openChat(c){newChat();chatId=c.id;history=c.msgs.slice();memo=String(c.memo||'');memoN=Number(c.memoN)||0;chatting(true);history.forEach(m=>{if(m.role!=='user'){asstMsg(m.content);const rl=resultLinks(m.content);if(rl.site)add(siteCard(rl.site));if(rl.video)add(videoCard(rl.video));return;}const u=userMsg(m.content);if(u&&Array.isArray(m.files)&&m.files.length){const fl=node('div','ufiles');m.files.forEach(n=>fl.appendChild(node('span','fchip',String(n))));u.appendChild(fl);}});const lastM=history[history.length-1];if(lastM&&lastM.role==='user'){const ic=node('div','errbox');ic.appendChild(node('div','err','This task was interrupted: the page was closed before it finished.'));const n=node('div','next');const rb=node('button','btn go','Run it again');rb.type='button';rb.onclick=()=>{ic.remove();run(lastM.content);};n.appendChild(rb);ic.appendChild(n);add(ic);}drawHist();}
 $('newchat').onclick=()=>{newChat();closeSide();};
 const side=$('side');const closeSide=()=>side.classList.remove('open');// On a phone the sidebar is fixed to the window; start it under the flisk bar, which sits above it.
 $('sideopen').onclick=()=>{const fb=document.querySelector('flisk-bar'),t=fb?Math.max(0,fb.getBoundingClientRect().bottom):0;side.style.top=t+'px';side.classList.add('open');};$('sideclose').onclick=closeSide;$('scrim').onclick=closeSide;
@@ -1122,7 +1124,7 @@ const ndLines=(res)=>{const rd=res.body.getReader(),dec=new TextDecoder();let bu
   return {rd,next:async()=>{for(;;){const i=buf.indexOf('\\n');if(i>=0){const l=buf.slice(0,i).trim();buf=buf.slice(i+1);if(!l)continue;try{return JSON.parse(l);}catch(e){continue;}}
     const x=await rd.read();if(x.done){const l=buf.trim();buf='';if(l){try{return JSON.parse(l);}catch(e){}}return null;}buf+=dec.decode(x.value,{stream:true});}}};};
 const talkSend=(blob)=>{const ctrl=new AbortController(),hist=oTurns.slice();
-  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang||chatLang,ui:window.__LANG||'',history:hist,stream:true,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
+  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang||chatLang,memo,ui:window.__LANG||'',history:hist,stream:true,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
     .then(async res=>{if(!res.ok||String(res.headers.get('content-type')||'').indexOf('ndjson')<0)return {status:res.status,ok:res.ok,b:await res.json().catch(()=>({}))};
       const ln=ndLines(res),first=await ln.next();return {status:200,ok:true,b:first||{},ln};});p.catch(()=>{});return {ctrl,p};};
 async function oLoop(){
@@ -1177,7 +1179,7 @@ async function oOpen(){
 function oClose(){oOn=false;if(oStop)oStop();if(oracle._endSpeak)oracle._endSpeak();stopTalk();
   if(oStream){oStream.getTracks().forEach(t=>t.stop());oStream=null;}if(oCtx){try{oCtx.close();}catch(e){}oCtx=null;}oracle.hidden=true;
   // Keep the talk in the chat, so it is saved with the rest and can be read later.
-  if(oTurns.length){chatting(true);oTurns.forEach(m=>{if(m.role==='user')userMsg(m.content);else asstMsg(m.content);history.push(m);});saveChat();down();oTurns=[];}
+  if(oTurns.length){chatting(true);oTurns.forEach(m=>{if(m.role==='user')userMsg(m.content);else asstMsg(m.content);history.push(m);});saveChat();roll();down();oTurns=[];}
 }
 orb.onclick=()=>{if(!oOn)return;if(oSpeaking&&oracle._endSpeak){oracle._endSpeak();return;}if(oStop){oStop();return;}if(!oRec)oLoop();};
 $('oend').onclick=oClose;
@@ -1261,7 +1263,7 @@ async function run(task){
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
   try{
-    if(task.length>3)chatLang=langOf(task);const payload={pod:podNow,task,history,lang:chatLang,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
+    if(task.length>3)chatLang=langOf(task);const payload={pod:podNow,task,history,lang:chatLang,memo,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
     const res=await fetch('/api/run',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json',accept:'application/x-ndjson'},body:JSON.stringify(payload)});
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.
@@ -1279,7 +1281,7 @@ async function run(task){
   }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err',T('You stopped this task.')));else errCard(turn,String(err.message||err),err.kind||'other',task);}
   if(needPod&&!failed){end(true);turn.remove();attached=sendFiles;drawFiles();podNext=true;return run(task);}
   end(!failed||answer!==null);
-  if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
+  if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();roll();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
     const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);
     const sv=node('div','asave'),dl2=node('button','btn','Save as file'),cp2=node('button','btn','Copy');dl2.type=cp2.type='button';
     dl2.onclick=()=>{const u=URL.createObjectURL(new Blob([answer],{type:'text/markdown'})),x=document.createElement('a');x.href=u;x.download='flisk-chat-answer.md';document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);dl2.textContent='Saved ✓';setTimeout(()=>dl2.textContent='Save as file',1500);};
