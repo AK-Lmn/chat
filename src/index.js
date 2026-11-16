@@ -17,6 +17,7 @@ import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession
 import { speakStream, MAX_SPEAK } from './tts.js';
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
 import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alexa.js';
+import { withSecurityHeaders } from './security-headers.js';
 
 export const TASKS_PER_DAY = 20;
 // Visitors without GitHub are counted by network address, not by cookie (a cookie can be thrown away), so their share is smaller.
@@ -850,8 +851,12 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
 }
 
 export default {
-  fetch: (request, env, ectx) =>
-    handle(request, env, { waitUntil: ectx?.waitUntil ? (p) => ectx.waitUntil(p) : null }).catch((e) => json(500, { error: 'chat failed: ' + String(e?.message || e).slice(0, 200) })),
+  // The voice button records, so the microphone stays allowed for chat's own pages; camera and location are off.
+  fetch: async (request, env, ectx) =>
+    withSecurityHeaders(
+      await handle(request, env, { waitUntil: ectx?.waitUntil ? (p) => ectx.waitUntil(p) : null }).catch((e) => json(500, { error: 'chat failed: ' + String(e?.message || e).slice(0, 200) })),
+      { permissionsPolicy: 'camera=(), microphone=(self), geolocation=()' },
+    ),
   // Hourly (wrangler.toml [triggers]): delete computers that are past their time.
   scheduled: (event, env, ectx) => {
     ectx.waitUntil(cleanPods(env).then((r) => console.log('cleanPods', JSON.stringify(r))));
