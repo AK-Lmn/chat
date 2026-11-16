@@ -1215,7 +1215,9 @@ const SI={terminal:'<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1=
 const cmdIcon=(c)=>/\\b(curl|wget|ping|dig|nslookup)\\b/.test(c)?'globe':/\\b(pip3?|npm|pnpm|bun|apt(-get)?|apk|brew|yarn)\\b.*\\b(install|add|i)\\b/.test(c)?'download':/\\bflisk\\b/.test(c)?'layers':/\\b(sqlite3|psql|mysql|redis-cli)\\b/.test(c)?'database':/\\b(python3?|node|deno|ruby|go run|php)\\b/.test(c)?(/\\bbc\\b|[*][*]|math|fib/i.test(c)?'calc':'code'):/^\\s*(ls|cat|head|tail|find|tree|du|wc|mkdir|cp|mv)\\b/.test(c)?'folder':'terminal';
 const noteIcon=(t)=>/scene|draw/i.test(t)?'image':/voice|record/i.test(t)?'mic':/sav/i.test(t)?'save':/install|pip/i.test(t)?'download':'film';
 // One task: a "Working for Ns" header, each computer step as it happens, then the answer and a result card.
+let podNext=false;
 async function run(task){
+  const podNow=podNext;podNext=false;
   go.disabled=true;chatting(true);closePop();
   const sendFiles=attached;attached=[];drawFiles();
   {const lu=history[history.length-1];if(sendFiles.length&&lu&&lu.role==='user')lu.files=sendFiles.map(f=>f.name);}
@@ -1226,7 +1228,7 @@ async function run(task){
   if(blind){const bn=node('div','blind');bn.textContent=cur.free?'Flisk Wolf cannot see pictures: it only gets the file on the computer (size, metadata). To ask about what is in the picture, pick a model with your own key that sees images, such as Claude, GPT or Gemini.':'This model cannot see pictures: it only gets the file on the computer. To ask about what is in the picture, pick a model marked "sees images".';const pk2=node('button','btn','Pick a model');pk2.type='button';pk2.onclick=()=>openPop();bn.appendChild(pk2);turn.appendChild(bn);}
   const box2=node('details','stepsbox'),sum2=node('summary','','Steps'),list=node('ol','steps');box2.open=true;box2.append(sum2,list);box2.hidden=true;turn.appendChild(box2);
   const t0=Date.now(),tick=()=>{const e=Date.now()-t0;wt.textContent='Working for '+secs(e)+(e>45000?' · slow: press Stop to give up':'');};let stopped=false;const ac=new AbortController();const stop=node('button','btn','Stop');stop.type='button';stop.onclick=()=>{stopped=true;ac.abort();};work.appendChild(stop);tick();const timer=setInterval(tick,1000);
-  let live=null,count=0,answer=null,failed=false,link=null,video=null,lastNote='';
+  let live=null,count=0,answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
   const step=(html,cls,ic)=>{if(live&&live.classList.contains('live')){live.classList.remove('live');live.classList.add('ok');}const li=node('li','st '+(cls||'live')),si=node('span','si'),t=node('div','t');si.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+(SI[ic]||SI.sparkles)+'</svg>';t.innerHTML=html;li.append(si,t);list.appendChild(li);box2.hidden=false;count++;sum2.textContent='Steps ('+count+')';live=li;down();return li;};
   const code=(s)=>{const c=document.createElement('code');c.textContent=s;return c.outerHTML;};
   const txt=(s)=>{const c=document.createElement('span');c.textContent=s;return c.innerHTML;};
@@ -1254,12 +1256,12 @@ async function run(task){
     else if(ev.type==='pod_stopped')step('Computer stopped','ok','power');
     else if(ev.type==='pod_kept')step(ev.days?'Computer kept running for the live app: it sleeps when idle, wakes on a visit, deleted after '+Number(ev.days)+' days':'Computer kept running for the live app until '+(ev.until?new Date(ev.until).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'the provider stops it'),'ok','power');
     else if(ev.type==='widget'){const w=drawWidget(ev);if(w){turn.appendChild(w);down();}}
-    else if(ev.type==='answer')answer=ev.text;
+    else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
   try{
-    if(task.length>3)chatLang=langOf(task);const payload={task,history,lang:chatLang,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
+    if(task.length>3)chatLang=langOf(task);const payload={pod:podNow,task,history,lang:chatLang,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
     const res=await fetch('/api/run',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json',accept:'application/x-ndjson'},body:JSON.stringify(payload)});
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.
@@ -1275,6 +1277,7 @@ async function run(task){
       }}
     }
   }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err',T('You stopped this task.')));else errCard(turn,String(err.message||err),err.kind||'other',task);}
+  if(needPod&&!failed){end(true);turn.remove();attached=sendFiles;drawFiles();podNext=true;return run(task);}
   end(!failed||answer!==null);
   if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
     const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);

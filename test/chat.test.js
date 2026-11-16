@@ -119,10 +119,20 @@ describe('first-time flow', () => {
   test('no computer connected: a task gets 409 needProvider and uses no model call', async () => {
     const e = env();
     const w = world({ connected: false });
-    const res = await post(e, w, '/api/run', { task: 'hi' }, await authed(e));
+    const res = await post(e, w, '/api/run', { task: 'hi', pod: true }, await authed(e));
     expect(res.status).toBe(409);
     expect((await res.json()).needProvider).toBe(true);
     expect(w.log.some((l) => l.model)).toBe(false);
+  });
+
+  test('no computer connected: a plain question is answered on the Worker, no 409 and no pod boot', async () => {
+    const e = env();
+    const w = world({ connected: false });
+    const res = await post(e, w, '/api/run', { task: 'hi' }, await authed(e));
+    expect(res.status).toBe(200);
+    const evs = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+    expect(evs.some((x) => x.type === 'needcomputer')).toBe(false);
+    expect(evs.some((x) => x.type === 'answer')).toBe(true);
   });
 
   test('pasting a key sends it to fleet once for that login, only for known providers', async () => {
