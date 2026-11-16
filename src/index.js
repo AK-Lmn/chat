@@ -1,4 +1,5 @@
 import { OG_PNG } from './og.js';
+import { LANG_NAMES, PRODUCT_FACTS, replyRule, resolveLang } from './lang.js';
 import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
@@ -90,14 +91,14 @@ export function talkReply(raw, heard = '', history = []) {
   return { text, build };
 }
 // Whisper's language code -> the name the model understands, so the reply comes back in the language spoken.
-export const LANG_NAMES = { en: 'English', uk: 'Ukrainian', ru: 'Russian', es: 'Spanish', de: 'German', fr: 'French', it: 'Italian', pt: 'Portuguese', pl: 'Polish', nl: 'Dutch', tr: 'Turkish', cs: 'Czech', sk: 'Slovak', ro: 'Romanian', hu: 'Hungarian', sv: 'Swedish', da: 'Danish', no: 'Norwegian', fi: 'Finnish', el: 'Greek', bg: 'Bulgarian', sr: 'Serbian', hr: 'Croatian', be: 'Belarusian', ka: 'Georgian', he: 'Hebrew', ar: 'Arabic', fa: 'Persian', hi: 'Hindi', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', vi: 'Vietnamese', th: 'Thai', id: 'Indonesian', ms: 'Malay', kk: 'Kazakh', lt: 'Lithuanian', lv: 'Latvian', et: 'Estonian', sl: 'Slovenian' };
+export { LANG_NAMES };
 export function talkMessages(history, lang = '') {
   const turns = (Array.isArray(history) ? history : [])
     .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
     .slice(-12)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
-  const name = LANG_NAMES[String(lang).slice(0, 2)];
-  const sys = name ? `${TALK_SYSTEM}\nThe person is speaking ${name}. Reply only in ${name}.` : TALK_SYSTEM;
+  const rule = replyRule(lang);
+  const sys = `${TALK_SYSTEM}\n${PRODUCT_FACTS}${rule ? `\n${rule}` : ''}`;
   return [{ role: 'system', content: sys }, ...turns];
 }
 
@@ -791,7 +792,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         timed('stt', t0);
         if (t.error) return json(t.status, { error: t.error });
         heard = t.text;
-        lang = t.lang || lang;
+        // Whisper guesses uk or ru per clip; the words, the chat's last language and the page language settle it.
+        lang = resolveLang({ text: t.text, heard: t.lang, sticky: lang, ui: body?.ui });
         if (!heard) return json(200, { heard: '', lang, text: '' });
       }
       const history = Array.isArray(body?.history) ? body.history.slice(-12) : [];
@@ -839,7 +841,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
