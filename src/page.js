@@ -959,6 +959,30 @@ async function say(t,hint,opts){stopTalk();opts=opts||{};const gen=sayGen,lang=l
   for(const x of sentences(t)){if(gen!==sayGen)return;if(await browserSay(x,lang,gen))heard=true;else if(!heard)break;}
   if(!heard&&gen===sayGen&&opts.onSilent)opts.onSilent(words,lang);}
 const talkBack=(t,hint)=>{if(t)say(t,hint);};
+// Reads a reply while it is still arriving (voice talk): push(sentence) as each one comes, end() after the last. The first
+// sentence streams from /voice and starts on its first chunk; the others are fetched while it plays, so each starts the
+// moment the one before it ends. A sentence Ava cannot give is read by the browser's own voice; when nothing makes a sound,
+// onSilent offers a tap-to-play button.
+const playBlob=(url,gen)=>new Promise((ok)=>{if(gen!==sayGen){ok(false);return;}let w=0,t=0;
+  const fin=(r)=>{AUD.onended=AUD.onerror=null;clearInterval(w);clearTimeout(t);ok(r);};
+  AUD.onended=()=>fin(true);AUD.onerror=()=>{try{AUD.pause();}catch(e){}fin(false);};
+  w=setInterval(()=>{if(gen!==sayGen){try{AUD.pause();}catch(e){}fin(true);}},150);t=setTimeout(()=>{try{AUD.pause();}catch(e){}fin(false);},60000);
+  AUD.src=url;const p=AUD.play();if(p)p.catch(()=>fin(false));});
+function talkSpeaker(hint,opts){stopTalk();opts=opts||{};const gen=sayGen,items=[];let ended=false,wake=null,n=0,heardAny=false,allWords='',lastLang=hint||'';
+  const getBlob=(words,lg)=>fetch('/voice?l='+encodeURIComponent(lg)+'&t='+encodeURIComponent(words.slice(0,1200))).then(r=>r.ok?r.blob():null).then(b=>b&&b.size>300?URL.createObjectURL(b):null).catch(()=>null);
+  const push=(sentence)=>{const words=spoken(sentence);if(!words||gen!==sayGen)return;const lg=langOf(words,hint);lastLang=lg;allWords+=(allWords?' ':'')+words;
+    const it={words,lg};if(items.length)it.url=getBlob(words,lg);items.push(it);if(wake)wake();};
+  const end=()=>{ended=true;if(wake)wake();};
+  const done=(async()=>{for(;;){if(gen!==sayGen)return;
+    if(n>=items.length){if(ended)break;await new Promise(r=>{wake=r;});wake=null;continue;}
+    const it=items[n],first=n===0;n++;let ok=false;
+    if(first){const budget=opts.budget&&MELO_SPEAKS.indexOf(it.lg)<0?Math.min(opts.budget,2000):opts.budget;ok=await playVoice(it.words,it.lg,gen,budget);}
+    else{const url=await it.url;if(gen!==sayGen)return;ok=url?await playBlob(url,gen):false;if(url)URL.revokeObjectURL(url);}
+    if(gen!==sayGen)return;
+    if(!ok)ok=await browserSay(it.words,it.lg,gen);
+    if(ok)heardAny=true;else if(first)break;}
+    if(!heardAny&&gen===sayGen&&opts.onSilent&&allWords)opts.onSilent(allWords,lastLang);})();
+  return {push,end,done};}
 if(TTS&&TTS.onvoiceschanged!==undefined)TTS.onvoiceschanged=()=>{};
 const SV='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',SPK_ON=SV+'<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>',SPK_OFF=SV+'<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>';
 const drawVoice=()=>{voiceBtn.innerHTML=voiceOn?SPK_ON:SPK_OFF;voiceBtn.classList.toggle('on',voiceOn);voiceBtn.setAttribute('aria-pressed',voiceOn);const t=voiceOn?'Reading answers aloud. Tap to stop':'Read answers aloud';voiceBtn.title=t;voiceBtn.setAttribute('aria-label',t);};
@@ -1080,27 +1104,46 @@ const ack=()=>new Promise((ok)=>{const list=ackClips[ackLang()]||[];if(!list.len
   let fin=false;const end=()=>{if(fin)return;fin=true;AUD.onended=AUD.onerror=null;clearTimeout(t);ok();};const t=setTimeout(end,1500);
   AUD.onended=AUD.onerror=end;AUD.src=list[ackN++%list.length];const p=AUD.play();if(p)p.catch(()=>{chime();end();});});
 const LNAME={en:'English',uk:'Ukrainian',ru:'Russian',es:'Spanish',de:'German',fr:'French',it:'Italian',pt:'Portuguese',pl:'Polish',ja:'Japanese',ko:'Korean',zh:'Chinese',ar:'Arabic',he:'Hebrew',hi:'Hindi',tr:'Turkish',nl:'Dutch',el:'Greek'};
-// One request: the recording goes up, the words you said and the spoken answer come back, with the language heard.
+// One request: the recording goes up; the words you said come back first, then the answer sentence by sentence (read by
+// ndLines), so the first sentence can be spoken while the model is still writing the rest.
+const ndLines=(res)=>{const rd=res.body.getReader(),dec=new TextDecoder();let buf='';
+  return {rd,next:async()=>{for(;;){const i=buf.indexOf('\\n');if(i>=0){const l=buf.slice(0,i).trim();buf=buf.slice(i+1);if(!l)continue;try{return JSON.parse(l);}catch(e){continue;}}
+    const x=await rd.read();if(x.done){const l=buf.trim();buf='';if(l){try{return JSON.parse(l);}catch(e){}}return null;}buf+=dec.decode(x.value,{stream:true});}}};};
 const talkSend=(blob)=>{const ctrl=new AbortController(),hist=oTurns.slice();
-  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang,history:hist,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
-    .then(async res=>({status:res.status,ok:res.ok,b:await res.json().catch(()=>({}))}));p.catch(()=>{});return {ctrl,p};};
+  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang,history:hist,stream:true,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
+    .then(async res=>{if(!res.ok||String(res.headers.get('content-type')||'').indexOf('ndjson')<0)return {status:res.status,ok:res.ok,b:await res.json().catch(()=>({}))};
+      const ln=ndLines(res),first=await ln.next();return {status:200,ok:true,b:first||{},ln};});p.catch(()=>{});return {ctrl,p};};
 async function oLoop(){
   while(oOn){
     oSet('listening','Listening…');ackLoad();const got=await hearOne(talkSend);if(!oOn){if(got&&got.early)got.early.ctrl.abort();return;}
     if(!got){oSet('idle','Tap the circle when you want to talk.');return;}
     // Answer at once: the acknowledgement plays while the reply (often already asked for at the first pause) arrives.
-    oSet('thinking','Mm-hm…');const acked=ack();let b;
+    oSet('thinking','Mm-hm…');const acked=ack();let r;
     // The early draft is used when it heard words; a draft that failed or heard nothing is sent again in full.
     const redo=()=>talkSend(got.blob).p;
-    try{const r=await (got.early?got.early.p.then(x=>(x.ok&&String(x.b.heard||'').trim())||x.status===401||x.status===429?x:redo(),redo):redo());
-      b=r.b;if(r.status===401){oClose();signin.hidden=false;signin.scrollIntoView({block:'center'});return;}if(!r.ok)throw new Error(b.error||('Voice talk answered '+r.status));}
+    try{r=await (got.early?got.early.p.then(x=>(x.ok&&String(x.b.heard||'').trim())||x.status===401||x.status===429?x:redo(),redo):redo());
+      if(r.status===401){oClose();signin.hidden=false;signin.scrollIntoView({block:'center'});return;}if(!r.ok)throw new Error(r.b.error||('Voice talk answered '+r.status));}
     catch(e){oSet('idle',T(String(e.message||e)));return;}
-    await acked;
-    if(!oOn)return;const said=String(b.heard||'').trim(),reply=String(b.text||'').trim();
+    const said=String(r.b.heard||'').trim();
     if(!said){oSet('idle','I did not catch that. Tap the circle and try again.');return;}
-    if(b.lang)oLang=b.lang;oYou.textContent=said;oSay.textContent=reply;oTurns.push({role:'user',content:said},{role:'assistant',content:reply});const toBuild=String(b.build||'').trim();
-    oSet('speaking','Speaking… tap the circle to interrupt');
-    await speakAll(reply,oLang);
+    if(r.b.lang)oLang=r.b.lang;oYou.textContent=said;oSay.textContent='';
+    // The reply is read while it arrives: each sentence is shown and spoken the moment it comes in. The speaker starts once
+    // the acknowledgement has finished, so it never talks over "Mm-hm".
+    let reply='',toBuild='',sp=null,fin=false,failed='';const pend=[];const live=r.ln;
+    const feed=(sentence)=>{oSay.textContent+=(oSay.textContent?' ':'')+sentence;if(sp)sp.push(sentence);else pend.push(sentence);};
+    oracle._endSpeak=()=>{stopTalk();if(live)try{live.rd.cancel();}catch(e){}};
+    acked.then(()=>{if(!oOn||sp)return;oSpeaking=true;oSet('speaking','Speaking… tap the circle to interrupt');
+      sp=talkSpeaker(oLang,{budget:7000,onSilent:(words,lang)=>{oHear.hidden=false;oHear.onclick=()=>{oHear.hidden=true;stopTalk();AUD.src='/voice?l='+encodeURIComponent(lang)+'&t='+encodeURIComponent(words.slice(0,1200));const p=AUD.play();if(p)p.catch(()=>{});};}});
+      oHear.hidden=true;pend.splice(0).forEach(x=>sp.push(x));if(fin)sp.end();});
+    if(live){try{for(;;){const m=await live.next();if(!m)break;if(m.say)feed(String(m.say));else if(m.error){failed=String(m.error);break;}else if(m.done){reply=String(m.text||'');toBuild=String(m.build||'').trim();break;}}}catch(e){if(oOn)failed=failed||'The connection dropped. Tap the circle and try again.';}}
+    else{reply=String(r.b.text||'').trim();toBuild=String(r.b.build||'').trim();if(reply)feed(reply);}
+    fin=true;await acked;if(sp)sp.end();
+    if(failed&&!oSay.textContent){oSpeaking=false;oSet('idle',T(failed));return;}
+    if(!oOn){oSpeaking=false;return;}
+    if(!reply)reply=oSay.textContent;
+    oTurns.push({role:'user',content:said},{role:'assistant',content:reply});
+    if(sp){try{await sp.done;}finally{oSpeaking=false;}}else oSpeaking=false;
+    if(failed){oSet('idle',T(failed));return;}
     // Asked to build: leave the talk (it is kept in the chat) and run the task on a real computer, as if typed.
     if(toBuild&&oOn){oClose();box.value=toBuild;if(form.requestSubmit)form.requestSubmit();else form.dispatchEvent(new Event('submit',{cancelable:true}));return;}
   }

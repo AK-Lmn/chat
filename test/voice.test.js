@@ -175,7 +175,7 @@ test('voice talk starts a build when asked, from the model JSON or from the word
   expect(talkReply('{"say":"I am building it now. Build a long app with many things.","build":"x"}').text).toBe('I am building it now.');
   expect(TALK_SYSTEM).toContain('"build"');
   const page = appPage({ login: 'ann', connected: [] });
-  expect(page).toContain('const toBuild=String(b.build');
+  expect(page).toContain('toBuild=String(m.build||');
   expect(page).toContain('form.requestSubmit()');
 });
 
@@ -500,4 +500,71 @@ test('voice: Ava gets a few seconds head start before the robotic Melo backup is
   expect(AVA_HEAD_START_MS).toBeGreaterThanOrEqual(2500);
   const src = await Bun.file(new URL('../src/index.js', import.meta.url)).text();
   expect(src).toContain('backup: meloBackup(env, lang), hedgeMs: AVA_HEAD_START_MS');
+});
+
+import { sentenceSplitter, splitReply } from '../src/talk-stream.js';
+
+test('a reply is cut into sentences as it arrives, short pieces are joined, JSON is never cut', () => {
+  const s = sentenceSplitter();
+  const out = [];
+  for (const d of ['You will ship it', ' today. Dr. Rao agrees', ' with you, so go. And', ' then rest']) out.push(...s.push(d));
+  out.push(...s.flush());
+  expect(out).toEqual(['You will ship it today.', 'Dr. Rao agrees with you, so go.', 'And then rest']);
+  expect(splitReply('One sentence that is long enough. Another sentence that is long enough.')).toHaveLength(2);
+  expect(splitReply('Hi.')).toEqual(['Hi.']);
+  const j = sentenceSplitter();
+  expect(j.push('{"say":"Building it now. Please wait here.","build":"x"}')).toEqual([]);
+  expect(j.live).toBe(false);
+  expect(j.flush()).toEqual([]);
+  expect(sentenceSplitter({ hold: true }).push('Sure thing, I will make that. Really.')).toEqual([]);
+});
+
+const readNd = async (res) => (await res.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+
+test('/api/talk with stream:true sends the sentences one line at a time, then done', async () => {
+  const INFERENCE = { fetch: async () => Response.json({ choices: [{ message: { content: 'You will ship it today. Then rest, you earned it.' } }] }) };
+  const e = env({ INFERENCE, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions' });
+  const cookie = (await makeSession(e, 'ann')).split(';')[0];
+  const res = await handle(new Request(`${ORIGIN}/api/talk`, { method: 'POST', headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ stream: true, history: [{ role: 'user', content: 'Will I ship?' }], ai: { ai: 'wolf' } }) }), e, { fetchImpl: async () => Response.json({}) });
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('ndjson');
+  const lines = await readNd(res);
+  expect(lines[0]).toEqual({ heard: '', lang: '' });
+  expect(lines.filter((l) => l.say).map((l) => l.say)).toEqual(['You will ship it today.', 'Then rest, you earned it.']);
+  const done = lines.at(-1);
+  expect(done.done).toBe(true);
+  expect(done.text).toBe('You will ship it today. Then rest, you earned it.');
+});
+
+test('/api/talk with stream:true reads a build request whole and never speaks the JSON', async () => {
+  const INFERENCE = { fetch: async () => Response.json({ choices: [{ message: { content: '{"say":"Building it now.","build":"a tip calculator"}' } }] }) };
+  const e = env({ INFERENCE, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions' });
+  const cookie = (await makeSession(e, 'ann')).split(';')[0];
+  const res = await handle(new Request(`${ORIGIN}/api/talk`, { method: 'POST', headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ stream: true, history: [{ role: 'user', content: 'Build me a tip calculator' }], ai: { ai: 'wolf' } }) }), e, { fetchImpl: async () => Response.json({}) });
+  const lines = await readNd(res);
+  expect(lines.some((l) => String(l.say || '').includes('{'))).toBe(false);
+  expect(lines.at(-1)).toMatchObject({ done: true, text: 'Building it now.', build: 'a tip calculator' });
+});
+
+test('the page asks for a streamed reply and reads it sentence by sentence', () => {
+  const page = appPage({ login: 'ann', connected: [] });
+  expect(page).toContain('stream:true');
+  expect(page).toContain('function talkSpeaker(');
+  expect(page).toContain('ndLines');
+});
+
+import { modelFrom as streamModel } from '../src/loop.js';
+
+test('a visitor-key model streams its reply: each piece reaches onDelta as it is written', async () => {
+  const sse = ['Sure, ', 'I can ', 'help.'].map((t) => `data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\n`).join('') + `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;
+  let body;
+  const f = async (u, init) => { body = JSON.parse(init.body); return new Response(sse, { headers: { 'content-type': 'text/event-stream' } }); };
+  const got = [];
+  const r = await streamModel({}, f, { ai: 'openrouter', free: false, url: 'https://x.test', key: 'k'.repeat(10), model: 'a/b' })([{ role: 'user', content: 'hi' }], { onDelta: (d) => got.push(d) });
+  expect(body.stream).toBe(true);
+  expect(got.join('')).toBe('Sure, I can help.');
+  expect(r.text).toBe('Sure, I can help.');
+  const plain = await streamModel({}, async (u, init) => { body = JSON.parse(init.body); return Response.json({ choices: [{ message: { content: 'ok' } }] }); }, { ai: 'openrouter', free: false, url: 'https://x.test', key: 'k'.repeat(10), model: 'a/b' })([{ role: 'user', content: 'hi' }]);
+  expect(body.stream).toBeUndefined();
+  expect(plain.text).toBe('ok');
 });

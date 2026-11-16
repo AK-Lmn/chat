@@ -15,6 +15,7 @@ import { runOverSocket } from './browserpod.js';
 import { sitePhoto } from './photo.js';
 import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession, sameOrigin } from './session.js';
 import { speakStream, MAX_SPEAK } from './tts.js';
+import { sentenceSplitter, splitReply } from './talk-stream.js';
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
 import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alexa.js';
 import { withSecurityHeaders } from './security-headers.js';
@@ -804,6 +805,34 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (chosen.error) return json(400, { error: chosen.error, kind: chosen.kind });
       if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_TALK_PER_DAY : TALK_PER_DAY, scope: anon ? 'talk-anon' : 'talk-limit' }))) return json(429, { error: `That's your ${anon ? ANON_TALK_PER_DAY : TALK_PER_DAY} free voice replies for today.${anon ? ' Sign in with GitHub for more.' : ''} Keep going free with your own OpenRouter account in the model menu, or come back tomorrow.` });
       const t1 = Date.now();
+      // Voice talk asks for a stream: each sentence goes out as soon as it is written, so the page starts reading the first
+      // one while the rest is still coming. {heard,lang}, then {say} per sentence, then {done,text,build} (or {error}).
+      if (body?.stream === true) {
+        const { readable, writable } = new TransformStream();
+        const w = writable.getWriter();
+        const enc = new TextEncoder();
+        const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
+        emit({ heard, lang });
+        const last = heard || String(messages[messages.length - 1]?.content || '');
+        // An answer to "build me ..." is read after it is whole: only its first sentence is spoken, and a model may answer in JSON.
+        const split = sentenceSplitter({ hold: BUILD_IT.test(last) || BUILD_ASK.test(last) });
+        let deltas = 0;
+        const job = (async () => {
+          const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(messages, { onDelta: (d) => { deltas++; for (const s of split.push(d)) { const t = spokenReply(s); if (t) emit({ say: t }); } } });
+          timed('llm', t1);
+          if (r.error) { emit({ error: r.error, kind: r.kind }); return; }
+          const { text, build } = talkReply(r.text, heard || String(messages[messages.length - 1]?.content || ''), messages);
+          if (!text) { emit({ error: 'the model sent an empty answer' }); return; }
+          // A model that streamed has said all but its last words; one that cannot (Flisk Wolf) sends the whole answer now.
+          const rest = deltas && split.live && !build ? split.flush().map(spokenReply).filter(Boolean) : splitReply(text);
+          for (const s of rest) emit({ say: s });
+          emit({ done: true, text, ...(build ? { build } : {}), timing: timing.join(', ') });
+        })()
+          .catch((e) => emit({ error: String(e?.message || e).slice(0, 200) }))
+          .finally(() => w.close().catch(() => {}));
+        if (waitUntil) waitUntil(job);
+        return new Response(readable, { headers: { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no' } });
+      }
       const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(messages);
       timed('llm', t1);
       // Server-Timing says which step of a slow turn was slow (Whisper or the model).

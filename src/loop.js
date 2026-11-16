@@ -367,7 +367,37 @@ export function explainModelError(body, status, chosen = {}) {
   return { error: `${head}${why ? `: ${why}` : ''}`.slice(0, 500), kind };
 }
 
-// Calls one model (OpenAI-compatible). Errors come back as { error }.
+// An OpenAI-style event stream ("data: {...}" lines, ending "data: [DONE]"): each piece of text goes to onDelta as it
+// arrives. Resolves { text, finish }, or { error } when the provider sends one in the stream.
+async function readStream(res, onDelta) {
+  const rd = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', text = '', finish = '', error = null;
+  const line = (raw) => {
+    const l = raw.trim();
+    if (!l.startsWith('data:')) return;
+    const data = l.slice(5).trim();
+    if (!data || data === '[DONE]') return;
+    let j;
+    try { j = JSON.parse(data); } catch { return; }
+    if (j?.error && !text) error = j.error;
+    const c = j?.choices?.[0];
+    const d = c?.delta?.content;
+    if (typeof d === 'string' && d) { text += d; onDelta(d); }
+    if (c?.finish_reason) finish = c.finish_reason;
+  };
+  for (;;) {
+    const { value, done } = await rd.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) { line(buf.slice(0, i)); buf = buf.slice(i + 1); }
+  }
+  line(buf);
+  return error ? { error, text, finish } : { text, finish };
+}
+
+// Calls one model (OpenAI-compatible). Errors come back as { error }. A second argument { onDelta } streams the answer.
 function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }) {
   const url = chosen.free ? env.INFERENCE_URL || 'https://inference.flisk.si/v1/chat/completions' : chosen.url;
   const model = chosen.free ? env.INFERENCE_MODEL || 'flisk-wolf-chat' : chosen.model;
@@ -377,8 +407,11 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
   // The free model is another Worker on our own domain: Cloudflare refuses a Worker calling it by its public address
   // (error 1033), so the call goes through a service binding when there is one.
   const call = chosen.free && env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl;
-  return async (messages) => {
+  return async (messages, o = {}) => {
     if (!key) return { error: 'chat has no model key yet (INFERENCE_KEY)' };
+    // Voice talk reads the answer aloud while it is still being written: the model's own key streams it. Flisk Wolf
+    // (inference.flisk.si) answers 400 to stream: true, so the free choice never streams.
+    const stream = typeof o.onDelta === 'function' && !chosen.free;
     // Newer models refuse settings other models take: Claude 4.7 and later answer 400 to any `temperature` below 1, and
     // OpenAI's newer models want `max_completion_tokens` instead of `max_tokens`. So a model the visitor brings is called
     // without `temperature` (and OpenAI with `max_completion_tokens`), and a 400 that names one of them is retried once
@@ -388,10 +421,10 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
       const r = await call(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'user-agent': 'flisk-chat', ...(chosen.referer ? { 'http-referer': 'https://chat.flisk.si', 'x-title': 'Flisk Chat' } : {}) },
-        body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}) }),
+        body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}), ...(stream ? { stream: true } : {}) }),
         ...(chosen.ms ? { signal: AbortSignal.timeout(chosen.ms) } : {}),
       });
-      return { res: r, body: await r.json().catch(() => null) };
+      return { res: r, body: stream && r.ok ? null : await r.json().catch(() => null) };
     };
     let res, body;
     try {
@@ -407,6 +440,13 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
       return { error: `the model did not answer: ${String(e?.message || e).slice(0, 150)}`, kind: 'provider' };
     }
     if (!res.ok || (body?.error && !body?.choices)) return explainModelError(body, res.status, chosen);
+    if (stream) {
+      let got;
+      try { got = await readStream(res, o.onDelta); } catch (e) { return { error: `the model stopped answering: ${String(e?.message || e).slice(0, 150)}`, kind: 'provider' }; }
+      if (got.error) return explainModelError({ error: got.error }, 0, chosen);
+      if (got.text.trim()) return got.finish === 'length' ? { text: got.text, cut: true } : { text: got.text };
+      return { error: 'the model sent an empty answer' + (got.finish ? ` (finish reason: ${String(got.finish).slice(0, 30)})` : ''), kind: 'empty' };
+    }
     const text = body?.choices?.[0]?.message?.content;
     const finish = body?.choices?.[0]?.finish_reason;
     // cut: the answer stopped at the length limit, so an action in it may be missing its end.
@@ -488,9 +528,12 @@ function workersAiModel(env, overLimit) {
 export const ownFreeOpenRouter = (chosen) => !chosen.free && chosen.ai === 'openrouter' && /:free$/.test(chosen.model || '');
 const dailyFreeUsed = (r) => /free-models-per-day|per.?day/i.test(r.error || '');
 function ownFreeModel(env, fetchImpl, chosen) {
-  return async (messages) => {
-    const first = await oneModel(env, fetchImpl, chosen)(messages);
-    if (!first.error || first.kind === 'key' || dailyFreeUsed(first)) return first;
+  return async (messages, o = {}) => {
+    // Once words were streamed to the speaker, another model must not start the answer again.
+    let streamed = false;
+    const onDelta = typeof o.onDelta === 'function' ? (d) => { streamed = true; o.onDelta(d); } : undefined;
+    const first = await oneModel(env, fetchImpl, chosen)(messages, { onDelta });
+    if (!first.error || streamed || first.kind === 'key' || dailyFreeUsed(first)) return first;
     const others = (await freeOpenRouterModels(fetchImpl)).filter((id) => id !== chosen.model).slice(0, 2);
     for (const id of others) {
       const r = await oneModel(env, fetchImpl, { ...chosen, model: id })(messages);
