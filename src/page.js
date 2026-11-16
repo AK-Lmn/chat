@@ -375,6 +375,7 @@ html[data-theme=earth].home:not(.ex-about) .tpill,html[data-theme=earth].home:no
 /* Earth reads like terafab.ai: no colour anywhere, one white button, the rest grey glass over the photo. The bar's pink sponsor button is the one exception (it has no part=tone). */
 html[data-theme=earth] flisk-bar::part(tone),html[data-theme=earth] .brand .logo,html[data-theme=earth] .newchat{filter:grayscale(1)}
 html[data-theme=earth].home .side{background:rgba(0,0,0,.4);backdrop-filter:blur(14px)}
+@media (max-width:860px){html[data-theme=earth].home .side{background:#0b0b0c;backdrop-filter:none}}
 /* Earth type: terafab-thin. Everything is Inter 300, big headings 200, nothing above 400, so no bold anywhere. */
 html[data-theme=earth] body,html[data-theme=earth] body *{font-weight:300}
 html[data-theme=earth] b,html[data-theme=earth] strong,html[data-theme=earth] th,html[data-theme=earth] h4,html[data-theme=earth] h5,html[data-theme=earth] .newchat,html[data-theme=earth] .excta button,html[data-theme=earth] .send,html[data-theme=earth] .btn{font-weight:400}

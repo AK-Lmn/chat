@@ -45,3 +45,7 @@ test('every page carries the keyboard fit and hides the top bar while typing on 
   expect(page).toContain(`<script>${KEYBOARD_FIT}`);
   expect(page).toContain('html.kbopen flisk-bar,html.kbopen .top{display:none!important}');
 });
+
+test('on a phone the sidebar drawer is opaque on the Earth home (the page text must not show through it)', () => {
+  expect(page).toContain('@media (max-width:860px){html[data-theme=earth].home .side{background:#0b0b0c;backdrop-filter:none}}');
+});
