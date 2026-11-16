@@ -207,7 +207,7 @@ export const pickTheme = (request) => {
   return setLook(DEFAULT_THEME);
 };
 
-// Where the browser computer's files are served from (fleet's /browserpod/). Empty string in BROWSER_POD_URL turns it off.
+// Where the browser computer's files are served from (fleet's /browserpod/, a pinned release of github.com/flisk-sh/linux2wasm). Empty string in BROWSER_POD_URL turns it off.
 export const podBase = (env) => (env.BROWSER_POD_URL === '' ? '' : (env.BROWSER_POD_URL || `${(env.FLEET_URL || 'https://fleet.flisk.si').replace(/\/$/, '')}/browserpod/`).replace(/\/?$/, '/'));
 // The chat page may load the browser computer (a script, a WebAssembly file and a Linux image) from that one folder, and
 // open the task's WebSocket back to chat itself. 'wasm-unsafe-eval' allows WebAssembly only, never eval of text.
