@@ -1,4 +1,4 @@
-// The computer in the visitor's own browser tab (fleet's web/browserpod): a small Linux on WebAssembly, no key, no cost.
+// The computer in the visitor's own browser tab (github.com/flisk-sh/linux2wasm, served by fleet at /browserpod/): a small Linux on WebAssembly, no key, no cost.
 // The task loop runs here on the Worker as always; each computer call is sent down the task's WebSocket to the page,
 // which runs it in its pod and sends the result back. Nothing is stored, and a call to the tab is not a subrequest.
 import { MAX_TASK, cleanFiles, runTask } from './loop.js';

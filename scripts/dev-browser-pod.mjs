@@ -1,7 +1,7 @@
 // Try the browser computer locally, in a real browser, with no Cloudflare and no keys:
 //   bun scripts/dev-browser-pod.mjs ../fleet/web        then open http://localhost:8853
 // It serves chat itself (src/index.js) with a scripted stand-in for the AI model and an empty fleet (no cloud computer),
-// and serves fleet's web/ folder (the pod files, after `sh web/browserpod/vendor/get.sh`) on a second port with CORS.
+// and serves fleet's web/ folder (the pod files, after `sh scripts/fetch-browserpod.sh` in fleet; the pod itself is github.com/flisk-sh/linux2wasm) on a second port with CORS.
 // What it proves: the page, the WebSocket relay, the Linux in the tab and publish. What it does not: the real model and
 // Cloudflare's own WebSocket.
 import { readFileSync } from 'node:fs';
