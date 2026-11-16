@@ -30,9 +30,9 @@ const BUILD_ASK = /\b(build|make|create|generate|develop)\b[\s\S]{0,60}\b(app|ap
 const BUILD_IT = /^\W*(ok(ay)?\W+|yes\W+|please\W+)*(build|make|do) it\W*$/i;
 export function talkReply(raw, heard = '', history = []) {
   let t = String(raw || '').trim(), build = '';
-  const j = t.match(/\{[\s\S]*\}/);
-  if (j && (t.startsWith('{') || t.startsWith('```'))) {
-    try { const o = JSON.parse(j[0]); build = String(o.build || o.task || '').trim().slice(0, 2000); t = String(o.say || o.answer || o.text || o.reply || '').trim(); } catch {}
+  const a = t.indexOf('{'), z = t.lastIndexOf('}');
+  if (a >= 0 && z > a && (t.startsWith('{') || t.startsWith('```'))) {
+    try { const o = JSON.parse(t.slice(a, z + 1)); build = String(o.build || o.task || '').trim().slice(0, 2000); t = String(o.say || o.answer || o.text || o.reply || '').trim(); } catch {}
   }
   if (!build && heard) {
     if (BUILD_IT.test(heard)) build = [...history].reverse().find((m) => m.role === 'user' && !BUILD_IT.test(m.content) && BUILD_ASK.test(m.content))?.content || '';
