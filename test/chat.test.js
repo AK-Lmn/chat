@@ -1139,3 +1139,8 @@ test('the talk circle skips the 3D Earth on a phone', async () => {
   const page = appPageUi({ login: 'ann', connected: [] });
   expect(page).toContain('pointer: coarse');
 });
+
+test('the Earth home screen stays a still photo on a phone', () => {
+  const page = appPageUi({ login: 'ann', connected: [] });
+  expect(page).toMatch(/const phone = matchMedia/);
+});
