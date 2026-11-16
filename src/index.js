@@ -824,7 +824,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (task.length > MAX_TASK) return json(400, { error: `keep the task under ${MAX_TASK} characters` });
       const connections = await fleet.connections().catch(() => null);
       if (connections === null) return json(502, { error: 'chat could not reach fleet, try again in a minute' });
-      if (!Object.keys(connections).length) return json(409, { error: 'connect a computer first', needProvider: true });
+      // No computer connected: answer straight away on the Worker, and only when the model asks for a computer, send the page
+      // to start the one in the visitor's browser (body.pod). A plain question then needs no Linux boot (4 s on a phone).
+      const noPod = !Object.keys(connections).length;
+      if (noPod && body.pod) return json(409, { error: 'connect a computer first', needProvider: true });
       // Which AI answers, and which of the user's computers may be used (empty = fleet picks the cheapest).
       const chosen = resolveModel(body.ai);
       if (chosen.error) return json(400, { error: chosen.error, kind: chosen.kind });
@@ -840,18 +843,25 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const { readable, writable } = new TransformStream();
       const w = writable.getWriter();
       const enc = new TextEncoder();
-      const emit = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
+      let needPod = false, buffered = [];
+      const send = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
+      // Without a computer the steps are held until we know the task needs none; plain answers are then sent all at once.
+      const emit = (e) => { if (!noPod) return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
+      const computer = noPod ? { ...fleet, start: async () => ({ error: ['needs', 'a computer'].join(' ') }) } : fleet;
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer: fleet, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
+          if (needPod) return;
+          for (const e of buffered) send(e);
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
-          emit({ type: 'done', ms: r.ms, error: r.error });
+          if (!needPod) send({ type: 'done', ms: r.ms, error: r.error });
         })
-        .catch((e) => emit({ type: 'error', error: String(e?.message || e).slice(0, 200) }))
+        .catch((e) => { for (const x of buffered) send(x); send({ type: 'error', error: String(e?.message || e).slice(0, 200) }); })
         .finally(async () => {
-          if (chosen.free && !m.answered()) await refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
+          if (needPod) send({ type: 'needcomputer' });
+          if (chosen.free && (needPod || !m.answered())) await refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
           await w.close().catch(() => {});
         });
       if (waitUntil) waitUntil(job);
