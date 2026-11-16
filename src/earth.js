@@ -256,6 +256,9 @@ function orbClient(SRC, G, HERE) {
   const want = () => !box.hidden && !document.hidden;
   async function start() {
     started = true;
+    // On a phone the 4K Earth stalls the page (a long task every frame), so listening lags and the pause is missed.
+    // The plain gradient circle is used there: the same talk, no 3D.
+    if (matchMedia('(pointer: coarse)').matches || Math.min(screen.width, innerWidth) <= 860) return;
     let T;
     try {
       T = await import(`${SRC}three.module.min.js`);
