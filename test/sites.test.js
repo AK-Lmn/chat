@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_LAYOUT_BYTES, parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { MAX_LAYOUT_BYTES, parseAction, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { BROWSER_NOTE } from '../src/browserpod.js';
 import { ACCENTS, cleanSite, LAYOUTS, photoPrompt, renderSite } from '../src/sites.js';
 import { PHOTOS_PER_DAY, PHOTOS_PER_LOGIN, sitePhoto } from '../src/photo.js';

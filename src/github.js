@@ -2,15 +2,14 @@
 // the token is sealed with KEY_SECRET in D1, and each task's computer gets it as git's credential and gh's login, so
 // "fork this repo, fix the issue, open a PR" runs as the visitor. The token is never shown to the model or the page:
 // every output is scrubbed before either sees it.
-import { open, seal } from './keys.js';
+import { open, upsertSealed } from './keys.js';
 
 export const GITHUB_SCOPE = 'public_repo';
 const GH_VERSION = '2.63.2';
 
 export async function saveGithubToken(env, login, token, scope = '') {
   if (!env.KEY_SECRET || !env.DB || !token) return;
-  await env.DB.prepare('INSERT INTO github_tokens (login, token_enc, scope, updated) VALUES (?, ?, ?, ?) ON CONFLICT(login) DO UPDATE SET token_enc = excluded.token_enc, scope = excluded.scope, updated = excluded.updated')
-    .bind(login, await seal(env.KEY_SECRET, token), String(scope).slice(0, 200), new Date().toISOString()).run();
+  await upsertSealed(env, 'github_tokens', login, 'token_enc', token, { scope: String(scope).slice(0, 200) });
 }
 
 // { token, scope } or null when this login never allowed chat to use GitHub (signed in before it asked, or anonymous).

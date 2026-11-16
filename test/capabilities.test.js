@@ -2,7 +2,7 @@
 // This fails when a service learns a new way to be asked for and chat's prompt, widget or page does not follow.
 import { describe, expect, test } from 'bun:test';
 import { CAPABILITIES } from '../src/capabilities.generated.js';
-import { SYSTEM } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { WIDGETS } from '../src/widgets.js';
 import { appPage } from '../src/page.js';
 

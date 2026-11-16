@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { WIDGETS, parseWidget, widgetPrompt } from '../src/widgets.js';
-import { parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { parseAction, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { appPage } from '../src/page.js';
 
 const hours = Array.from({ length: 48 }, (_, i) => `2026-11-13T${String(i % 24).padStart(2, '0')}:00`);

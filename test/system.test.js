@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { cleanSystem, FIRST_PORT, indexHtml, makeSystem, MAX_SERVICES, overviewJs, partPassed, scaffoldCommand, serviceJs, smokeCommand, START_COMMAND, viteConfig, waitCommand } from '../src/system.js';
-import { parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { parseAction, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { appPage } from '../src/page.js';
 
 const spec2 = () => cleanSystem({ title: 'Sales CRM', services: [{ name: 'contacts', does: 'people', fields: ['Name', 'Email'] }, { name: 'deals', fields: ['Title', 'Value'] }] });
@@ -216,7 +217,7 @@ describe('a bigger app is one Flisk project in ~/app', () => {
 });
 
 test('research questions get the structured report format', async () => {
-  const { SYSTEM } = await import('../src/loop.js');
+  const { SYSTEM } = await import('../src/prompt.js');
   expect(SYSTEM).toContain('Research or analysis questions');
   expect(SYSTEM).toContain('Positioning');
   expect(SYSTEM).toContain('web widget');

@@ -1,12 +1,13 @@
 import { OG_PNG } from './og.js';
-import { cleanMemo, memoMessages, memoNote } from './memo.js';
-import { LANG_NAMES, PRODUCT_FACTS, replyRule, resolveLang } from './lang.js';
+import { cleanMemo, memoMessages } from './memo.js';
+import { resolveLang } from './lang.js';
 import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
 import { THREE_SRC, TEXTURES } from './earth.js';
 import { fleetClient } from './fleet.js';
-import { BYO_STEPS, GITHUB_STEPS, cleanFiles, imageIntent, MAX_STEPS, MAX_TASK, modelFrom, modelLabel, resolveModel, runTask, WORKERS_AI_PER_DAY } from './loop.js';
+import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, runTask } from './loop.js';
+import { imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
 import { lookup } from './lookup.js';
 import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
@@ -21,29 +22,16 @@ import { sentenceSplitter, splitReply } from './talk-stream.js';
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
 import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alexa.js';
 import { withSecurityHeaders } from './security-headers.js';
+import { asksBuild, spokenReply, talkMessages, talkReply, transcribe } from './voice.js';
+export * from './voice.js';
+import { answeredModel, freeModelOpts, limitOf, overDailyLimit, overQuota, refundQuota, taskLimitBody } from './limits.js';
+export * from './limits.js';
 
-export const TASKS_PER_DAY = 20;
-// Visitors without GitHub are counted by network address, not by cookie (a cookie can be thrown away), so their share is smaller.
-export const ANON_TASKS_PER_DAY = 10;
-export const ANON_VOICE_PER_DAY = 20;
-export const ANON_TALK_PER_DAY = 30;
-export const ANON_SPEAK_PER_DAY = 600; // one ask per sentence: 150 ran out after a few talks and the page fell back to the robotic browser voice
-export const ANON_PER_PERSON_BACKUP = 10;
 export const MAX_SITE_BYTES = 200 * 1024;
 export const SITES_PER_LOGIN = 5;
 export const VIDEOS_PER_LOGIN = 5;
 export const IMAGES_PER_LOGIN = 50;
 export const IMAGE_DAYS = 30;
-export const VOICE_PER_DAY = 60;
-// The mic sends one request per spoken phrase (it writes while you talk), so phrases have their own, larger allowance.
-export const VOICE_PARTS_PER_DAY = 400;
-export const ANON_VOICE_PARTS_PER_DAY = 120;
-export const MAX_AUDIO_B64 = 1_400_000; // about 1 MB of audio, a minute of speech
-export const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
-export const TALK_PER_DAY = 100;
-export const ANON_MEMO_PER_DAY = 40;
-export const MEMO_PER_DAY = 120;
-export const SPEAK_PER_DAY = 2000;
 // MeloTTS is robotic next to Ava, so Ava gets this long to start before the backup is asked (it was 0.8 s, and in a slow
 // spell of Microsoft's that meant Melo spoke every answer). Melo still covers a longer stall.
 const alexaCache = (env) => env.VOICE_CACHE || (typeof caches !== 'undefined' && caches.default) || null;
@@ -56,91 +44,6 @@ async function alexaVoiceBytes(env, text) {
 }
 export const AVA_RETRY_MS = 1500; // Ava is the only voice: when no audio has come after this long, ask Ava again on a new connection (never a robot voice)
 export const AVA_HEAD_START_MS = 3000; // answers read aloud by the Ava voice, per login
-export const TALK_SYSTEM = `You are Flisk Oracle, a voice you talk to on chat.flisk.si. Your reply is read aloud, so:
-- Answer in one or two short sentences of plain spoken words. No Markdown, no lists, no tables, no links, no code, no emoji.
-- Be warm, direct and sure of yourself, like a wise oracle who also knows practical things. Give the answer first.
-- If the person asks you to build or make something (a website, an app, a video, a system) or says "build it", reply with ONLY this JSON and nothing else: {"say":"one short sentence saying you are building it now","build":"the full task in plain words, with every detail they gave, using the earlier turns if they said build it"}. A real computer then builds it. Never say you cannot build.
-- Never invent phone numbers, emails, prices or addresses. If you do not know, say so in a few words.
-- You can tell the live weather anywhere: chat looks it up from a live weather service and gives you the numbers. Weather numbers you said earlier in this talk were real and live: never take them back, never say they were made up, and never say you cannot check the weather.
-- Reply in the language the person speaks.`;
-
-// One spoken turn for voice talk: the model answers directly, no computer, short and plain so it sounds right aloud.
-export function spokenReply(text) {
-  let t = String(text || '').trim();
-  if (t.startsWith('{')) {
-    try {
-      const o = JSON.parse(t);
-      t = String(o.say || o.answer || o.text || o.reply || '').trim() || t;
-    } catch {}
-  }
-  return t.replace(/```[\s\S]*?```/g, ' ').replace(/[*_#>|`~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 1200);
-}
-// Voice talk builds when asked: the model answers {say, build}; if it only talked, a plain "build / make / create a ..."
-// request (or "build it" after one) still starts the build.
-const BUILD_ASK = /\b(build|make|create|generate|develop)\b[\s\S]{0,60}\b(app|application|website|web ?site|site|page|video|dashboard|bot|game|tool|api|shop|store|system|calculator|landing)\b/i;
-const BUILD_IT = /^\W*(ok(ay)?\W+|yes\W+|please\W+)*(build|make|do) it\W*$/i;
-export function talkReply(raw, heard = '', history = []) {
-  let t = String(raw || '').trim(), build = '';
-  const j = t.match(/\{[\s\S]*\}/);
-  if (j && (t.startsWith('{') || t.startsWith('```'))) {
-    try { const o = JSON.parse(j[0]); build = String(o.build || o.task || '').trim().slice(0, 2000); t = String(o.say || o.answer || o.text || o.reply || '').trim(); } catch {}
-  }
-  if (!build && heard) {
-    if (BUILD_IT.test(heard)) build = [...history].reverse().find((m) => m.role === 'user' && !BUILD_IT.test(m.content) && BUILD_ASK.test(m.content))?.content || '';
-    else if (BUILD_ASK.test(heard)) build = heard;
-    build = build.slice(0, 2000);
-  }
-  // When building, only the first sentence is spoken: the task itself goes to the computer, not to the speaker.
-  const said = spokenReply(t);
-  const text = (build ? said.split(/(?<=[.!?…])\s+/)[0] : said) || (build ? 'On it. I am building that now.' : '');
-  return { text, build };
-}
-// Whisper's language code -> the name the model understands, so the reply comes back in the language spoken.
-export { LANG_NAMES };
-export function talkMessages(history, lang = '', memo = '') {
-  const turns = (Array.isArray(history) ? history : [])
-    .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
-    .slice(-12)
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }));
-  const rule = replyRule(lang);
-  const sys = `${TALK_SYSTEM}\n${PRODUCT_FACTS}${rule ? `\n${rule}` : ''}${memoNote(memo)}`;
-  return [{ role: 'system', content: sys }, ...turns];
-}
-
-// Speech to text for the mic button: the browser records, Workers AI Whisper writes it down. Works in every browser,
-// unlike the browser's own speech recognition (missing in Firefox, broken in Arc, Brave and in-app browsers).
-// Whisper on Workers AI usually answers in ~1 s but sometimes waits 3-6 s in a queue (measured 2026-11-14). A second ask
-// started at hedgeMs, or at once when the first one fails, is usually fast, so the first answer wins.
-export const WHISPER_HEDGE_MS = 1100;
-export function hedgedRun(run, hedgeMs = WHISPER_HEDGE_MS) {
-  return new Promise((ok, fail) => {
-    let started = 0, failed = 0, done = false, timer = 0;
-    const start = () => {
-      if (done || started >= 2) return;
-      started++;
-      Promise.resolve().then(run).then(
-        (r) => { if (done) return; done = true; clearTimeout(timer); ok(r); },
-        (e) => { if (done) return; failed++; if (started < 2) { clearTimeout(timer); start(); } else if (failed === 2) { done = true; fail(e); } },
-      );
-    };
-    start();
-    timer = setTimeout(start, hedgeMs);
-  });
-}
-export async function transcribe(env, body, { hedgeMs = WHISPER_HEDGE_MS } = {}) {
-  const audio = typeof body?.audio === 'string' ? body.audio : '';
-  if (!audio) return { status: 400, error: 'no audio was recorded' };
-  if (audio.length > MAX_AUDIO_B64) return { status: 413, error: 'keep it under a minute' };
-  if (!/^[A-Za-z0-9+/=]+$/.test(audio)) return { status: 400, error: 'the recording was not readable' };
-  if (!env.AI) return { status: 503, error: 'voice is not set up on this server' };
-  try {
-    const r = await hedgedRun(() => env.AI.run(WHISPER_MODEL, { audio }), hedgeMs);
-    const lang = String(r?.transcription_info?.language || '').toLowerCase().replace(/[^a-z-]/g, '').slice(0, 8);
-    return { status: 200, text: String(r?.text || '').trim(), lang };
-  } catch (e) {
-    return { status: 502, error: 'could not hear that, try again: ' + String(e?.message || e).slice(0, 120) };
-  }
-}
 const SITE_DAYS = 7;
 
 // The model picker's list comes from inference (/v1/catalog), so a model added there shows up here with no chat change.
@@ -253,49 +156,6 @@ const readJson = async (request) => {
     return null;
   }
 };
-
-// A counter per login per day in Cloudflare's Cache API: no storage writes, and not exact across data centres.
-export async function overDailyLimit(login, { cache = globalThis.caches?.default, now = Date.now(), limit = TASKS_PER_DAY, scope = 'chat-limit' } = {}) {
-  if (!cache) return false;
-  const url = `https://${scope}.invalid/${encodeURIComponent(login)}/${new Date(now).toISOString().slice(0, 10)}`;
-  try {
-    const hit = await cache.match(url);
-    const count = hit ? Number(await hit.text()) || 0 : 0;
-    if (count >= limit) return true;
-    await cache.put(url, new Response(String(count + 1), { headers: { 'cache-control': 'max-age=90000' } }));
-  } catch {}
-  return false;
-}
-
-// A free task the free AI never answered (every free model busy) gives its count back, so "busy" does not use up the day.
-export async function refundDailyLimit(login, { cache = globalThis.caches?.default, now = Date.now(), scope = 'chat-limit' } = {}) {
-  if (!cache) return;
-  const url = `https://${scope}.invalid/${encodeURIComponent(login)}/${new Date(now).toISOString().slice(0, 10)}`;
-  try {
-    const hit = await cache.match(url);
-    const count = hit ? Number(await hit.text()) || 0 : 0;
-    if (count > 0) await cache.put(url, new Response(String(count - 1), { headers: { 'cache-control': 'max-age=90000' } }));
-  } catch {}
-}
-
-// Wraps a model so the task can tell, at its end, whether the model answered even once.
-export function answeredModel(model) {
-  let answered = false;
-  const ask = async (messages) => {
-    const r = await model(messages);
-    if (!r?.error) answered = true;
-    return r;
-  };
-  return { ask, answered: () => answered };
-}
-
-// The free model's last fallback (Workers AI on our account) has one daily cap for everyone, so chat keeps to its share.
-// Each person may use only a share of it, so one busy visitor cannot use up the day for everybody.
-export const WORKERS_AI_PER_PERSON = 40;
-export const freeModelOpts = (env, login = '', anon = false) => ({
-  overLimit: async () => (login && (await overDailyLimit(login, { cache: env.LIMIT_CACHE, limit: anon ? ANON_PER_PERSON_BACKUP : WORKERS_AI_PER_PERSON, scope: anon ? 'workers-ai-anon' : 'workers-ai-person' }))) || overDailyLimit('everyone', { cache: env.LIMIT_CACHE, limit: WORKERS_AI_PER_DAY, scope: 'workers-ai-fallback' }),
-  log: (tried) => console.log('free model fallbacks all failed', JSON.stringify(tried).slice(0, 600)),
-});
 
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -644,6 +504,14 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   // Signing in with GitHub is optional: a visitor with no session gets a private anonymous one on the home page.
   const anon = !!session && isAnon(session.login);
   const who = async (login) => (isAnon(login) ? `ip-${[...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(request.headers.get('cf-connecting-ip') || 'unknown')))].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('')}` : login);
+  // One gate for a task, whichever way it arrives (POST /api/run or the browser-computer WebSocket): the daily cap for the shared
+  // free model, the model that answers, and the refund of a free task the free AI never answered (or that needs a computer).
+  const admitTask = async (login, chosen) => {
+    if (chosen.free && (await overQuota(env, 'chat', { anon, id: await who(login) }))) return { refuse: taskLimitBody(anon) };
+    const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
+    const refund = async (force = false) => chosen.free && (force || !m.answered()) && refundQuota(env, 'chat', { anon, id: await who(login) });
+    return { m, refund };
+  };
   if (request.method === 'GET' && path === '/') {
     const [models, names] = await Promise.all([loadCatalog(env), loadFleetNames(env, fetchImpl)]);
     const { theme, cookie } = pickTheme(request);
@@ -702,7 +570,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const text = String(url.searchParams.get('t') || '').trim();
     if (!text) return json(400, { error: 'nothing to say' });
     if (text.length > MAX_SPEAK) return json(413, { error: `keep it under ${MAX_SPEAK} characters` });
-    if (await overDailyLimit(await who(session.login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_SPEAK_PER_DAY : SPEAK_PER_DAY, scope: anon ? 'speak-anon' : 'speak-limit' })) return json(429, { error: 'the voice has read enough for today' });
+    if (await overQuota(env, 'speak', { anon, id: await who(session.login) })) return json(429, { error: 'the voice has read enough for today' });
     const info = {}, t0 = Date.now();
     try {
       const lang = String(url.searchParams.get('l') || '').slice(0, 8);
@@ -729,14 +597,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const gate = async (body) => {
       const chosen = resolveModel(body.ai);
       if (chosen.error) return { refuse: { status: 400, error: chosen.error, kind: chosen.kind } };
-      if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY, scope: anon ? 'chat-anon' : 'chat-limit' }))) {
-        const now = new Date();
-        const resetsIn = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime();
-        return { refuse: { status: 429, error: `That's your ${anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY} free tasks for today`, limit: anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY, resetsIn, anon } };
-      }
-      const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const refund = async () => chosen.free && !m.answered() && refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
-      return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
+      const admitted = await admitTask(login, chosen);
+      if (admitted.refuse) return { refuse: { status: 429, ...admitted.refuse } };
+      const { m, refund } = admitted;
+      return { model: m.ask, settle: () => refund(), maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
     const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
@@ -769,9 +633,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     if (path === '/api/transcribe') {
       const body = await readJson(request);
       const part = body?.part === true;
-      const limit = part ? (anon ? ANON_VOICE_PARTS_PER_DAY : VOICE_PARTS_PER_DAY) : anon ? ANON_VOICE_PER_DAY : VOICE_PER_DAY;
-      const scope = (part ? 'voice-part' : 'voice') + (anon ? '-anon' : '-limit');
-      if (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit, scope })) return json(429, { error: `You've used today's voice (${limit} ${part ? 'spoken phrases' : 'voice messages'}).${anon ? ' Sign in with GitHub for more, or come back tomorrow.' : ' Type instead, or come back tomorrow.'}` });
+      const limit = limitOf(part ? 'voice-part' : 'voice', anon);
+      if (await overQuota(env, part ? 'voice-part' : 'voice', { anon, id: await who(login) })) return json(429, { error: `You've used today's voice (${limit} ${part ? 'spoken phrases' : 'voice messages'}).${anon ? ' Sign in with GitHub for more, or come back tomorrow.' : ' Type instead, or come back tomorrow.'}` });
       const r = await transcribe(env, body);
       return r.error ? json(r.status, { error: r.error }) : json(200, { text: r.text, lang: r.lang });
     }
@@ -791,7 +654,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       // One round trip per spoken turn: the audio comes with the request, is written down here, then answered.
       let heard = '', lang = String(body?.lang || '').slice(0, 8);
       if (body?.audio) {
-        if (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_VOICE_PER_DAY : VOICE_PER_DAY, scope: anon ? 'voice-anon' : 'voice-limit' })) return json(429, { error: `You've used today's ${anon ? ANON_VOICE_PER_DAY : VOICE_PER_DAY} voice messages.${anon ? ' Sign in with GitHub for more, or come back tomorrow.' : ' Come back tomorrow.'}` });
+        if (await overQuota(env, 'voice', { anon, id: await who(login) })) return json(429, { error: `You've used today's ${limitOf('voice', anon)} voice messages.${anon ? ' Sign in with GitHub for more, or come back tomorrow.' : ' Come back tomorrow.'}` });
         const t0 = Date.now();
         const t = await transcribe(env, body);
         timed('stt', t0);
@@ -811,7 +674,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (messages.length < 2 || messages[messages.length - 1].role !== 'user') return json(400, { error: 'say something first' });
       const chosen = resolveModel(body.ai);
       if (chosen.error) return json(400, { error: chosen.error, kind: chosen.kind });
-      if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_TALK_PER_DAY : TALK_PER_DAY, scope: anon ? 'talk-anon' : 'talk-limit' }))) return json(429, { error: `That's your ${anon ? ANON_TALK_PER_DAY : TALK_PER_DAY} free voice replies for today.${anon ? ' Sign in with GitHub for more.' : ''} Keep going free with your own OpenRouter account in the model menu, or come back tomorrow.` });
+      if (chosen.free && (await overQuota(env, 'talk', { anon, id: await who(login) }))) return json(429, { error: `That's your ${limitOf('talk', anon)} free voice replies for today.${anon ? ' Sign in with GitHub for more.' : ''} Keep going free with your own OpenRouter account in the model menu, or come back tomorrow.` });
       const t1 = Date.now();
       // Voice talk asks for a stream: each sentence goes out as soon as it is written, so the page starts reading the first
       // one while the rest is still coming. {heard,lang}, then {say} per sentence, then {done,text,build} (or {error}).
@@ -823,7 +686,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         emit({ heard, lang });
         const last = heard || String(messages[messages.length - 1]?.content || '');
         // An answer to "build me ..." is read after it is whole: only its first sentence is spoken, and a model may answer in JSON.
-        const split = sentenceSplitter({ hold: BUILD_IT.test(last) || BUILD_ASK.test(last) });
+        const split = sentenceSplitter({ hold: asksBuild(last) });
         let deltas = 0;
         const job = (async () => {
           const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(messages, { onDelta: (d) => { deltas++; for (const s of split.push(d)) { const t = spokenReply(s); if (t) emit({ say: t }); } } });
@@ -856,7 +719,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (!msgs.length) return json(400, { error: 'nothing to remember' });
       const chosen = resolveModel(body.ai);
       if (chosen.error) return json(400, { error: chosen.error, kind: chosen.kind });
-      if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_MEMO_PER_DAY : MEMO_PER_DAY, scope: anon ? 'memo-anon' : 'memo-limit' }))) return json(429, { error: 'memo limit for today' });
+      if (chosen.free && (await overQuota(env, 'memo', { anon, id: await who(login) }))) return json(429, { error: 'memo limit for today' });
       const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(memoMessages(body.memo, msgs));
       if (r.error) return json(502, { error: r.error });
       const memo = cleanMemo(r.text);
@@ -881,11 +744,9 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const missing = order.find((p) => !connections[p]);
       if (missing) return json(400, { error: `${missing} is not connected yet. Connect it, or tick another computer` });
       // Only the shared free model counts against the daily cap; the visitor's own key costs us nothing.
-      if (chosen.free && (await overDailyLimit(await who(login), { cache: env.LIMIT_CACHE, limit: anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY, scope: anon ? 'chat-anon' : 'chat-limit' }))) {
-        const now = new Date();
-        const resetsIn = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime();
-        return json(429, { error: `That's your ${anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY} free tasks for today`, limit: anon ? ANON_TASKS_PER_DAY : TASKS_PER_DAY, resetsIn, anon });
-      }
+      const admitted = await admitTask(login, chosen);
+      if (admitted.refuse) return json(429, admitted.refuse);
+      const { m, refund } = admitted;
       const { readable, writable } = new TransformStream();
       const w = writable.getWriter();
       const enc = new TextEncoder();
@@ -895,7 +756,6 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => { if (!noPod) return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
       const computer = noPod ? { ...fleet, start: async () => ({ error: ['needs', 'a computer'].join(' ') }) } : fleet;
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
-      const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
       const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           if (needPod) return;
@@ -907,7 +767,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         .catch((e) => { for (const x of buffered) send(x); send({ type: 'error', error: String(e?.message || e).slice(0, 200) }); })
         .finally(async () => {
           if (needPod) send({ type: 'needcomputer' });
-          if (chosen.free && (needPod || !m.answered())) await refundDailyLimit(await who(login), { cache: env.LIMIT_CACHE, scope: anon ? 'chat-anon' : 'chat-limit' });
+          await refund(needPod);
           await w.close().catch(() => {});
         });
       if (waitUntil) waitUntil(job);

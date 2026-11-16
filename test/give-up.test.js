@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { playbooksFor, runTask } from '../src/loop.js';
+import { runTask } from '../src/loop.js';
+import { playbooksFor } from '../src/prompt.js';
 
 // chat.flisk.si 2026-11-15: "get me some news today" curled newsapi.org with an invented key, then told the
 // customer "Please provide a valid API key". It must try another way instead.
@@ -62,7 +63,7 @@ test('"could not be retrieved" is a give-up', async () => {
 });
 
 test('a GitHub org named in the task is read before anything is built', async () => {
-  const { githubSourceIn, sourceNote } = await import('../src/loop.js');
+  const { githubSourceIn, sourceNote } = await import('../src/prompt.js');
   expect(githubSourceIn('we build portfoliw with 10 tabs, see flisk-sh org in github buld portfolio for flisk-sh org')).toBe('flisk-sh');
   expect(githubSourceIn('make a site from https://github.com/acme-co')).toBe('acme-co');
   expect(githubSourceIn('build me a todo app')).toBe('');
