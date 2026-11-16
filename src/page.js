@@ -124,7 +124,7 @@ a{color:var(--green)}button{font:inherit;color:inherit}
 .st.live .si{background:#FAEEDA;color:#854F0B;animation:pulse 1.2s ease-in-out infinite}
 .st.ok .si{background:var(--tint);color:var(--green)}.st.bad .si{background:#FEF3F2;color:var(--red)}
 .st .t{overflow-wrap:anywhere}.st .t code{font:13px var(--mono);background:rgba(27,27,24,.05);border-radius:var(--radius);padding:1px 5px}
-.wcard{margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--panel)}.wh{font-size:13px;color:var(--dim);margin-bottom:8px}.wrow{display:flex;gap:8px}.wchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.wchips .btn{font:12px var(--mono);padding:4px 8px}.wrow input{flex:1;font:13px var(--mono);padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:transparent;color:inherit}.wcard pre{margin:8px 0 0;font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
+.wcard{margin-top:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);overflow:hidden}.wtop{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);font:11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}.wtop b{color:var(--ink);font-weight:600}.wdot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px var(--tint)}.wtop span{margin-left:auto;text-transform:none;letter-spacing:0}.wbody{padding:14px}.wrow{display:flex;gap:8px}.wrow input{flex:1;min-width:0;font:14px var(--mono);padding:10px 12px;border:1px solid var(--line2);border-radius:var(--radius);background:var(--bg);color:var(--ink)}.wrow input:focus{outline:2px solid var(--green);outline-offset:-1px}.wrow .wgo{background:var(--ink);color:var(--bg);border:1px solid var(--ink);font:600 13px var(--sans);padding:0 18px;border-radius:var(--radius);cursor:pointer}.wrow .wgo:hover{background:var(--green-d);border-color:var(--green-d)}.wchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.wchips button{font:12px var(--mono);padding:4px 10px;border:1px solid var(--line2);border-radius:var(--radius);background:transparent;color:var(--dim);cursor:pointer}.wchips button:hover{color:var(--ink);border-color:var(--ink)}.wrres{margin-top:14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg)}.wrmeta{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);font:11px var(--mono);color:var(--dim)}.wrst{padding:2px 8px;border-radius:var(--radius);background:var(--tint);color:var(--green-d);font-weight:600}.wrst.bad{background:#FDECEA;color:var(--red)}.wrmeta button{margin-left:auto;font:11px var(--mono);border:0;background:transparent;color:var(--dim);cursor:pointer;text-decoration:underline}.wrout{margin:0;padding:12px;font:13px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto;color:var(--ink)}.wrout .k{color:var(--green-d)}.wrout .s{color:#9A5B13}.wrout .n{color:#1D4ED8}.wrout .p{color:var(--soft)}
 .st pre{margin:6px 0 0;font:12px/1.5 var(--mono);color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word}
 @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,163,59,.45)}70%{box-shadow:0 0 0 6px rgba(232,163,59,0)}}
@@ -1299,21 +1299,39 @@ async function runWorker(code){
   const entry=URL.createObjectURL(new Blob(['import '+JSON.stringify(base+'src/worker-entry.js')+';'],{type:'text/javascript'}));
   return m.startWorker({code,entry});
 }
+function jsonView(v,ind){
+  const f=document.createDocumentFragment(),add=(c,t)=>{const e=document.createElement('span');e.className=c;e.textContent=t;f.appendChild(e);};
+  const pad=' '.repeat(ind*2),pad2=' '.repeat(ind*2+2);
+  if(v===null||typeof v!=='object'){add(typeof v==='string'?'s':'n',JSON.stringify(v));return f;}
+  const arr=Array.isArray(v),keys=Object.keys(v);
+  if(!keys.length){add('p',arr?'[]':'{}');return f;}
+  add('p',arr?'[':'{');
+  keys.forEach((k,i)=>{add('p','\\n'+pad2);if(!arr){add('k',JSON.stringify(k));add('p',': ');}f.appendChild(jsonView(v[k],ind+1));if(i<keys.length-1)add('p',',');});
+  add('p','\\n'+pad+(arr?']':'}'));return f;
+}
 function workerCard(ev){
   if(!window.__POD__)return null;
-  const c=node('div','wcard'),h=node('div','wh','A Worker running in this tab. Nothing was deployed: closing the tab ends it.');
-  const row=node('div','wrow'),inp=node('input');inp.value='GET /';inp.setAttribute('aria-label','Request: method and path');
-  const go=node('button','btn','Send');go.type='button';const o=node('pre','','');
-  let wp=null;
-  const send=async()=>{go.disabled=true;try{const parts=inp.value.trim().split(/\\s+/);const method=parts.length>1?parts[0].toUpperCase():'GET';const path=parts.length>1?parts[1]:parts[0];
+  const c=node('div','wcard'),top=node('div','wtop');
+  top.append(node('i','wdot'),node('b','','Live in this tab'),node('span','','no deploy · no key · free'));
+  const body=node('div','wbody'),row=node('div','wrow'),inp=node('input');inp.value='GET /';inp.setAttribute('aria-label','Request: method and path');inp.spellcheck=false;
+  const go=node('button','wgo','Send');go.type='button';
+  const paths=[];String(ev.code||'').replace(/["']([/][A-Za-z0-9_\\-/.:]*)["']/g,(m,x)=>{if(x.length>1&&!paths.includes(x)&&paths.length<6)paths.push(x);return m;});
+  const chips=node('div','wchips');paths.forEach((x)=>{const b=node('button','',x);b.type='button';b.onclick=()=>{inp.value='GET '+x;send();};chips.appendChild(b);});
+  const res=node('div','wrres');res.hidden=true;
+  let wp=null,last='';
+  const show=(ok,label,ms,txt,view)=>{res.hidden=false;res.textContent='';
+    const meta=node('div','wrmeta'),st=node('span','wrst'+(ok?'':' bad'),label),cp=node('button','','Copy');cp.type='button';
+    cp.onclick=()=>{try{navigator.clipboard.writeText(last);cp.textContent='Copied';setTimeout(()=>{cp.textContent='Copy';},1200);}catch(e){}};
+    meta.append(st,node('span','',ms+' ms'),cp);const out=node('pre','wrout');if(view)out.appendChild(view);else out.textContent=txt;res.append(meta,out);};
+  const send=async()=>{go.disabled=true;const t0=performance.now();try{const parts=inp.value.trim().split(/\\s+/);const method=parts.length>1?parts[0].toUpperCase():'GET';const path=parts.length>1?parts[1]:parts[0];
     if(!wp)wp=runWorker(ev.code);const w=await wp;
     const init={method};if(!['GET','HEAD'].includes(method)){const b=prompt('Body to send (text, usually JSON)','{}');init.body=b==null?'{}':b;init.headers={'content-type':'application/json'};}
-    const r=await w.fetch('https://worker.local'+(path.startsWith('/')?path:'/'+path),init);const t=await r.text();o.textContent=r.status+' '+r.statusText+'\\n'+t.slice(0,4000);}
-  catch(e){wp=null;o.textContent='Could not run it: '+String(e&&e.message||e);}go.disabled=false;};
-  const paths=[];String(ev.code||'').replace(/["']([/][A-Za-z0-9_\\-/.:]*)["']/g,(m,x)=>{if(x.length>1&&!paths.includes(x)&&paths.length<6)paths.push(x);return m;});
-  const chips=node('div','wchips');paths.forEach((x)=>{const b=node('button','btn',x);b.type='button';b.onclick=()=>{inp.value='GET '+x;send();};chips.appendChild(b);});
+    const r=await w.fetch('https://worker.local'+(path.startsWith('/')?path:'/'+path),init);const t=await r.text();const ms=Math.round(performance.now()-t0);
+    let view=null;try{const j=JSON.parse(t);last=JSON.stringify(j,null,2);view=jsonView(j,0);}catch(e){last=t;}
+    show(r.ok,r.status+(r.statusText?' '+r.statusText:''),ms,t.slice(0,4000),view);}
+  catch(e){wp=null;last='';show(false,'Error',Math.round(performance.now()-t0),'Could not run it: '+String(e&&e.message||e),null);}go.disabled=false;};
   go.onclick=send;inp.onkeydown=(e)=>{if(e.key==='Enter')send();};
-  row.append(inp,go);c.append(h,row);if(paths.length)c.append(chips);c.append(o);return c;
+  row.append(inp,go);body.append(row);if(paths.length)body.append(chips);body.append(res);c.append(top,body);return c;
 }
 // The computer in this tab (fleet's browser pod): a small Linux on WebAssembly. Loaded on the first task that needs it.
 const podOk=()=>!!window.__POD__&&typeof WebAssembly==='object'&&typeof WebSocket==='function';
