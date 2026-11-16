@@ -1,7 +1,7 @@
 // Daily allowances. One place decides how much each kind of request may use per day, for a signed-in login or an
 // anonymous visitor (counted by network address, not by cookie: a cookie can be thrown away, so their share is smaller).
 // Counters live in Cloudflare's Cache API: no storage writes, and not exact across data centres.
-import { WORKERS_AI_PER_DAY } from './loop.js';
+import { WORKERS_AI_PER_DAY } from './model.js';
 
 export const TASKS_PER_DAY = 20;
 export const ANON_TASKS_PER_DAY = 10;

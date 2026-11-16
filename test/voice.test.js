@@ -555,7 +555,7 @@ test('the page asks for a streamed reply and reads it sentence by sentence', () 
   expect(page).toContain('ndLines');
 });
 
-import { modelFrom as streamModel } from '../src/loop.js';
+import { modelFrom as streamModel } from '../src/model.js';
 
 test('a visitor-key model streams its reply: each piece reaches onDelta as it is written', async () => {
   const sse = ['Sure, ', 'I can ', 'help.'].map((t) => `data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\n`).join('') + `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;

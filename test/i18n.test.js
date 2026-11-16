@@ -61,7 +61,7 @@ test('errors stay English for an English visitor', () => {
 
 test('every error string the server sends has a Ukrainian form', () => {
   const t = loadT('uk');
-  const src = ['index.js', 'loop.js'].map((f) => require('node:fs').readFileSync(new URL('../src/' + f, import.meta.url), 'utf8')).join('\n');
+  const src = ['index.js', 'loop.js', 'model.js'].map((f) => require('node:fs').readFileSync(new URL('../src/' + f, import.meta.url), 'utf8')).join('\n');
   const missing = [];
   for (const m of src.matchAll(/error: '([^'$\\]{3,80})'/g)) if (t(m[1]) === m[1]) missing.push(m[1]);
   expect(missing).toEqual([]);

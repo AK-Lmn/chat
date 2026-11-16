@@ -3,7 +3,7 @@
 import { loadSettings } from './keys.js';
 import { startRun } from './run.js';
 import { gh, installToken, verifySignature } from './github-app.js';
-import { modelFrom, resolveModel } from './loop.js';
+import { modelFrom, resolveModel } from './model.js';
 
 export { verifySignature };
 export const WOLF_DIFF = 14_000; // the free model answers at most 1024 tokens, so it only reads this much

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, POLLINATIONS_TEXT_URL, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/loop.js';
+import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, POLLINATIONS_TEXT_URL, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/model.js';
 
 const WOLF = 'https://inf.test/v1/chat/completions';
 const msgs = [{ role: 'user', content: 'hi' }];

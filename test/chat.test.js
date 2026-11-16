@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
-import { modelLabel, parseAction, resolveModel, runTask, SYSTEM } from '../src/loop.js';
+import { parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { modelLabel, resolveModel } from '../src/model.js';
 import { EARTH_JS, shortCount, THREE_SRC, USERS, USERS_DATE } from '../src/earth.js';
 import { makeSession } from '../src/session.js';
 import { fakeD1 } from './d1.js';
@@ -519,7 +520,8 @@ test('a square is chosen only by a click or tap; hover just outlines it, and onl
   expect(page).toContain(".zchip:not(.ok)");
 });
 
-import { cleanFiles, explainModelError, modelFrom as modelFrom2, runTask as runTask2 } from '../src/loop.js';
+import { cleanFiles, runTask as runTask2 } from '../src/loop.js';
+import { explainModelError, modelFrom as modelFrom2 } from '../src/model.js';
 
 describe('model errors a person can act on', () => {
   test('OpenRouter "Provider returned error" shows the real reason and a kind', () => {
