@@ -1,0 +1,55 @@
+import { expect, test } from 'bun:test';
+import { detectLang, resolveLang, replyRule, PRODUCT_FACTS } from '../src/lang.js';
+import { talkMessages } from '../src/index.js';
+import { appPage } from '../src/page.js';
+
+test('Ukrainian text with none of the letters і ї є ґ is still Ukrainian', () => {
+  expect(detectLang('Все добре, дякую. А у тебе як справи?')).toBe('uk');
+  expect(detectLang('Розкажи, як в тебе справи.')).toBe('uk');
+  expect(detectLang('Все добрые, ты кто?')).toBe('ru');
+  expect(detectLang('Что ты умеешь?')).toBe('ru');
+  expect(detectLang('Привіт')).toBe('uk');
+  expect(detectLang('What is the weather?')).toBe('');
+});
+
+test('an ambiguous Cyrillic clip keeps the chat language, then the page language, never a fresh guess', () => {
+  // Whisper heard "ru" for a short Ukrainian clip with no marker words.
+  expect(resolveLang({ text: 'Все добре', heard: 'ru', sticky: 'uk', ui: 'en' })).toBe('uk');
+  expect(resolveLang({ text: 'Ну да', heard: 'ru', sticky: '', ui: 'uk' })).toBe('uk');
+  expect(resolveLang({ text: 'Ну да', heard: 'ru', sticky: '', ui: 'en' })).toBe('ru');
+  // Marker words beat the sticky language: a Russian sentence in a Ukrainian chat is Russian.
+  expect(resolveLang({ text: 'Все добрые, ты кто?', heard: 'uk', sticky: 'uk', ui: 'uk' })).toBe('ru');
+  expect(resolveLang({ text: 'Hello there', heard: 'en', sticky: 'uk', ui: 'uk' })).toBe('en');
+  expect(resolveLang({ text: '', heard: '', sticky: '', ui: '' })).toBe('');
+});
+
+test('the model gets an explicit reply language and the facts about itself, with one persona for each mode', () => {
+  expect(replyRule('uk')).toContain('Reply only in Ukrainian');
+  expect(replyRule('uk')).toContain('not Russian');
+  expect(replyRule('')).toBe('');
+  const sys = talkMessages([{ role: 'user', content: 'Привіт' }], 'uk')[0].content;
+  expect(sys).toContain('Reply only in Ukrainian');
+  expect(sys).toContain(PRODUCT_FACTS);
+  expect(PRODUCT_FACTS).toContain('saved in their own browser');
+  expect(PRODUCT_FACTS).toContain('Flisk Oracle');
+});
+
+test('the page reads Ukrainian text with the Ukrainian voice and agrees with the Worker', () => {
+  const page = appPage({ login: 'ann', connected: [] });
+  const cut = (a, b) => page.slice(page.indexOf(a), page.indexOf(b));
+  const langOf = (sticky = '', ui = '') => new Function('chatLang', 'window', `${cut('const langOf=', 'const pickVoice=')}\nreturn langOf;`)(sticky, { __LANG: ui });
+  for (const t of ['Все добре, дякую. А у тебе як справи?', 'Все добрые, ты кто?', 'Привіт', 'Что ты умеешь?']) expect(langOf()(t)).toBe(detectLang(t));
+  expect(langOf('uk')('Ну да')).toBe('uk');
+  expect(langOf('', 'uk')('Ну да')).toBe('uk');
+  expect(langOf('', 'en')('Ну да')).toBe('ru');
+  expect(page).toContain("lang:chatLang,ui:window.__LANG");
+});
+
+import { runTask } from '../src/loop.js';
+test('the typed chat states the reply language and its own name to the model', async () => {
+  let system = '';
+  const model = async (messages) => { system = messages[0].content; return { text: '{"answer":"Все добре."}' }; };
+  await runTask({ task: 'Розкажи, як в тебе справи.', history: [{ role: 'assistant', content: 'Я — Flisk Oracle' }], lang: 'uk', model, computer: {}, emit: () => {} });
+  expect(system).toContain('Reply only in Ukrainian');
+  expect(system).toContain('"Flisk Chat"');
+});

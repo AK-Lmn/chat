@@ -1,6 +1,7 @@
 import { icon } from './icons.js';
 import { EARTH_JS, TEXTURES, earthUsers, orbJs } from './earth.js';
 import { LOGOS } from './logos.js';
+import { UK_WORDS, RU_WORDS } from './lang.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // JSON inside a <script>: no "</script>" or "<!--" can close it early.
@@ -561,7 +562,7 @@ const APP_JS = `
 const $=(id)=>document.getElementById(id);
 const talk=$('talk'),form=$('ask'),box=$('task'),go=$('go'),setup=$('setup'),signin=$('signin'),hist=$('hist'),scroller=$('scroll'),welcome=$('ideas');
 const MODELS=window.__MODELS__||[],IC=window.__ICONS__||{},LG=window.__LOGOS__||{};
-let history=[];
+let history=[],chatLang='';
 const down=()=>{scroller.scrollTop=scroller.scrollHeight;};
 const node=(tag,cls,text)=>{const d=document.createElement(tag);if(cls)d.className=cls;if(text!=null)d.textContent=text;return d;};
 const lg=(p,h)=>{try{const i=document.createElement('img');i.className='lg';i.alt='';i.src='/logo/'+new URL(h).hostname.replace(/^www[.]/,'');i.onerror=()=>i.remove();p.appendChild(i);}catch(e){}};
@@ -726,7 +727,7 @@ function drawHist(){const q=($('q').value||'').toLowerCase();const all=loadAll()
   rows.forEach(c=>{const dn=c.at?dayName(c.at):'';if(dn&&dn!==lastDay){lastDay=dn;hist.appendChild(node('li','day',dn));}const li=node('li',c.id===chatId?'cur':''),b=node('button','',c.title),x=node('button','x','×');b.type=x.type='button';b.title=c.title+(c.at?' · '+new Date(c.at).toLocaleString():'');b.onclick=()=>{openChat(c);closeSide();};x.title='Delete this chat';x.setAttribute('aria-label','Delete chat: '+c.title);x.onclick=()=>{saveAll(loadAll().filter(o=>o.id!==c.id));if(chatId===c.id)newChat();drawHist();};li.append(b,x);hist.appendChild(li);});
   if(!showAll&&all.length>LIM){const li=node('li','more'),m=node('button','','Show '+(all.length-LIM)+' older');m.type='button';m.onclick=()=>{hist.dataset.all='1';drawHist();};li.append(m);hist.appendChild(li);}}
 $('q').addEventListener('input',drawHist);
-function newChat(){history=[];go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
+function newChat(){history=[];chatLang='';go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
 // Result cards for a finished website or video. Built in run() and again when a saved chat is reopened, from the link in its answer.
 function siteCard(link){const r=node('div','result');r.innerHTML=IC.website.replace('<svg ','<svg width="34" height="34" style="border-radius:var(--radius);flex:none" aria-hidden="true" ')+'<div class="rt"><b></b><div class="url"></div></div>';r.querySelector('b').textContent=link.indexOf('/s/')>0&&link.indexOf('chat.flisk.si')>0?'Your page is live':'Your app is live: the real website and API';r.querySelector('.url').textContent=link.replace(/^https?:\\/\\//,'');
   const cp=node('button','btn','Copy link');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(link).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy link',1500);});};
@@ -925,7 +926,11 @@ const isMale=(v)=>String(v.name).split(/[^A-Za-z]+/).some(w=>MALE.indexOf(w)>=0)
 // Which language a text is in: Whisper's answer when there is one, else a guess from the letters, else the browser's.
 const LOC={en:'en-US',uk:'uk-UA',ru:'ru-RU',es:'es-ES',de:'de-DE',fr:'fr-FR',it:'it-IT',pt:'pt-BR',pl:'pl-PL',nl:'nl-NL',tr:'tr-TR',cs:'cs-CZ',ja:'ja-JP',ko:'ko-KR',zh:'zh-CN',ar:'ar-SA',he:'he-IL',hi:'hi-IN',el:'el-GR',sv:'sv-SE',fi:'fi-FI',da:'da-DK',no:'nb-NO',ro:'ro-RO',hu:'hu-HU',bg:'bg-BG',vi:'vi-VN',th:'th-TH',id:'id-ID',kk:'kk-KZ',ka:'ka-GE',be:'be-BY'};
 const langOf=(t,hint)=>{if(hint)return String(hint).slice(0,2).toLowerCase();t=String(t||'');
-  if(/[іїєґ]/i.test(t))return 'uk';if(/[а-яё]/i.test(t))return 'ru';if(/[가-힣]/.test(t))return 'ko';if(/[ぁ-ヿ]/.test(t))return 'ja';if(/[一-鿿]/.test(t))return 'zh';
+  if(/[іїєґ]/i.test(t))return 'uk';if(/[ыэъё]/i.test(t))return 'ru';
+  // Ukrainian and Russian share letters: marker words decide; a line with none keeps this chat's language, then the page language.
+  if(/[а-я]/i.test(t)){const UKW=${JSON.stringify(UK_WORDS)},RUW=${JSON.stringify(RU_WORDS)},ws=t.toLowerCase().match(/[а-яіїєґё'’-]+/g)||[],u=ws.filter(w=>UKW.indexOf(w)>=0).length,r=ws.filter(w=>RUW.indexOf(w)>=0).length;
+    if(u!==r)return u>r?'uk':'ru';const st=typeof chatLang==='string'?chatLang:'';if(st==='uk'||st==='ru')return st;return (typeof window!=='undefined'&&window.__LANG==='uk')?'uk':'ru';}
+  if(/[가-힣]/.test(t))return 'ko';if(/[ぁ-ヿ]/.test(t))return 'ja';if(/[一-鿿]/.test(t))return 'zh';
   if(/[α-ω]/i.test(t))return 'el';if(/[א-ת]/.test(t))return 'he';if(/[ء-ي]/.test(t))return 'ar';if(/[ऀ-ॿ]/.test(t))return 'hi';if(/[ก-๛]/.test(t))return 'th';
   const w=' '+t.toLowerCase()+' ';if(/[¿¡ñ]/.test(w)||/ (el|los|las|que|es|por|para|una|cuál|qué) /.test(w))return 'es';if(/ (het|een|niet|ik|wat|zijn|jij|hoe|ook|maar|heb|wordt|graag|bedankt|dank|goed|mijn) /.test(w)&&!/[ßäöü]/.test(w))return 'nl';if(/[ßäöü]/.test(w)||/ (der|die|und|ist|nicht|ich) /.test(w))return 'de';
   if(/[çœ]/.test(w)||/ (le|les|est|une|vous|je|pas|des) /.test(w))return 'fr';if(/[ãõ]/.test(w)||/ (não|você|uma|para|com) /.test(w))return 'pt';if(/[łąęśźż]/.test(w))return 'pl';
@@ -1082,7 +1087,7 @@ const ack=()=>new Promise((ok)=>{const list=ackClips[ackLang()]||[];if(!list.len
 const LNAME={en:'English',uk:'Ukrainian',ru:'Russian',es:'Spanish',de:'German',fr:'French',it:'Italian',pt:'Portuguese',pl:'Polish',ja:'Japanese',ko:'Korean',zh:'Chinese',ar:'Arabic',he:'Hebrew',hi:'Hindi',tr:'Turkish',nl:'Dutch',el:'Greek'};
 // One request: the recording goes up, the words you said and the spoken answer come back, with the language heard.
 const talkSend=(blob)=>{const ctrl=new AbortController(),hist=oTurns.slice();
-  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang,history:hist,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
+  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang||chatLang,ui:window.__LANG||'',history:hist,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
     .then(async res=>({status:res.status,ok:res.ok,b:await res.json().catch(()=>({}))}));p.catch(()=>{});return {ctrl,p};};
 async function oLoop(){
   while(oOn){
@@ -1098,7 +1103,7 @@ async function oLoop(){
     await acked;
     if(!oOn)return;const said=String(b.heard||'').trim(),reply=String(b.text||'').trim();
     if(!said){oSet('idle','I did not catch that. Tap the circle and try again.');return;}
-    if(b.lang)oLang=b.lang;oYou.textContent=said;oSay.textContent=reply;oTurns.push({role:'user',content:said},{role:'assistant',content:reply});const toBuild=String(b.build||'').trim();
+    if(b.lang){oLang=b.lang;chatLang=b.lang;}oYou.textContent=said;oSay.textContent=reply;oTurns.push({role:'user',content:said},{role:'assistant',content:reply});const toBuild=String(b.build||'').trim();
     oSet('speaking','Speaking… tap the circle to interrupt');
     await speakAll(reply,oLang);
     // Asked to build: leave the talk (it is kept in the chat) and run the task on a real computer, as if typed.
@@ -1204,7 +1209,7 @@ async function run(task){
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
   try{
-    const payload={task,history,providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
+    if(task.length>3)chatLang=langOf(task);const payload={task,history,lang:chatLang,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
     const res=await fetch('/api/run',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json',accept:'application/x-ndjson'},body:JSON.stringify(payload)});
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.
