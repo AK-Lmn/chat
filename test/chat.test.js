@@ -1128,3 +1128,9 @@ test('a ?voice=1 link opens the talk screen on the first tap', () => {
   expect(page).toContain("get('voice')");
   expect(page).toContain('Tap anywhere to start talking');
 });
+
+test('a link can ask for any chat look by its own id', async () => {
+  const { lookForFliskTheme } = await import('../src/index.js');
+  for (const id of ['classic', 'ivory', 'glow', 'focus', 'voice', 'earth']) expect(lookForFliskTheme(id)).toBe(id);
+  expect(lookForFliskTheme('cool-glow')).toBe('glow');
+});

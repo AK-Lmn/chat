@@ -186,7 +186,8 @@ export const DEFAULT_THEME = 'earth';
 // The shared Flisk look (the bar's ?flisk_theme= parameter, or its flisk_theme cookie on .flisk.si) maps onto the closest of
 // the five chat looks: ivory and soft glow have their own, other light looks get Focus, dark looks get Classic.
 const LIGHT_LOOKS = new Set(['paper-tool', 'editorial-ruled', 'soft-satoshi', 'clean', 'ice', 'chapters']);
-export const lookForFliskTheme = (id) => (id === 'ivory' ? 'ivory' : id === 'cool-glow' ? 'glow' : LIGHT_LOOKS.has(id) ? 'focus' : /^[a-z-]{2,24}$/.test(id || '') ? 'classic' : undefined);
+// A chat look's own id (classic, ivory, glow, focus, voice, earth) is taken as it is, so a link can ask for Voice first or Earth.
+export const lookForFliskTheme = (id) => (THEME_IDS.includes(id) ? id : id === 'ivory' ? 'ivory' : id === 'cool-glow' ? 'glow' : LIGHT_LOOKS.has(id) ? 'focus' : /^[a-z-]{2,24}$/.test(id || '') ? 'classic' : undefined);
 const setLook = (theme) => ({ theme, cookie: `chat_theme=${theme}; Path=/; Max-Age=31536000; SameSite=Lax; Secure` });
 export const pickTheme = (request) => {
   const cookies = request.headers.get('cookie') || '';
