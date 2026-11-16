@@ -1134,3 +1134,8 @@ test('a link can ask for any chat look by its own id', async () => {
   for (const id of ['classic', 'ivory', 'glow', 'focus', 'voice', 'earth']) expect(lookForFliskTheme(id)).toBe(id);
   expect(lookForFliskTheme('cool-glow')).toBe('glow');
 });
+
+test('the talk circle skips the 3D Earth on a phone', async () => {
+  const page = appPageUi({ login: 'ann', connected: [] });
+  expect(page).toContain('pointer: coarse');
+});
