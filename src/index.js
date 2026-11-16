@@ -504,6 +504,14 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   // Signing in with GitHub is optional: a visitor with no session gets a private anonymous one on the home page.
   const anon = !!session && isAnon(session.login);
   const who = async (login) => (isAnon(login) ? `ip-${[...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(request.headers.get('cf-connecting-ip') || 'unknown')))].slice(0, 8).map((b) => b.toString(16).padStart(2, '0')).join('')}` : login);
+  // One gate for a task, whichever way it arrives (POST /api/run or the browser-computer WebSocket): the daily cap for the shared
+  // free model, the model that answers, and the refund of a free task the free AI never answered (or that needs a computer).
+  const admitTask = async (login, chosen) => {
+    if (chosen.free && (await overQuota(env, 'chat', { anon, id: await who(login) }))) return { refuse: taskLimitBody(anon) };
+    const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
+    const refund = async (force = false) => chosen.free && (force || !m.answered()) && refundQuota(env, 'chat', { anon, id: await who(login) });
+    return { m, refund };
+  };
   if (request.method === 'GET' && path === '/') {
     const [models, names] = await Promise.all([loadCatalog(env), loadFleetNames(env, fetchImpl)]);
     const { theme, cookie } = pickTheme(request);
@@ -589,12 +597,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const gate = async (body) => {
       const chosen = resolveModel(body.ai);
       if (chosen.error) return { refuse: { status: 400, error: chosen.error, kind: chosen.kind } };
-      if (chosen.free && (await overQuota(env, 'chat', { anon, id: await who(login) }))) {
-        return { refuse: { status: 429, ...taskLimitBody(anon) } };
-      }
-      const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
-      const refund = async () => chosen.free && !m.answered() && refundQuota(env, 'chat', { anon, id: await who(login) });
-      return { model: m.ask, settle: refund, maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
+      const admitted = await admitTask(login, chosen);
+      if (admitted.refuse) return { refuse: { status: 429, ...admitted.refuse } };
+      const { m, refund } = admitted;
+      return { model: m.ask, settle: () => refund(), maxSteps: chosen.free ? MAX_STEPS : BYO_STEPS, vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen) };
     };
     const job = runOverSocket(server, { lookupFacts: (q) => lookup(q), gate, origin, fetchImpl, publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: async () => ({ error: 'a video needs a cloud computer' }) });
     if (waitUntil) waitUntil(job);
@@ -738,9 +744,9 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const missing = order.find((p) => !connections[p]);
       if (missing) return json(400, { error: `${missing} is not connected yet. Connect it, or tick another computer` });
       // Only the shared free model counts against the daily cap; the visitor's own key costs us nothing.
-      if (chosen.free && (await overQuota(env, 'chat', { anon, id: await who(login) }))) {
-        return json(429, taskLimitBody(anon));
-      }
+      const admitted = await admitTask(login, chosen);
+      if (admitted.refuse) return json(429, admitted.refuse);
+      const { m, refund } = admitted;
       const { readable, writable } = new TransformStream();
       const w = writable.getWriter();
       const enc = new TextEncoder();
@@ -750,7 +756,6 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => { if (!noPod) return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
       const computer = noPod ? { ...fleet, start: async () => ({ error: ['needs', 'a computer'].join(' ') }) } : fleet;
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
-      const m = answeredModel(modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon)));
       const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui }), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           if (needPod) return;
@@ -762,7 +767,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         .catch((e) => { for (const x of buffered) send(x); send({ type: 'error', error: String(e?.message || e).slice(0, 200) }); })
         .finally(async () => {
           if (needPod) send({ type: 'needcomputer' });
-          if (chosen.free && (needPod || !m.answered())) await refundQuota(env, 'chat', { anon, id: await who(login) });
+          await refund(needPod);
           await w.close().catch(() => {});
         });
       if (waitUntil) waitUntil(job);
