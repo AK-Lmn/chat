@@ -985,14 +985,14 @@ const playBlob=(url,gen)=>new Promise((ok)=>{if(gen!==sayGen){ok(false);return;}
   AUD.src=url;const p=AUD.play();if(p)p.catch(()=>fin(false));});
 function talkSpeaker(hint,opts){stopTalk();opts=opts||{};const gen=sayGen,items=[];let ended=false,wake=null,n=0,heardAny=false,allWords='',lastLang=hint||'';
   const getBlob=(words,lg)=>fetch('/voice?l='+encodeURIComponent(lg)+'&t='+encodeURIComponent(words.slice(0,1200))).then(r=>r.ok?r.blob():null).then(b=>b&&b.size>300?URL.createObjectURL(b):null).catch(()=>null);
-  const push=(sentence)=>{const words=spoken(sentence);if(!words||gen!==sayGen)return;const lg=langOf(words,hint);lastLang=lg;allWords+=(allWords?' ':'')+words;
+  const push=(sentence)=>{const words=spoken(sentence);if(!words||gen!==sayGen)return;let lg=langOf(words,hint);if(items.length&&(lg==='uk'||lg==='ru')&&(items[0].lg==='uk'||items[0].lg==='ru'))lg=items[0].lg;lastLang=lg;allWords+=(allWords?' ':'')+words;
     const it={words,lg};if(items.length)it.url=getBlob(words,lg);items.push(it);if(wake)wake();};
   const end=()=>{ended=true;if(wake)wake();};
   const done=(async()=>{for(;;){if(gen!==sayGen)return;
     if(n>=items.length){if(ended)break;await new Promise(r=>{wake=r;});wake=null;continue;}
     const it=items[n],first=n===0;n++;let ok=false;
     if(first){const budget=opts.budget&&MELO_SPEAKS.indexOf(it.lg)<0?Math.min(opts.budget,2000):opts.budget;ok=await playVoice(it.words,it.lg,gen,budget);}
-    else{const url=await it.url;if(gen!==sayGen)return;ok=url?await playBlob(url,gen):false;if(url)URL.revokeObjectURL(url);}
+    else{let url=await it.url;if(gen!==sayGen)return;if(!url)url=await getBlob(it.words,it.lg);if(gen!==sayGen)return;ok=url?await playBlob(url,gen):false;if(url)URL.revokeObjectURL(url);}
     if(gen!==sayGen)return;
     if(!ok)ok=await browserSay(it.words,it.lg,gen);
     if(ok)heardAny=true;else if(first)break;}
