@@ -53,7 +53,9 @@ function earthClient(U, SRC, G, TG) {
   });
   const cv = document.getElementById('earth');
   if (!cv) return;
-  const want = () => ROOT.dataset.theme === 'earth' && ROOT.classList.contains('home') && !document.hidden;
+  // On a phone the spinning 3D globe stalls the page every frame, so the still photo of the Earth (earthstill) stays instead.
+  const phone = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, innerWidth) <= 860;
+  const want = () => !phone && ROOT.dataset.theme === 'earth' && ROOT.classList.contains('home') && !document.hidden;
   const calm = matchMedia('(prefers-reduced-motion: reduce)');
   let T = null;
   let started = false;
