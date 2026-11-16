@@ -42,7 +42,7 @@ test('the page reads Ukrainian text with the Ukrainian voice and agrees with the
   expect(langOf('uk')('Ну да')).toBe('uk');
   expect(langOf('', 'uk')('Ну да')).toBe('uk');
   expect(langOf('', 'en')('Ну да')).toBe('ru');
-  expect(page).toContain("lang:chatLang,ui:window.__LANG");
+  expect(page).toContain("lang:chatLang,memo,ui:window.__LANG");
 });
 
 import { runTask } from '../src/loop.js';
@@ -65,4 +65,31 @@ test('a typed voice turn in Russian is answered in Russian even when the page se
   const res = await handle(new Request('https://chat.test/api/talk', { method: 'POST', headers: { cookie, origin: 'https://chat.test', 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' }, body: JSON.stringify(body) }), e, { fetchImpl: async () => Response.json({}) });
   expect(res.status).toBe(200);
   expect(system).toContain('Reply only in Russian');
+});
+
+import { memoMessages, memoNote, cleanMemo } from '../src/memo.js';
+test('a chat summary reaches the model as background, not as instructions', async () => {
+  expect(memoNote('')).toBe('');
+  expect(memoNote('The user builds a shop.')).toContain('The user builds a shop.');
+  expect(talkMessages([{ role: 'user', content: 'Привіт' }], 'uk', 'Shop for Kyiv.')[0].content).toContain('Shop for Kyiv.');
+  expect(cleanMemo('a'.repeat(5000)).length).toBe(1500);
+  const m = memoMessages('old', [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }]);
+  expect(m[1].content).toContain('old');
+  expect(m[1].content).toContain('User: hi');
+  let system = '';
+  await runTask({ task: 'next', history: [], memo: 'Shop for Kyiv.', model: async (ms) => { system = ms[0].content; return { text: '{"answer":"ok"}' }; }, computer: {}, emit: () => {} });
+  expect(system).toContain('Shop for Kyiv.');
+});
+test('/api/memo folds old turns into a summary and the page rolls it', async () => {
+  const cache = new Map();
+  const e = { PUBLIC_ORIGIN: 'https://chat.test', SESSION_SECRET: 's', LIMIT_CACHE: { match: async (k) => cache.get(String(k.url || k))?.clone(), put: async (k, r) => { cache.set(String(k.url || k), r); } }, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions', INFERENCE: { fetch: async () => Response.json({ choices: [{ message: { content: 'User wants a shop.' } }] }) } };
+  const cookie = (await makeSession(e, newAnonLogin())).split(';')[0];
+  const post = (b) => handle(new Request('https://chat.test/api/memo', { method: 'POST', headers: { cookie, origin: 'https://chat.test', 'content-type': 'application/json', 'cf-connecting-ip': '2.2.2.2' }, body: JSON.stringify(b) }), e, { fetchImpl: async () => Response.json({}) });
+  expect((await post({ msgs: [] })).status).toBe(400);
+  const res = await post({ memo: '', msgs: [{ role: 'user', content: 'Build a shop' }], ai: { ai: 'wolf' } });
+  expect(res.status).toBe(200);
+  expect((await res.json()).memo).toBe('User wants a shop.');
+  const pg = appPage({ login: 'ann', connected: [] });
+  expect(pg).toContain('/api/memo');
+  expect(pg).toContain('memo,memoN');
 });
