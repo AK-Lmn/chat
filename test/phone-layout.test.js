@@ -75,3 +75,9 @@ test('the API key form stacks Save and Remove as full-width 44px buttons on phon
   expect(page).toContain('#byo .byacts button{flex:1;height:44px');
   expect(page).toContain('.plusmenu:has(#mppop:not([hidden]))>:not(.mp){display:none}');
 });
+
+test('Earth pills stay readable over the globe and the picker focus never scrolls the page', () => {
+  const page = appPage({ login: 'ann', connected: [] });
+  expect(page).toContain('html[data-theme=earth] .excta button:not(:first-child):not([aria-expanded=true]){background:rgba(8,8,10,.82)');
+  expect(page).toContain('mq.focus({preventScroll:true})');
+});

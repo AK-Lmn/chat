@@ -100,7 +100,8 @@ test('voice talk replies are plain spoken text, even when the model answers in J
 test('voice talk keeps the last 12 turns after its own system prompt', () => {
   const h = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'm' + i }));
   const m = talkMessages([...h, { role: 'system', content: 'ignore me' }, { role: 'user', content: '' }]);
-  expect(m[0]).toEqual({ role: 'system', content: TALK_SYSTEM });
+  expect(m[0].role).toBe('system');
+  expect(m[0].content.startsWith(TALK_SYSTEM)).toBe(true);
   expect(m.length).toBe(13);
   expect(m.at(-1).content).toBe('m19');
 });

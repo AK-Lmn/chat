@@ -1,6 +1,7 @@
 import { icon } from './icons.js';
 import { EARTH_JS, TEXTURES, earthUsers, orbJs } from './earth.js';
 import { LOGOS } from './logos.js';
+import { UK_WORDS, RU_WORDS } from './lang.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // JSON inside a <script>: no "</script>" or "<!--" can close it early.
@@ -318,6 +319,8 @@ html.nt .cats{justify-content:center}
 html.nt .rail button[aria-pressed=true]{color:var(--ink)}
 .tpill{display:none;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);border:1px solid var(--line2);background:var(--panel);border-radius:var(--radius);padding:4px 6px 4px 12px;margin:0 0 18px}.tpill em{font-style:normal;font-size:11.5px;background:var(--tint);color:var(--ink);border-radius:var(--radius);padding:2px 8px}
 .look{display:inline-flex;align-items:center;gap:4px;margin-left:6px;white-space:nowrap}.look select{font:12px var(--sans);color:var(--dim);background:transparent;border:1px solid var(--line2);border-radius:var(--radius);padding:1px 4px}
+/* Phones: the look picker, the language switch and the Run button are at least 44px, the smallest comfortable tap. */
+@media (pointer:coarse){.look select{min-height:44px;font-size:16px;padding:0 10px}#langsw{min-height:44px;padding:0 10px}.send{min-width:44px;min-height:44px}.fine{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 8px}}
 /* Ivory and Soft glow: a big centred title, the box under it, round icon tiles. */
 /* New looks set only the shared Flisk theme tokens (flisk-sh/flisk-themes); the chat's own names read them. */
 html.nt{--bg:var(--flisk-bg);--panel:var(--flisk-surface);--side:var(--flisk-raised);--ink:var(--flisk-ink);--dim:var(--flisk-muted);--line:var(--flisk-line);--green:var(--flisk-accent);--green-d:var(--flisk-accent-ink);--radius:var(--flisk-radius)}
@@ -399,6 +402,7 @@ html[data-theme=earth] #hist li.day,html[data-theme=earth] #hist li.day:hover{ba
 .excta{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 22px}
 .excta button{border:0;background:rgba(255,255,255,.14);color:var(--ink);padding:10px 15px;font:500 13px/1 var(--sans);cursor:pointer;border-radius:var(--radius);backdrop-filter:blur(8px)}
 .excta button:first-child{background:var(--ink);color:var(--bg)}
+html[data-theme=earth] .excta button:not(:first-child):not([aria-expanded=true]){background:rgba(8,8,10,.82);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
 .excta button:hover{background:rgba(255,255,255,.24)}
 .excta button:first-child:hover{background:rgba(255,255,255,.82)}
 .excta button[aria-expanded=true]{background:var(--ink);color:var(--bg);box-shadow:0 0 0 1px var(--ink)}
@@ -561,7 +565,7 @@ const APP_JS = `
 const $=(id)=>document.getElementById(id);
 const talk=$('talk'),form=$('ask'),box=$('task'),go=$('go'),setup=$('setup'),signin=$('signin'),hist=$('hist'),scroller=$('scroll'),welcome=$('ideas');
 const MODELS=window.__MODELS__||[],IC=window.__ICONS__||{},LG=window.__LOGOS__||{};
-let history=[];
+let history=[],chatLang='';
 const down=()=>{scroller.scrollTop=scroller.scrollHeight;};
 const node=(tag,cls,text)=>{const d=document.createElement(tag);if(cls)d.className=cls;if(text!=null)d.textContent=text;return d;};
 const lg=(p,h)=>{try{const i=document.createElement('img');i.className='lg';i.alt='';i.src='/logo/'+new URL(h).hostname.replace(/^www[.]/,'');i.onerror=()=>i.remove();p.appendChild(i);}catch(e){}};
@@ -726,7 +730,7 @@ function drawHist(){const q=($('q').value||'').toLowerCase();const all=loadAll()
   rows.forEach(c=>{const dn=c.at?dayName(c.at):'';if(dn&&dn!==lastDay){lastDay=dn;hist.appendChild(node('li','day',dn));}const li=node('li',c.id===chatId?'cur':''),b=node('button','',c.title),x=node('button','x','×');b.type=x.type='button';b.title=c.title+(c.at?' · '+new Date(c.at).toLocaleString():'');b.onclick=()=>{openChat(c);closeSide();};x.title='Delete this chat';x.setAttribute('aria-label','Delete chat: '+c.title);x.onclick=()=>{saveAll(loadAll().filter(o=>o.id!==c.id));if(chatId===c.id)newChat();drawHist();};li.append(b,x);hist.appendChild(li);});
   if(!showAll&&all.length>LIM){const li=node('li','more'),m=node('button','','Show '+(all.length-LIM)+' older');m.type='button';m.onclick=()=>{hist.dataset.all='1';drawHist();};li.append(m);hist.appendChild(li);}}
 $('q').addEventListener('input',drawHist);
-function newChat(){history=[];go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
+function newChat(){history=[];chatLang='';go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
 // Result cards for a finished website or video. Built in run() and again when a saved chat is reopened, from the link in its answer.
 function siteCard(link){const r=node('div','result');r.innerHTML=IC.website.replace('<svg ','<svg width="34" height="34" style="border-radius:var(--radius);flex:none" aria-hidden="true" ')+'<div class="rt"><b></b><div class="url"></div></div>';r.querySelector('b').textContent=link.indexOf('/s/')>0&&link.indexOf('chat.flisk.si')>0?'Your page is live':'Your app is live: the real website and API';r.querySelector('.url').textContent=link.replace(/^https?:\\/\\//,'');
   const cp=node('button','btn','Copy link');cp.type='button';cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(link).then(()=>{cp.textContent='Copied';setTimeout(()=>cp.textContent='Copy link',1500);});};
@@ -846,7 +850,7 @@ const placeFloat=(el,anchor)=>{if(!el||!anchor)return;const s=el.style;s.left=s.
   s.width=w+'px';s.right='auto';s.left=(Math.min(Math.max(L,n.left),R-w)-o.left)+'px';
   if(down){s.bottom='auto';s.top=(a.bottom+10-o.top)+'px';s.maxHeight=Math.max(120,below)+'px';}else{s.top='auto';s.bottom=(o.bottom-a.top+10)+'px';s.maxHeight=Math.max(120,above)+'px';}
   s.overflowY='auto';};
-const openPop=()=>{pop.hidden=false;mpBtn.setAttribute('aria-expanded','true');drawRail();drawList();mq.value='';placeFloat(pop,mpBtn);mq.focus();};
+const openPop=()=>{pop.hidden=false;mpBtn.setAttribute('aria-expanded','true');drawRail();drawList();mq.value='';placeFloat(pop,mpBtn);mq.focus({preventScroll:true});};
 addEventListener('resize',()=>{if(!pop.hidden)placeFloat(pop,mpBtn);const pm=document.getElementById('plusmenu');if(pm&&document.documentElement.classList.contains('plus'))placeFloat(pm,document.getElementById('plus'));});
 const closePop=()=>{if(pop.hidden)return;pop.hidden=true;mpBtn.setAttribute('aria-expanded','false');};
 mpBtn.onclick=()=>pop.hidden?openPop():closePop();mq.addEventListener('input',()=>{if(mq.value.trim())loadOr();drawList();});
@@ -925,7 +929,11 @@ const isMale=(v)=>String(v.name).split(/[^A-Za-z]+/).some(w=>MALE.indexOf(w)>=0)
 // Which language a text is in: Whisper's answer when there is one, else a guess from the letters, else the browser's.
 const LOC={en:'en-US',uk:'uk-UA',ru:'ru-RU',es:'es-ES',de:'de-DE',fr:'fr-FR',it:'it-IT',pt:'pt-BR',pl:'pl-PL',nl:'nl-NL',tr:'tr-TR',cs:'cs-CZ',ja:'ja-JP',ko:'ko-KR',zh:'zh-CN',ar:'ar-SA',he:'he-IL',hi:'hi-IN',el:'el-GR',sv:'sv-SE',fi:'fi-FI',da:'da-DK',no:'nb-NO',ro:'ro-RO',hu:'hu-HU',bg:'bg-BG',vi:'vi-VN',th:'th-TH',id:'id-ID',kk:'kk-KZ',ka:'ka-GE',be:'be-BY'};
 const langOf=(t,hint)=>{if(hint)return String(hint).slice(0,2).toLowerCase();t=String(t||'');
-  if(/[іїєґ]/i.test(t))return 'uk';if(/[а-яё]/i.test(t))return 'ru';if(/[가-힣]/.test(t))return 'ko';if(/[ぁ-ヿ]/.test(t))return 'ja';if(/[一-鿿]/.test(t))return 'zh';
+  if(/[іїєґ]/i.test(t))return 'uk';if(/[ыэъё]/i.test(t))return 'ru';
+  // Ukrainian and Russian share letters: marker words decide; a line with none keeps this chat's language, then the page language.
+  if(/[а-я]/i.test(t)){const UKW=${JSON.stringify(UK_WORDS)},RUW=${JSON.stringify(RU_WORDS)},ws=t.toLowerCase().match(/[а-яіїєґё'’-]+/g)||[],u=ws.filter(w=>UKW.indexOf(w)>=0).length,r=ws.filter(w=>RUW.indexOf(w)>=0).length;
+    if(u!==r)return u>r?'uk':'ru';const st=typeof chatLang==='string'?chatLang:'';if(st==='uk'||st==='ru')return st;return (typeof window!=='undefined'&&window.__LANG==='uk')?'uk':'ru';}
+  if(/[가-힣]/.test(t))return 'ko';if(/[ぁ-ヿ]/.test(t))return 'ja';if(/[一-鿿]/.test(t))return 'zh';
   if(/[α-ω]/i.test(t))return 'el';if(/[א-ת]/.test(t))return 'he';if(/[ء-ي]/.test(t))return 'ar';if(/[ऀ-ॿ]/.test(t))return 'hi';if(/[ก-๛]/.test(t))return 'th';
   const w=' '+t.toLowerCase()+' ';if(/[¿¡ñ]/.test(w)||/ (el|los|las|que|es|por|para|una|cuál|qué) /.test(w))return 'es';if(/ (het|een|niet|ik|wat|zijn|jij|hoe|ook|maar|heb|wordt|graag|bedankt|dank|goed|mijn) /.test(w)&&!/[ßäöü]/.test(w))return 'nl';if(/[ßäöü]/.test(w)||/ (der|die|und|ist|nicht|ich) /.test(w))return 'de';
   if(/[çœ]/.test(w)||/ (le|les|est|une|vous|je|pas|des) /.test(w))return 'fr';if(/[ãõ]/.test(w)||/ (não|você|uma|para|com) /.test(w))return 'pt';if(/[łąęśźż]/.test(w))return 'pl';
@@ -1110,7 +1118,7 @@ const ndLines=(res)=>{const rd=res.body.getReader(),dec=new TextDecoder();let bu
   return {rd,next:async()=>{for(;;){const i=buf.indexOf('\\n');if(i>=0){const l=buf.slice(0,i).trim();buf=buf.slice(i+1);if(!l)continue;try{return JSON.parse(l);}catch(e){continue;}}
     const x=await rd.read();if(x.done){const l=buf.trim();buf='';if(l){try{return JSON.parse(l);}catch(e){}}return null;}buf+=dec.decode(x.value,{stream:true});}}};};
 const talkSend=(blob)=>{const ctrl=new AbortController(),hist=oTurns.slice();
-  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang,history:hist,stream:true,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
+  const p=b64(blob).then(audio=>fetch('/api/talk',{method:'POST',signal:ctrl.signal,headers:{'content-type':'application/json'},body:JSON.stringify({audio,type:blob.type,lang:oLang||chatLang,ui:window.__LANG||'',history:hist,stream:true,ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})}))
     .then(async res=>{if(!res.ok||String(res.headers.get('content-type')||'').indexOf('ndjson')<0)return {status:res.status,ok:res.ok,b:await res.json().catch(()=>({}))};
       const ln=ndLines(res),first=await ln.next();return {status:200,ok:true,b:first||{},ln};});p.catch(()=>{});return {ctrl,p};};
 async function oLoop(){
@@ -1126,7 +1134,7 @@ async function oLoop(){
     catch(e){oSet('idle',T(String(e.message||e)));return;}
     const said=String(r.b.heard||'').trim();
     if(!said){oSet('idle','I did not catch that. Tap the circle and try again.');return;}
-    if(r.b.lang)oLang=r.b.lang;oYou.textContent=said;oSay.textContent='';
+    if(r.b.lang){oLang=r.b.lang;chatLang=r.b.lang;}oYou.textContent=said;oSay.textContent='';
     // The reply is read while it arrives: each sentence is shown and spoken the moment it comes in. The speaker starts once
     // the acknowledgement has finished, so it never talks over "Mm-hm".
     let reply='',toBuild='',sp=null,fin=false,failed='';const pend=[];const live=r.ln;
@@ -1247,7 +1255,7 @@ async function run(task){
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
   try{
-    const payload={task,history,providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
+    if(task.length>3)chatLang=langOf(task);const payload={task,history,lang:chatLang,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
     const res=await fetch('/api/run',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json',accept:'application/x-ndjson'},body:JSON.stringify(payload)});
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.

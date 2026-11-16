@@ -1144,3 +1144,9 @@ test('the Earth home screen stays a still photo on a phone', () => {
   const page = appPageUi({ login: 'ann', connected: [] });
   expect(page).toMatch(/const phone = matchMedia/);
 });
+
+test('phone tap targets are at least 44px for the look picker and language switch', () => {
+  const page = appPageUi({ login: 'ann', connected: [] });
+  expect(page).toContain('.look select{min-height:44px');
+  expect(page).toContain('#langsw{min-height:44px');
+});
