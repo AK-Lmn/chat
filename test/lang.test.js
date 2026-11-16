@@ -53,3 +53,16 @@ test('the typed chat states the reply language and its own name to the model', a
   expect(system).toContain('Reply only in Ukrainian');
   expect(system).toContain('"Flisk Chat"');
 });
+
+import { handle } from '../src/index.js';
+import { makeSession, newAnonLogin } from '../src/session.js';
+test('a typed voice turn in Russian is answered in Russian even when the page sent uk', async () => {
+  let system = '';
+  const cache = new Map();
+  const e = { PUBLIC_ORIGIN: 'https://chat.test', SESSION_SECRET: 's', LIMIT_CACHE: { match: async (k) => cache.get(String(k.url || k))?.clone(), put: async (k, r) => { cache.set(String(k.url || k), r); } }, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions', INFERENCE: { fetch: async (_u, init) => { system = JSON.parse(init.body).messages[0].content; return Response.json({ choices: [{ message: { content: 'Привет.' } }] }); } } };
+  const cookie = (await makeSession(e, newAnonLogin())).split(';')[0];
+  const body = { lang: 'uk', ui: 'uk', ai: { ai: 'wolf' }, history: [{ role: 'assistant', content: 'Все добре, дякую!' }, { role: 'user', content: 'Все добрые, ты кто?' }] };
+  const res = await handle(new Request('https://chat.test/api/talk', { method: 'POST', headers: { cookie, origin: 'https://chat.test', 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' }, body: JSON.stringify(body) }), e, { fetchImpl: async () => Response.json({}) });
+  expect(res.status).toBe(200);
+  expect(system).toContain('Reply only in Russian');
+});
