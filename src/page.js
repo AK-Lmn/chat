@@ -319,6 +319,8 @@ html.nt .cats{justify-content:center}
 html.nt .rail button[aria-pressed=true]{color:var(--ink)}
 .tpill{display:none;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);border:1px solid var(--line2);background:var(--panel);border-radius:var(--radius);padding:4px 6px 4px 12px;margin:0 0 18px}.tpill em{font-style:normal;font-size:11.5px;background:var(--tint);color:var(--ink);border-radius:var(--radius);padding:2px 8px}
 .look{display:inline-flex;align-items:center;gap:4px;margin-left:6px;white-space:nowrap}.look select{font:12px var(--sans);color:var(--dim);background:transparent;border:1px solid var(--line2);border-radius:var(--radius);padding:1px 4px}
+/* Phones: the look picker, the language switch and the Run button are at least 44px, the smallest comfortable tap. */
+@media (pointer:coarse){.look select{min-height:44px;font-size:16px;padding:0 10px}#langsw{min-height:44px;padding:0 10px}.send{min-width:44px;min-height:44px}.fine{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 8px}}
 /* Ivory and Soft glow: a big centred title, the box under it, round icon tiles. */
 /* New looks set only the shared Flisk theme tokens (flisk-sh/flisk-themes); the chat's own names read them. */
 html.nt{--bg:var(--flisk-bg);--panel:var(--flisk-surface);--side:var(--flisk-raised);--ink:var(--flisk-ink);--dim:var(--flisk-muted);--line:var(--flisk-line);--green:var(--flisk-accent);--green-d:var(--flisk-accent-ink);--radius:var(--flisk-radius)}
