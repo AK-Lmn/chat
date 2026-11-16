@@ -5,11 +5,15 @@
   "scripts": {
     "test": "bun test test && node --test scripts/*.test.mjs evals/answers/*.test.mjs",
     "eval": "node evals/answers/run.mjs",
+    "test:mobile": "node scripts/mobile-qa.mjs https://chat.flisk.si/",
     "eval:loop": "node evals/answers/loop.mjs",
     "check:radius": "node scripts/check-radius.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "msedge-tts": "2.1.1"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.1"
   }
 }
