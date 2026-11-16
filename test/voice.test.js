@@ -496,11 +496,12 @@ test('voice: Ava speaks slowly, and the daily read-aloud caps cover a few long t
   expect(SPEAK_PER_DAY).toBeGreaterThanOrEqual(2000);
 });
 
-test('voice: Ava gets a few seconds head start before the robotic Melo backup is asked', async () => {
-  const { AVA_HEAD_START_MS } = await import('../src/index.js');
-  expect(AVA_HEAD_START_MS).toBeGreaterThanOrEqual(2500);
+test('voice: Ava is the only voice, asked again on a new connection, never the robotic Melo', async () => {
+  const { AVA_RETRY_MS } = await import('../src/index.js');
+  expect(AVA_RETRY_MS).toBeLessThanOrEqual(2000);
   const src = await Bun.file(new URL('../src/index.js', import.meta.url)).text();
-  expect(src).toContain('backup: meloBackup(env, lang), hedgeMs: AVA_HEAD_START_MS');
+  expect(src).toContain('{ info, hedgeMs: AVA_RETRY_MS }');
+  expect(src).not.toContain('backup: meloBackup(env, lang)');
 });
 
 import { sentenceSplitter, splitReply } from '../src/talk-stream.js';
