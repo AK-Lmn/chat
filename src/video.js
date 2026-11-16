@@ -12,6 +12,25 @@ const b64 = (bytes) => {
   return btoa(s);
 };
 
+// Native Microsoft voices for languages where Ava (an English-locale voice) speaks with the wrong accent: Ukrainian read by
+// Ava sounds Belarusian. Anything not listed keeps Ava Multilingual.
+export const VIDEO_VOICES = { uk: 'uk-UA-PolinaNeural', ru: 'ru-RU-SvetlanaNeural', pl: 'pl-PL-ZofiaNeural', nl: 'nl-NL-FennaNeural', es: 'es-ES-ElviraNeural', de: 'de-DE-KatjaNeural', pt: 'pt-BR-FranciscaNeural', fr: 'fr-FR-DeniseNeural', it: 'it-IT-ElsaNeural', tr: 'tr-TR-EmelNeural', cs: 'cs-CZ-VlastaNeural', bg: 'bg-BG-KalinaNeural' };
+export const VIDEO_VOICE = 'en-US-AvaMultilingualNeural';
+
+// Which language the words are in. The model names it ("lang": "uk"); when it does not, or says something odd, the letters
+// decide: і ї є ґ only exist in Ukrainian, ы э ъ ё only in Russian, ў only in Belarusian.
+export function detectLang(text = '') {
+  const t = String(text);
+  if (/[іїєґІЇЄҐ]/.test(t)) return 'uk';
+  if (/[ўЎ]/.test(t)) return 'be';
+  if (/[ыэъёЫЭЪЁ]/.test(t)) return 'ru';
+  if (/[\u0400-\u04FF]/.test(t)) return 'uk';
+  if (/[ąćęłńśźżĄĆĘŁŃŚŹŻ]/.test(t)) return 'pl';
+  if (/[ğşİıĞŞ]/.test(t)) return 'tr';
+  return 'en';
+}
+export const videoVoice = (lang) => VIDEO_VOICES[String(lang || '').slice(0, 2).toLowerCase()] || VIDEO_VOICE;
+
 // Keeps only what the script can draw and say.
 export function cleanVideo(v) {
   if (!v || typeof v !== 'object' || !Array.isArray(v.scenes)) return null;
@@ -21,7 +40,12 @@ export function cleanVideo(v) {
     .filter((sc) => sc.text || sc.say)
     .slice(0, MAX_SCENES);
   if (!scenes.length) return null;
-  return { title: s(v.title, 60) || scenes[0].text.slice(0, 60), scenes };
+  const title = s(v.title, 60) || scenes[0].text.slice(0, 60);
+  const said = String(v.lang || '').toLowerCase().slice(0, 2);
+  // The model's own pick wins, unless the words clearly say otherwise (it called a Ukrainian video "ru" or "en").
+  const found = detectLang([title, ...scenes.map((sc) => sc.text + ' ' + sc.say)].join(' '));
+  const lang = /^[a-z]{2}$/.test(said) && !(said === 'en' && found !== 'en') && !(found === 'uk' && said !== 'uk') ? said : found;
+  return { title, lang, voice: videoVoice(lang), scenes };
 }
 
 export const VIDEO_PY = String.raw`import asyncio, json, os, re, subprocess, sys, textwrap
@@ -32,7 +56,26 @@ W, H = 854, 480
 LOOKS = [((247,246,242),(27,27,24),(47,125,74)), ((15,20,38),(251,250,247),(111,240,174)), ((246,210,194),(113,43,19),(113,43,19)), ((201,237,228),(8,80,65),(8,80,65))]
 spec = json.load(open('scenes.json'))
 
+# Pillow's built-in font has no Cyrillic (or Greek, Polish accents...), so look for DejaVu Sans, which has them, on the
+# computer, then fetch it once. The built-in font is the last resort (Latin only).
+FONT_FILES = ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf', '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf', '/Library/Fonts/Arial Bold.ttf', 'DejaVuSans-Bold.ttf']
+FONT_URLS = ['https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf', 'https://unpkg.com/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf']
+def find_font():
+    for f in FONT_FILES:
+        if os.path.exists(f) and os.path.getsize(f) > 10000: return f
+    import urllib.request
+    for u in FONT_URLS:
+        try:
+            urllib.request.urlretrieve(u, 'DejaVuSans-Bold.ttf')
+            if os.path.getsize('DejaVuSans-Bold.ttf') > 10000: return 'DejaVuSans-Bold.ttf'
+        except Exception as e:
+            print('font download failed: %s' % e, file=sys.stderr)
+    return None
+FONT_FILE = find_font()
 def font(size):
+    if FONT_FILE:
+        try: return ImageFont.truetype(FONT_FILE, size)
+        except Exception: pass
     try: return ImageFont.load_default(size=size)
     except TypeError: return ImageFont.load_default()
 
@@ -41,8 +84,8 @@ def slide(i, sc, path):
     im = Image.new('RGB', (W, H), bg); d = ImageDraw.Draw(im)
     d.rectangle([48, 52, 96, 58], fill=acc)
     d.text((48, 70), spec['title'], font=font(20), fill=acc)
-    big = font(46 if len(sc['text']) < 40 else 36)
-    lines = textwrap.wrap(sc['text'] or sc['say'], 26 if len(sc['text']) < 40 else 34)[:5]
+    big = font(42 if len(sc['text']) < 40 else 32)
+    lines = textwrap.wrap(sc['text'] or sc['say'], 20 if len(sc['text']) < 40 else 26)[:5]
     y = (H - len(lines) * 58) // 2 + 20
     for ln in lines:
         d.text((48, y), ln, font=big, fill=ink); y += 58
@@ -56,7 +99,7 @@ def length(media):
 
 async def voice(text, out):
     import edge_tts
-    await edge_tts.Communicate(text, 'en-US-AvaMultilingualNeural', rate='-5%').save(out)
+    await edge_tts.Communicate(text, spec.get('voice') or 'en-US-AvaMultilingualNeural', rate='-5%').save(out)
 
 clips = []
 for i, sc in enumerate(spec['scenes']):
