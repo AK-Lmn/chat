@@ -381,6 +381,8 @@ html[data-theme=earth].home .side{background:rgba(0,0,0,.4);backdrop-filter:blur
 @media (max-width:860px){.composer .bar{gap:8px}.composer .bar .grow{display:none}.composer .bar #mic:not([hidden]){margin-left:auto}.composer .bar #go{margin-left:auto}.composer .bar #mic:not([hidden])+#go{margin-left:0}.plusmenu .modes{display:flex;flex:none;width:100%;margin:0 0 4px}.plusmenu .mp{flex:none}.plusmenu .modes .md{flex:1;min-width:0}}
 /* Generated pictures reserve their square so the page does not jump when they load; the top bar scrolls instead of clipping. */
 .gimg img{aspect-ratio:1/1;object-fit:cover}flisk-bar{display:block;max-width:100vw;overflow-x:auto}
+/* Key form on phones: note on top, full-width 44px Save / Remove under it, 16px fields so iOS does not zoom. */
+@media (max-width:860px){#byo .bystat{flex-direction:column;align-items:stretch;gap:10px}#byo .byacts{width:100%}#byo .byacts button{flex:1;height:44px;font-size:13px}#byo input{font-size:16px;min-height:44px}#byo .byrev{margin-top:4px}.plusmenu:has(#mppop:not([hidden]))>:not(.mp){display:none}}
 @media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}.md{padding:0 8px}.composer .bar{gap:6px}}
 /* Earth type: terafab-thin. Everything is Inter 300, big headings 200, nothing above 400, so no bold anywhere. */
 html[data-theme=earth] body,html[data-theme=earth] body *{font-weight:300}

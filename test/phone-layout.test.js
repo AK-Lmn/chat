@@ -68,3 +68,9 @@ test('generated pictures reserve a square and keep their top in view when they l
 test('the shared top bar scrolls instead of clipping on narrow phones', () => {
   expect(page).toContain('flisk-bar{display:block;max-width:100vw;overflow-x:auto}');
 });
+
+test('the API key form stacks Save and Remove as full-width 44px buttons on phones', () => {
+  expect(page).toContain('#byo .bystat{flex-direction:column;align-items:stretch');
+  expect(page).toContain('#byo .byacts button{flex:1;height:44px');
+  expect(page).toContain('.plusmenu:has(#mppop:not([hidden]))>:not(.mp){display:none}');
+});
