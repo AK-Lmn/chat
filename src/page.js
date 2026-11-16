@@ -124,6 +124,7 @@ a{color:var(--green)}button{font:inherit;color:inherit}
 .st.live .si{background:#FAEEDA;color:#854F0B;animation:pulse 1.2s ease-in-out infinite}
 .st.ok .si{background:var(--tint);color:var(--green)}.st.bad .si{background:#FEF3F2;color:var(--red)}
 .st .t{overflow-wrap:anywhere}.st .t code{font:13px var(--mono);background:rgba(27,27,24,.05);border-radius:var(--radius);padding:1px 5px}
+.wcard{margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--panel)}.wh{font-size:13px;color:var(--dim);margin-bottom:8px}.wrow{display:flex;gap:8px}.wrow input{flex:1;font:13px var(--mono);padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:transparent;color:inherit}.wcard pre{margin:8px 0 0;font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
 .st pre{margin:6px 0 0;font:12px/1.5 var(--mono);color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word}
 @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,163,59,.45)}70%{box-shadow:0 0 0 6px rgba(232,163,59,0)}}
@@ -1246,6 +1247,7 @@ async function run(task){
     else if(ev.type==='write'){step('Wrote '+code(ev.path)+' '+txt('('+Number(ev.bytes||0).toLocaleString()+' characters)'),'','pen');ws.textContent='Writing files';}
     else if(ev.type==='read')step('Read '+code(ev.path),'','file');
     else if(ev.type==='publish'){step('Publishing '+code(ev.path),'','upload');ws.textContent='Publishing';}
+    else if(ev.type==='worker'){step('Running '+code(ev.path)+' as a Worker in this tab','','server');const w=workerCard(ev);if(w){turn.appendChild(w);down();}}
     else if(ev.type==='site'){step('Drawing a '+txt(ev.layout)+' page: '+txt(ev.title),'','layers');ws.textContent='Publishing';}
     else if(ev.type==='image_start'){step('Drawing the picture','','image');ws.textContent='Drawing the picture';}
     else if(ev.type==='photo'){step('Drawing the photo for the page','','image');ws.textContent='Drawing the photo';}
@@ -1289,6 +1291,27 @@ async function run(task){
   if(link)turn.appendChild(siteCard(link));
   if(video)turn.appendChild(videoCard(video));
   if(turn.offsetHeight>scroller.clientHeight-60)turn.scrollIntoView({block:'start'});else down();go.disabled=false;box.focus();
+}
+// A Cloudflare Worker the task wrote, run in this tab (cfworker2browser, served next to the pod). The visitor sends it requests.
+async function runWorker(code){
+  const base=new URL('../cfworker2browser/',window.__POD__).href;
+  const m=await import(base+'src/index.js');
+  const entry=URL.createObjectURL(new Blob(['import '+JSON.stringify(base+'src/worker-entry.js')+';'],{type:'text/javascript'}));
+  return m.startWorker({code,entry});
+}
+function workerCard(ev){
+  if(!window.__POD__)return null;
+  const c=node('div','wcard'),h=node('div','wh','A Worker running in this tab. Nothing was deployed: closing the tab ends it.');
+  const row=node('div','wrow'),inp=node('input');inp.value='GET /';inp.setAttribute('aria-label','Request: method and path');
+  const go=node('button','btn','Send');go.type='button';const o=node('pre','','');
+  let wp=null;
+  const send=async()=>{go.disabled=true;try{const parts=inp.value.trim().split(/\s+/);const method=parts.length>1?parts[0].toUpperCase():'GET';const path=parts.length>1?parts[1]:parts[0];
+    if(!wp)wp=runWorker(ev.code);const w=await wp;
+    const init={method};if(!['GET','HEAD'].includes(method)){const b=prompt('Body to send (text, usually JSON)','{}');init.body=b==null?'{}':b;init.headers={'content-type':'application/json'};}
+    const r=await w.fetch('https://worker.local'+(path.startsWith('/')?path:'/'+path),init);const t=await r.text();o.textContent=r.status+' '+r.statusText+'\\n'+t.slice(0,4000);}
+  catch(e){wp=null;o.textContent='Could not run it: '+String(e&&e.message||e);}go.disabled=false;};
+  go.onclick=send;inp.onkeydown=(e)=>{if(e.key==='Enter')send();};
+  row.append(inp,go);c.append(h,row,o);return c;
 }
 // The computer in this tab (fleet's browser pod): a small Linux on WebAssembly. Loaded on the first task that needs it.
 const podOk=()=>!!window.__POD__&&typeof WebAssembly==='object'&&typeof WebSocket==='function';

@@ -225,7 +225,7 @@ describe('the page', () => {
     const e = env();
     const res = await handle(new Request(`${ORIGIN}/`), e);
     const csp = res.headers.get('content-security-policy');
-    expect(csp).toMatch(/script-src [^;]*'wasm-unsafe-eval' https:\/\/fleet\.test\/browserpod\/( |;)/);
+    expect(csp).toMatch(/script-src [^;]*'wasm-unsafe-eval' blob: https:\/\/fleet\.test\/browserpod\/ https:\/\/fleet\.test\/cfworker2browser\/( |;)/);
     expect(csp).toMatch(/connect-src 'self' wss:\/\/chat\.test https:\/\/fleet\.test\/browserpod\/ /);
     expect(csp).toEndWith('; worker-src blob:');
     expect(csp).not.toContain("'unsafe-eval'");

@@ -32,3 +32,7 @@ test('a reply cut at the length limit is retried with "write a smaller file", th
   expect(Object.keys(files)).toEqual(['~/site/index.html']);
   expect(r.answer).not.toContain('"write"');
 });
+
+test('a {"worker": path} action is read as a Worker to run in the tab', () => {
+  expect(parseAction('{"worker": "worker.js"}')).toEqual({ type: 'worker', path: 'worker.js' });
+});
