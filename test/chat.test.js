@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
-import { parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { parseAction, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { modelLabel, resolveModel } from '../src/model.js';
 import { EARTH_JS, shortCount, THREE_SRC, USERS, USERS_DATE } from '../src/earth.js';
 import { makeSession } from '../src/session.js';

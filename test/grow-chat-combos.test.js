@@ -5,7 +5,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseWidget, WIDGETS } from '../src/widgets.js';
-import { runTask, SYSTEM } from '../src/loop.js';
+import { runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { appPage } from '../src/page.js';
 
 const report = { score: 64, grade: 'D', checks: [{ title: 'Readable without JavaScript', status: 'fail', summary: 'Thin HTML.' }] };

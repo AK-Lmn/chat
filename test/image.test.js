@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { appPage } from '../src/page.js';
-import { asksImage, cleanSvg, inlineLocal, parseAction, runTask, SYSTEM } from '../src/loop.js';
+import { asksImage, cleanSvg, inlineLocal, parseAction, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 import { imageIntent } from '../src/model.js';
 import { handle, saveImage } from '../src/index.js';
 import { fakeD1 } from './d1.js';

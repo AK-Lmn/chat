@@ -1,7 +1,8 @@
 // The answer loop: measure -> propose -> measure again -> keep only what scores better. The model is only ever the
 // thing being measured or the thing proposing a rewrite; the decision to keep a rewrite is made by score.mjs alone.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseAction, SYSTEM } from '../../src/loop.js';
+import { parseAction } from '../../src/loop.js';
+import { SYSTEM } from '../../src/prompt.js';
 import { ANSWER_STYLE } from '../../src/answer-style.js';
 import { sourcesNote, splitPoints, wantsLookup, withSources } from '../../src/lookup.js';
 import { summarize, unsupportedYears } from './score.mjs';

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { asksToBuild, runTask, SYSTEM } from '../src/loop.js';
+import { runTask } from '../src/loop.js';
+import { asksToBuild, SYSTEM } from '../src/prompt.js';
 
 const INSTALL = '{"run":"curl -fsSL https://flisk.sh/install.sh | sh; cd ~ && flisk create app --frontend vanilla --language node --yes"}';
 

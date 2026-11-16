@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { appPage } from '../src/page.js';
-import { inlineLocal, localImages, MAX_LAYOUT_BYTES, runTask, SYSTEM } from '../src/loop.js';
+import { inlineLocal, localImages, MAX_LAYOUT_BYTES, runTask } from '../src/loop.js';
+import { SYSTEM } from '../src/prompt.js';
 
 const scripted = (...texts) => { let i = 0; return async () => ({ text: texts[Math.min(i++, texts.length - 1)] }); };
 const disk = (files) => async (path) => (path in files ? { status: 200, data: { encoding: 'utf8', content: files[path] } } : { error: `No such file: ${path}` });
