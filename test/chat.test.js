@@ -1122,3 +1122,9 @@ test('the composer has a Chat / Build / Create switch next to the model picker, 
   expect(h.indexOf('class="modes"')).toBeGreaterThan(h.indexOf('id="plusmenu"') + h.slice(h.indexOf('id="plusmenu"')).indexOf('</div>'));
   expect(h).toContain("setMode(m0)");
 });
+
+test('a ?voice=1 link opens the talk screen on the first tap', () => {
+  const page = appPageUi({ login: 'ann', connected: [] });
+  expect(page).toContain("get('voice')");
+  expect(page).toContain('Tap anywhere to start talking');
+});

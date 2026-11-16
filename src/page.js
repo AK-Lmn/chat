@@ -1127,6 +1127,13 @@ orb.onclick=()=>{if(!oOn)return;if(oSpeaking&&oracle._endSpeak){oracle._endSpeak
 $('oend').onclick=oClose;
 document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&!oracle.hidden)oClose();});
 $('orbbtn').onclick=()=>{unlockAudio();oOpen();};
+// A link with ?voice=1 (chat.flisk.si/?flisk_theme=ivory&voice=1) opens the talk screen. A browser only lets the page use the
+// speaker and microphone after a tap, so the first tap anywhere starts it, and a small note says so.
+{let want=false;try{want=/^(1|true|talk)$/.test(new URLSearchParams(location.search).get('voice')||'');}catch(e){}
+if(want){const n=document.createElement('div');n.textContent='Tap anywhere to start talking';n.setAttribute('role','status');
+n.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:90;padding:10px 18px;border-radius:var(--radius);background:#111;color:#fff;font:600 14px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.3);pointer-events:none';
+document.body.appendChild(n);
+document.addEventListener('pointerdown',(e)=>{n.remove();if(e.target.closest&&e.target.closest('#orbbtn,#oracle'))return;if(oracle.hidden){unlockAudio();oOpen();}},{once:true});}}
 const secs=(ms)=>Math.max(0,Math.round(ms/1000))+'s';
 // Step icons, from Lucide (lucide.dev, ISC license): each kind of step gets its own, the way T3 Code shows tool calls.
 const SI={terminal:'<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
