@@ -124,7 +124,7 @@ a{color:var(--green)}button{font:inherit;color:inherit}
 .st.live .si{background:#FAEEDA;color:#854F0B;animation:pulse 1.2s ease-in-out infinite}
 .st.ok .si{background:var(--tint);color:var(--green)}.st.bad .si{background:#FEF3F2;color:var(--red)}
 .st .t{overflow-wrap:anywhere}.st .t code{font:13px var(--mono);background:rgba(27,27,24,.05);border-radius:var(--radius);padding:1px 5px}
-.wcard{margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--panel)}.wh{font-size:13px;color:var(--dim);margin-bottom:8px}.wrow{display:flex;gap:8px}.wrow input{flex:1;font:13px var(--mono);padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:transparent;color:inherit}.wcard pre{margin:8px 0 0;font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
+.wcard{margin-top:12px;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--panel)}.wh{font-size:13px;color:var(--dim);margin-bottom:8px}.wrow{display:flex;gap:8px}.wchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.wchips .btn{font:12px var(--mono);padding:4px 8px}.wrow input{flex:1;font:13px var(--mono);padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:transparent;color:inherit}.wcard pre{margin:8px 0 0;font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
 .st pre{margin:6px 0 0;font:12px/1.5 var(--mono);color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:8px 10px;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word}
 @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,163,59,.45)}70%{box-shadow:0 0 0 6px rgba(232,163,59,0)}}
@@ -1310,8 +1310,10 @@ function workerCard(ev){
     const init={method};if(!['GET','HEAD'].includes(method)){const b=prompt('Body to send (text, usually JSON)','{}');init.body=b==null?'{}':b;init.headers={'content-type':'application/json'};}
     const r=await w.fetch('https://worker.local'+(path.startsWith('/')?path:'/'+path),init);const t=await r.text();o.textContent=r.status+' '+r.statusText+'\\n'+t.slice(0,4000);}
   catch(e){wp=null;o.textContent='Could not run it: '+String(e&&e.message||e);}go.disabled=false;};
+  const paths=[];String(ev.code||'').replace(/["']([/][A-Za-z0-9_\\-/.:]*)["']/g,(m,x)=>{if(x.length>1&&!paths.includes(x)&&paths.length<6)paths.push(x);return m;});
+  const chips=node('div','wchips');paths.forEach((x)=>{const b=node('button','btn',x);b.type='button';b.onclick=()=>{inp.value='GET '+x;send();};chips.appendChild(b);});
   go.onclick=send;inp.onkeydown=(e)=>{if(e.key==='Enter')send();};
-  row.append(inp,go);c.append(h,row,o);return c;
+  row.append(inp,go);c.append(h,row);if(paths.length)c.append(chips);c.append(o);return c;
 }
 // The computer in this tab (fleet's browser pod): a small Linux on WebAssembly. Loaded on the first task that needs it.
 const podOk=()=>!!window.__POD__&&typeof WebAssembly==='object'&&typeof WebSocket==='function';

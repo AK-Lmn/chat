@@ -26,7 +26,7 @@ const API = `export default {
     const url = new URL(req.url);
     if (url.pathname === '/hello') return Response.json({ hello: 'from a Worker running in your tab', at: new Date().toISOString() });
     if (url.pathname === '/count') { globalThis.n = (globalThis.n || 0) + 1; return Response.json({ visits: globalThis.n }); }
-    return new Response('Try GET /hello or GET /count', { headers: { 'content-type': 'text/plain' } });
+    return new Response('Not found. Try GET /hello or GET /count', { status: 404, headers: { 'content-type': 'text/plain' } });
   }
 };`;
 const SCRIPT = process.env.API ? [JSON.stringify({ write: { path: 'worker.js', content: API } }), '{"worker":"worker.js"}', '{"say":"Your small API is running in this tab. Use the card above: send GET /hello or GET /count."}'] : [JSON.stringify({ write: { path: 'site/index.html', content: SITE } }), '{"run":"uname -sm && ls -la site && wc -c site/index.html"}', '{"publish":"site/index.html"}', '{"say":"Your coffee website is live. It was made on the small Linux inside this browser tab."}'];
