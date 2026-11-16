@@ -53,3 +53,9 @@ test('on a phone the sidebar drawer is opaque on the Earth home (the page text m
 test('touch screens get 44px tap targets on the box buttons, menu button and mode switch', () => {
   expect(page).toContain('@media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}');
 });
+
+test('phone composer puts the modes on their own row and shrinks the model picker to an icon', () => {
+  const src = require('fs').readFileSync(new URL('../src/page.js', import.meta.url), 'utf8');
+  expect(src).toContain('.composer .bar .modes{order:-1;width:100%;margin:0;display:flex}');
+  expect(src).toContain('.composer .bar .mpname,.composer .bar #mpbtn .chev{display:none}');
+});

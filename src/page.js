@@ -377,6 +377,8 @@ html[data-theme=earth] flisk-bar::part(tone),html[data-theme=earth] .brand .logo
 html[data-theme=earth].home .side{background:rgba(0,0,0,.4);backdrop-filter:blur(14px)}
 @media (max-width:860px){html[data-theme=earth].home .side{background:#0b0b0c;backdrop-filter:none}}
 /* Thumb-sized targets (44px, the iOS guideline) on touch screens. */
+/* Phone composer: modes on one full-width row, then + / model icon / mic / send. */
+@media (max-width:860px){.composer .bar{flex-wrap:wrap;gap:8px}.composer .bar .modes{order:-1;width:100%;margin:0;display:flex}.composer .bar .modes .md{flex:1;min-width:0}.composer .bar .grow{display:none}.composer .bar .mpname,.composer .bar #mpbtn .chev{display:none}.composer .bar .mp{margin-left:auto}.composer .bar #mic:not([hidden]){margin-left:0}.composer .bar #go{margin-left:0}}
 @media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}.md{padding:0 8px}.composer .bar{gap:6px}}
 /* Earth type: terafab-thin. Everything is Inter 300, big headings 200, nothing above 400, so no bold anywhere. */
 html[data-theme=earth] body,html[data-theme=earth] body *{font-weight:300}
