@@ -2,7 +2,7 @@
 // the same Flisk Oracle prompt as voice talk, and Alexa speaks it in its own voice.
 // Auth: Amazon cannot add headers, so the endpoint URL carries a secret (?key=ALEXA_KEY); the skill id and the request
 // age are checked too. Own-account (development) skills need no Amazon review.
-import { talkMessages, talkReply } from './index.js';
+import { talkMessages, talkReply } from './voice.js';
 
 export const ALEXA_PER_DAY = 300;
 const MAX_AGE_MS = 150_000;
