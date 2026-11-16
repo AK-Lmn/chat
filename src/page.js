@@ -377,8 +377,10 @@ html[data-theme=earth] flisk-bar::part(tone),html[data-theme=earth] .brand .logo
 html[data-theme=earth].home .side{background:rgba(0,0,0,.4);backdrop-filter:blur(14px)}
 @media (max-width:860px){html[data-theme=earth].home .side{background:#0b0b0c;backdrop-filter:none}}
 /* Thumb-sized targets (44px, the iOS guideline) on touch screens. */
-/* Phone composer: modes on one full-width row, then + / model icon / mic / send. */
-@media (max-width:860px){.composer .bar{flex-wrap:wrap;gap:8px}.composer .bar .modes{order:-1;width:100%;margin:0;display:flex}.composer .bar .modes .md{flex:1;min-width:0}.composer .bar .grow{display:none}.composer .bar .mpname,.composer .bar #mpbtn .chev{display:none}.composer .bar .mp{margin-left:auto}.composer .bar #mic:not([hidden]){margin-left:0}.composer .bar #go{margin-left:0}}
+/* Phone composer: + , mic, send. Modes and the model picker live in the + menu (moved by script below). */
+@media (max-width:860px){.composer .bar{gap:8px}.composer .bar .grow{display:none}.composer .bar #mic:not([hidden]){margin-left:auto}.composer .bar #go{margin-left:auto}.composer .bar #mic:not([hidden])+#go{margin-left:0}.plusmenu .modes{display:flex;flex:none;width:100%;margin:0 0 4px}.plusmenu .mp{flex:none}.plusmenu .modes .md{flex:1;min-width:0}}
+/* Generated pictures reserve their square so the page does not jump when they load; the top bar scrolls instead of clipping. */
+.gimg img{aspect-ratio:1/1;object-fit:cover}flisk-bar{display:block;max-width:100vw;overflow-x:auto}
 @media (pointer:coarse){.iconbtn,.chip,.md,#mic,.excta>button{min-height:44px;min-width:44px}.composer .send{width:44px;height:44px}#newchat{min-height:44px}.md{padding:0 8px}.composer .bar{gap:6px}}
 /* Earth type: terafab-thin. Everything is Inter 300, big headings 200, nothing above 400, so no bold anywhere. */
 html[data-theme=earth] body,html[data-theme=earth] body *{font-weight:300}
@@ -568,7 +570,7 @@ const inl=(p,s)=>{String(s).split(/(\\[[^\\]]+\\]+\\(https?:\\/\\/[^\\s)]+\\)|\\
   else p.appendChild(document.createTextNode(t));});};
 const LI=/^\\s*([-*]|\\d+[.)])\\s+(.*)/;
 // A picture chat drew: shown big in the answer, the way ChatGPT shows one, with a button to save it.
-const picture=(src,alt)=>{const f=node('figure','gimg'),a=document.createElement('a'),im=document.createElement('img');a.href=src;a.target='_blank';a.rel='noopener';im.src=src;im.alt=alt||'';im.loading='lazy';im.onload=down;a.appendChild(im);
+const picture=(src,alt)=>{const f=node('figure','gimg'),a=document.createElement('a'),im=document.createElement('img');a.href=src;a.target='_blank';a.rel='noopener';im.src=src;im.alt=alt||'';im.loading='lazy';im.onload=()=>{f.scrollIntoView({block:'nearest'});};a.appendChild(im);
   const bar=node('div','gimgbar'),sv=node('button','btn','Save picture');sv.type='button';
   const give=(b,ext)=>{const u=URL.createObjectURL(b),x=document.createElement('a');x.href=u;x.download='flisk-picture.'+ext;document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);};
   sv.onclick=async()=>{try{const b=await (await fetch(src)).blob();
@@ -866,6 +868,9 @@ let m0='chat';try{m0=localStorage.getItem('chat_mode')||'chat'}catch(e){}if(!MOD
 if(pm&&cats)pm.prepend(cats);
 const setPlus=(on)=>{document.documentElement.classList.toggle('plus',on);if(pb)pb.setAttribute('aria-expanded',String(on));if(on)placeFloat(pm,pb);};
 if(pb)pb.onclick=()=>setPlus(!document.documentElement.classList.contains('plus'));
+{const mq=matchMedia('(max-width:860px)'),md=document.querySelector('.modes'),mp=document.getElementById('mp'),bar=document.querySelector('.composer .bar'),gr=bar&&bar.querySelector('.grow');
+const place=()=>{if(!pm||!md||!mp)return;if(mq.matches){pm.prepend(md);pm.insertBefore(mp,md.nextSibling);}else if(gr){bar.insertBefore(md,gr);bar.insertBefore(mp,gr.nextSibling);}};
+place();mq.addEventListener('change',place);if(md)md.addEventListener('click',()=>{if(mq.matches)setTimeout(()=>setPlus(false),0);});}
 // A kind of task picked in the + menu shows its result: the menu closes, the box says what to type, and the ideas list opens (on Earth it sits behind "Try an idea").
 const CATHINT={website:'Describe the website to make',app:'Describe the small app to make',system:'Describe the system and its parts',answer:'Ask anything',video:'Describe the video to make',check:'Paste the address of the page to check'};
 if(pm)pm.querySelectorAll('.cat').forEach(b=>b.addEventListener('click',()=>{const t=document.getElementById('task');if(t&&CATHINT[b.dataset.cat])t.placeholder=CATHINT[b.dataset.cat];setPlus(false);const ti=document.querySelector('[data-ex=ideas]');if(ti&&ti.getAttribute('aria-expanded')!=='true')ti.click();const sg=document.getElementById('sugg');if(sg&&sg.offsetParent)sg.scrollIntoView({block:'nearest',behavior:'smooth'});if(t)t.focus();}));
