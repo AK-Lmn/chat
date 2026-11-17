@@ -103,13 +103,21 @@ export function playbooksFor(task) {
 export const SYSTEM = systemFor(MAX_STEPS);
 
 // A small model reads the one-app recipe and skips the "system" action: for a bigger app, say so plainly and last.
+const WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8 };
+// "write 4 service.jsons", "three services": the number of parts the user named, if any.
+export function serviceCount(task) {
+  const m = /\b(\d{1,2}|two|three|four|five|six|seven|eight)\s+(?:micro)?(?:services?|service[ .-]?jsons?)\b/i.exec(String(task));
+  const n = m ? (WORDS[m[1].toLowerCase()] || Number(m[1])) : 0;
+  return n >= 2 && n <= MAX_SERVICES ? n : 0;
+}
 export const isBigApp = (task) => BIG_APP.test(String(task));
-const BIG_APP = /\b(crm|erp|back office|platform|services|microservices?|suite|bigger app|system of services)\b/i;
+const BIG_APP = /\b(crm|erp|back office|platform|services|service[ .-]?jsons?|microservices?|suite|bigger app|system of services)\b/i;
 
 // The whole system prompt for one task. `note` is extra instructions about the task's computer.
 export function taskPrompt({ task, maxSteps = MAX_STEPS, modelName = '', github, origin, note = '', lang, memo }) {
   // Asked "which model are you", the model would say it does not know: tell it what the visitor picked.
   const who = modelName ? `\n\nThe AI model behind you is ${String(modelName).slice(0, 120)}. If the user asks which model you are, say that, in "say".` : '';
-  const force = isBigApp(task) ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' : '';
+  const count = serviceCount(task);
+  const force = isBigApp(task) ? '\n\nThis task is a bigger app with several parts: your FIRST action must be the "system" action described above. Do not run flisk create and do not write the app files yourself.' + (count ? ` The user asked for ${count} services (service.json files): the "system" action must list exactly ${count} services.` : '') : '';
   return systemFor(maxSteps) + who + force + playbooksFor(task) + sourceNote(task) + (asksAnalysis(task) ? ANALYSIS_NOTE : '') + (asksStats(task) ? STATS_NOTE : '') + (github === undefined ? '' : githubNote(github, origin)) + note + `\n\n${PRODUCT_FACTS}` + (replyRule(lang) ? `\n${replyRule(lang)} (This only sets the language of "say" and of the answer text.)` : '') + memoNote(memo);
 }
