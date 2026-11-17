@@ -1163,3 +1163,10 @@ test('phone tap targets are at least 44px for the look picker and language switc
   expect(page).toContain('.look select{min-height:44px');
   expect(page).toContain('#langsw{min-height:44px');
 });
+
+test('the first screen says what the product does and offers example tasks', () => {
+  const page = appPageUi({ login: null, connected: [] });
+  expect(page).toContain('Say what you want. A computer builds it.');
+  expect(page).toContain('Free, no sign-up.');
+  expect((page.match(/class="eg"/g) || []).length).toBe(3);
+});
