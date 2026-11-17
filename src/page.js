@@ -909,7 +909,7 @@ const picked=()=>opts.filter(o=>o.checked).map(o=>o.value);
 const syncSb=()=>{const p=picked();auto.checked=!p.length;const nm=p.map(x=>document.querySelector('input[value='+x+']').dataset.label).join(', ');sum.textContent=p.length?nm:'Fleet: cheapest first';const s2=$('sbsum2');if(s2)s2.textContent=p.length?nm:'Cheapest first';};
 auto.onchange=()=>{if(auto.checked)opts.forEach(o=>o.checked=false);syncSb();};opts.forEach(o=>o.onchange=syncSb);syncSb();
 {const MODE={chat:['answer','Ask anything or describe what to make'],build:['website','Describe the website, app or system to build'],create:['video','Describe the video to make']};const mb=document.querySelectorAll('.md:not([data-mode=voice])');
-const setMode=(m)=>{mb.forEach(b=>b.setAttribute('aria-checked',String(b.dataset.mode===m)));const t=document.getElementById('task');if(t)t.placeholder=MODE[m][1];if(typeof showCat==='function')showCat(MODE[m][0]);try{localStorage.setItem('chat_mode',m)}catch(e){}};
+const setMode=(m)=>{mb.forEach(b=>b.setAttribute('aria-checked',String(b.dataset.mode===m)));const t=document.getElementById('task');if(t)t.placeholder=MODE[m][1];window.__cat=MODE[m][0];if(typeof showCat==='function')showCat(MODE[m][0]);try{localStorage.setItem('chat_mode',m)}catch(e){}};
 mb.forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 // Voice is the fourth toggle: it is lit while the talk screen is open, and the earlier mode comes back when it closes.
 {const vb=document.querySelector('.md[data-mode=voice]'),ob=document.getElementById('orbbtn'),or=document.getElementById('oracle');
@@ -928,7 +928,7 @@ place();mq.addEventListener('change',place);{const px=document.getElementById('p
 if(md)md.addEventListener('click',()=>{if(mq.matches)setTimeout(()=>setPlus(false),0);});}
 // A kind of task picked in the + menu shows its result: the menu closes, the box says what to type, and the ideas list opens (on Earth it sits behind "Try an idea").
 const CATHINT={website:'Describe the website to make',app:'Describe the small app to make',system:'Describe the system and its parts',answer:'Ask anything',video:'Describe the video to make',check:'Paste the address of the page to check'};
-if(pm)pm.querySelectorAll('.cat').forEach(b=>b.addEventListener('click',()=>{const t=document.getElementById('task');if(t&&CATHINT[b.dataset.cat])t.placeholder=CATHINT[b.dataset.cat];setPlus(false);const ti=document.querySelector('[data-ex=ideas]');if(ti&&ti.getAttribute('aria-expanded')!=='true')ti.click();const sg=document.getElementById('sugg');if(sg&&sg.offsetParent)sg.scrollIntoView({block:'nearest',behavior:'smooth'});if(t)t.focus();}));
+if(pm)pm.querySelectorAll('.cat').forEach(b=>b.addEventListener('click',()=>{window.__cat=b.dataset.cat||'';const t=document.getElementById('task');if(t&&CATHINT[b.dataset.cat])t.placeholder=CATHINT[b.dataset.cat];setPlus(false);const ti=document.querySelector('[data-ex=ideas]');if(ti&&ti.getAttribute('aria-expanded')!=='true')ti.click();const sg=document.getElementById('sugg');if(sg&&sg.offsetParent)sg.scrollIntoView({block:'nearest',behavior:'smooth'});if(t)t.focus();}));
 const pkIn=pm&&pm.querySelector('details.pick');if(pkIn)pkIn.addEventListener('toggle',()=>{if(document.documentElement.classList.contains('plus'))placeFloat(pm,pb);if(pkIn.open)pkIn.scrollIntoView({block:'nearest'});});
 document.addEventListener('click',(e)=>{if(document.documentElement.classList.contains('plus')&&e.target.isConnected&&!e.target.closest('#plus,#plusmenu')&&!e.target.closest('.sidesec,.rcol'))setPlus(false);});
 document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&document.documentElement.classList.contains('plus'))setPlus(false);});}
@@ -1300,7 +1300,7 @@ async function run(task){
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
   try{
-    if(task.length>3)chatLang=langOf(task);const payload={pod:podNow,task,history,lang:chatLang,memo,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
+    if(task.length>3)chatLang=langOf(task);const payload={pod:podNow,cat:window.__cat||'',task,history,lang:chatLang,memo,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
     const res=await fetch('/api/run',{signal:ac.signal,method:'POST',headers:{'content-type':'application/json',accept:'application/x-ndjson'},body:JSON.stringify(payload)});
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.
