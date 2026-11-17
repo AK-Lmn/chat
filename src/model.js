@@ -267,6 +267,8 @@ function withNameGuesses(make, env, fetchImpl, chosen, trace = () => {}) {
   };
 }
 
+// Languages Llama 3.1 8B officially supports; anything else (Ukrainian, Russian, Arabic...) is steered to the stronger backups first.
+const WORKERS_AI_LANGS = new Set(['en', 'de', 'fr', 'it', 'pt', 'hi', 'es', 'th']);
 export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {}, trace = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);
   if (!chosen.free) return withNameGuesses(oneModel, env, fetchImpl, chosen, trace);
@@ -274,6 +276,9 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
   const workers = workersAiModel(env, overLimit);
   return async (messages, o = {}) => {
     const tried = [];
+    const lang = String(o.lang || '').slice(0, 2).toLowerCase();
+    // Llama 8B on Workers AI is weak outside its supported languages, so those requests try the stronger backups first.
+    const weakHere = !!lang && !WORKERS_AI_LANGS.has(lang);
     // Wolf is the planned first stop. Whoever answers instead is a reroute worth a row, with the reason.
     // Whether wolf was skipped is decided once, before anything runs, so a pause that ends mid-request cannot change the story.
     const skipped = now() < wolfOutUntil;
@@ -281,7 +286,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const rerouted = (by, model) => {
       if (by === 'wolf') return;
       const why = [skipped ? `wolf skipped: resting ${rest} more min after a limit` : '', ...tried].filter(Boolean).join('; ') || 'wolf did not answer';
-      trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: by, detail: `answered by ${model || by} after ${tried.length} failed` });
+      trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: model && model !== by ? `${by} (${model})` : by, detail: `answered by ${model || by} after ${tried.length} failed${lang ? ` · lang ${lang}` : ''}` });
     };
     if (now() >= wolfOutUntil) {
       const r = await wolf(messages, { effort: o.effort });
@@ -297,21 +302,29 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
         tried.push(`${id}: ${r.error}`);
       }
     }
-    const r = await workers(messages);
-    if (!r.error) { rerouted('workers-ai', WORKERS_AI_FALLBACK); return { ...r, by: WORKERS_AI_FALLBACK }; }
-    tried.push(`workers-ai: ${r.error}`);
-    if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
-      const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
-      if (!v.error) { rerouted('vercel', env.VERCEL_MODEL || VERCEL_MODEL); return { ...v, by: 'vercel' }; }
-      tried.push(`vercel: ${v.error}`);
-    }
-    if (env.NO_POLLINATIONS !== '1') {
-      const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
-      if (!p.error) { rerouted('pollinations', 'openai'); return { ...p, by: 'pollinations' }; }
-      tried.push(`pollinations: ${p.error}`);
-    }
+    const viaWorkers = async () => {
+      const r = await workers(messages);
+      if (!r.error) { rerouted('workers-ai', WORKERS_AI_FALLBACK); return { ...r, by: WORKERS_AI_FALLBACK }; }
+      tried.push(`workers-ai: ${r.error}`);
+      return null;
+    };
+    const viaBackups = async () => {
+      if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
+        const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
+        if (!v.error) { rerouted('vercel', env.VERCEL_MODEL || VERCEL_MODEL); return { ...v, by: 'vercel' }; }
+        tried.push(`vercel: ${v.error}`);
+      }
+      if (env.NO_POLLINATIONS !== '1') {
+        const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
+        if (!p.error) { rerouted('pollinations', 'openai'); return { ...p, by: 'pollinations' }; }
+        tried.push(`pollinations: ${p.error}`);
+      }
+      return null;
+    };
+    const order = weakHere ? [viaBackups, viaWorkers] : [viaWorkers, viaBackups];
+    for (const step of order) { const hit = await step(); if (hit) return hit; }
     log(tried);
-    trace({ kind: 'error', why: 'every free model failed', expected: 'wolf', actual: 'none', detail: tried.join('; ').slice(0, 300) });
+    trace({ kind: 'error', why: 'every free model failed', expected: 'wolf', actual: 'none', detail: `${tried.join('; ')}${lang ? ` · lang ${lang}` : ''}`.slice(0, 300) });
     return { error: FREE_BUSY, kind: 'busy' };
   };
 }

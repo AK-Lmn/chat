@@ -33,6 +33,8 @@ export function runEvents(result, problem, route = '/api/run', lang = '') {
   const said = detectLang(result.answer || '');
   const asked = String(lang || '').slice(0, 2).toLowerCase();
   if (asked && said && said !== asked) out.push({ route, kind: 'unexpected', why: `asked in ${asked}, answered in ${said}`, detail: `${result.provider || 'no provider'}`, ms: result.ms || 0 });
+  // The person picked a build kind, yet the model reached for a picture: the decision worth seeing next to the reroute rows.
+  if (result.refusedImage) out.push({ route, kind: 'unexpected', why: `picked ${result.picked}, model tried to draw a picture (refused ${result.refusedImage}x)`, detail: `${result.provider || 'no provider'}`, ms: result.ms || 0 });
   const ms = result.ms || 0;
   const steps = result.steps?.length || 0;
   const detail = `${steps} steps · ${result.stats?.errors || 0} failed · ${result.provider || 'no provider'}`;
@@ -42,7 +44,8 @@ export function runEvents(result, problem, route = '/api/run', lang = '') {
   if (podMs > 30_000) out.push({ route, kind: 'slow', why: `a computer took ${Math.round(podMs / 1000)} s to start`, detail, ms: podMs });
   if (result.stats?.refused === 1) out.push({ route, kind: 'unexpected', why: `chat refused the model once: ${result.stats.refusedWhy}`.slice(0, 200), detail, ms });
   if (/^\s*Flisk Wolf, a free model[^.]*\.?\s*$/i.test(result.answer || '')) out.push({ route, kind: 'unexpected', why: 'the answer says nothing useful', detail, ms });
-  const slow = steps ? ms / steps > SLOW_STEP_MS : ms > SLOW_ASK_MS;
+  // One step or none is a plain answer: 30 s is already slow. Only longer tasks (a site, a computer) get the per-step allowance.
+  const slow = steps > 1 ? ms / steps > SLOW_STEP_MS : ms > SLOW_ASK_MS;
   if (slow) out.push({ route, kind: 'slow', why: steps ? `a step took ${Math.round(ms / steps / 1000)} s on average` : `answered in ${Math.round(ms / 1000)} s`, detail, ms });
   return out;
 }
