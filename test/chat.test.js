@@ -216,10 +216,10 @@ describe('safety', () => {
     expect(home).toContain('grid-template-rows:minmax(0,1fr)');
     expect(home).toContain("pick=[kind]");
     expect(home).toContain("pop.addEventListener('keydown'");
-    for (const m of home.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(m[1])).not.toThrow();
+    for (const m of home.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(m[1])).not.toThrow();
     const app = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: await authed(e, 'a-b') } }), e, { fetchImpl: w.fetchImpl })).text();
     expect(app).toContain('@a-b');
-    for (const m of app.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(m[1])).not.toThrow();
+    for (const m of app.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(m[1])).not.toThrow();
   });
 });
 
@@ -330,7 +330,7 @@ describe('the two pickers', () => {
     expect(app).toMatch(/E2B<\/span><a class="cbtn" href="#setup">Connect<\/a>/);
     expect(app).toMatch(/Blaxel<\/span><a class="cbtn" href="https:\/\/fleet\.flisk\.si\/console\?section=providers"/);
     expect(app).toContain('<img src="data:image/svg+xml;base64,');
-    for (const m of app.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(m[1])).not.toThrow();
+    for (const m of app.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(m[1])).not.toThrow();
   });
 });
 
@@ -845,7 +845,7 @@ describe('the bar on a published page', () => {
 describe('a published page can save to localStorage inside the sandbox', () => {
   // The sandbox has no allow-same-origin, so the browser throws on localStorage; a throwing save killed every click handler.
   const run = (html, win) => {
-    const shim = /<script>([\s\S]*?)<\/script>/.exec(withStorageShim(html))[1];
+    const shim = /<script>([\s\S]*?)<\/script[^>]*>/i.exec(withStorageShim(html))[1];
     new Function('window', shim)(win);
     return win;
   };

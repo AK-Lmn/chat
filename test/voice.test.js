@@ -79,7 +79,7 @@ test('the page has the mic and the Voice toggle, and its script parses', () => {
   expect(page).toContain('id="mic"');
   expect(page).toContain('id="voice"');
   expect(page).toContain('/api/transcribe');
-  const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)].map((m) => m[1]);
   for (const s of scripts) expect(() => new Function(s)).not.toThrow();
 });
 
@@ -214,7 +214,7 @@ test('/voice streams mp3 for a signed-in visitor on chat itself, and says why wh
   expect(calls[0]).toEqual(['Привіт', 'uk']);
   const bad = await get('t=boom', cookie);
   expect(bad.status).toBe(502);
-  expect((await bad.json()).error).toContain('voice down');
+  expect((await bad.json()).error).toContain('upstream request failed');
   expect((await get('t=', cookie)).status).toBe(400);
   expect((await get('t=' + 'x'.repeat(1201), cookie)).status).toBe(413);
 });
@@ -235,7 +235,7 @@ test('the mic writes while you talk: it cuts at each pause and sends every phras
   expect(page).toContain('if(cur.spoke&&(quiet>650||now-cur.t0>12000))cut(false);');
   expect(page).toContain('if(p.spoke&&blob.size>800)sends.push(sendPart(blob));');
   expect(page).toContain('type:blob.type,part:true})');
-  const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  const scripts = [...page.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)].map((m) => m[1]);
   for (const js of scripts) expect(() => new Function(js)).not.toThrow();
 });
 

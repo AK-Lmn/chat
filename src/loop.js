@@ -73,7 +73,7 @@ export async function inlineLocal(html, pagePath, read) {
     if (!data) missing.push(src);
     return data ? `data:${type};base64,${data}` : '';
   };
-  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script\s*>|<img\b[^>]*>/gi)];
+  const tags = [...html.matchAll(/<link\b[^>]*>|<script\b[^>]*>\s*<\/script[^>]*>|<img\b[^>]*>/gi)];
   let out = '';
   let at = 0;
   let pictures = 0;
@@ -235,12 +235,17 @@ export const SVG_ASK = 'Draw the picture the user asks for as ONE SVG image, and
 export function cleanSvg(raw) {
   const m = /<svg[\s>][\s\S]*<\/svg>/i.exec(String(raw || ''));
   if (!m) return null;
-  let svg = m[0]
-    .replace(/<(script|foreignObject|iframe|image|a|style)\b[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<(script|foreignObject|iframe|image|use)\b[^>]*\/?>/gi, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/\s(?:xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*')/gi, '')
-    .replace(/javascript:/gi, '');
+  let svg = m[0];
+  // One pass can leave a new tag or attribute behind (<scr<script>ipt>), so clean until nothing changes.
+  for (let prev = ''; prev !== svg;) {
+    prev = svg;
+    svg = svg
+      .replace(/<(script|foreignObject|iframe|image|a|style)\b[\s\S]*?<\/\1[^>]*>/gi, '')
+      .replace(/<(script|foreignObject|iframe|image|use)\b[^>]*\/?>/gi, '')
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+      .replace(/\s(?:xlink:)?href\s*=\s*("(?!#)[^"]*"|'(?!#)[^']*')/gi, '')
+      .replace(/(?:javascript|vbscript|data):/gi, '');
+  }
   if (!/<svg[^>]*\sxmlns=/i.test(svg)) svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   if (!/<svg[^>]*\sviewBox=/i.test(svg)) svg = svg.replace(/<svg/i, '<svg viewBox="0 0 800 800"');
   if (svg.length < 400 || svg.length > 300_000 || (svg.match(/<(path|circle|ellipse|rect|polygon|polyline|line)\b/gi) || []).length < 4) return null;

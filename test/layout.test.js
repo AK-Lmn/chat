@@ -23,7 +23,7 @@ test('buttons on the accent colour use the on-accent ink, so dark looks are not 
 });
 
 test('the page script still parses', () => {
-  for (const [, s] of page.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(s)).not.toThrow();
+  for (const [, s] of page.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(s)).not.toThrow();
 });
 
 test('Voice is the fourth mode toggle and opens the talk screen; the + menu rows never turn white', () => {
