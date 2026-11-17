@@ -34,6 +34,19 @@ test('another model answering is one rerouted row with the reason', async () => 
   expect(seen).toHaveLength(1);
   expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai' });
   expect(seen[0].why).toContain('wolf');
+  expect(seen[0].detail).toContain('@cf/meta/llama-3.1-8b-instruct-fast');
+});
+
+test('wolf resting then a failed fallback keeps both facts in the row', async () => {
+  const { env, fetchImpl } = world({ wolf: limited });
+  const seen = [];
+  const m = modelFrom(env, fetchImpl, { ai: 'wolf', free: true }, { trace: (e) => seen.push(e) });
+  await m(msgs); // wolf limited: starts the rest
+  seen.length = 0;
+  await m(msgs); // wolf skipped now
+  expect(seen).toHaveLength(1);
+  expect(seen[0].why).toContain('wolf skipped: resting');
+  expect(seen[0].detail).toContain('after 0 failed');
 });
 
 test('every free model failing is an error row', async () => {
