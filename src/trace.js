@@ -4,9 +4,21 @@
 export const SLOW_ASK_MS = 30_000;
 export const SLOW_STEP_MS = 90_000;
 
+// Provider errors can quote a key, even a masked one ("key_gl8C********hRTv"). Cut anything key-shaped before it leaves for traces.
+export function redactSecrets(text) {
+  return String(text)
+    .replace(/[A-Za-z0-9_-]*\*{3,}[A-Za-z0-9_*-]*/g, '[key]')
+    .replace(/\b(?:sk|rk|pk|key|gsk|xai|ghp|github_pat)[-_][A-Za-z0-9_-]{6,}/gi, '[key]')
+    .replace(/\bAIza[A-Za-z0-9_-]{10,}/g, '[key]')
+    .replace(/\bBearer\s+\S+/gi, 'Bearer [key]')
+    .replace(/(Incorrect API key provided:)[^.]*\./i, '$1 [key].');
+}
+const clean = (v) => typeof v === 'string' ? redactSecrets(v) : v;
+
 export async function sendTrace(env, event, fetchImpl = fetch) {
   if (!env?.TRACE_KEY) return;
   try {
+    event = Object.fromEntries(Object.entries(event || {}).map(([k, v]) => [k, clean(v)]));
     const init = { method: 'POST', headers: { authorization: `Bearer ${env.TRACE_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify(event), signal: AbortSignal.timeout(2000) };
     if (env.TRACES) await env.TRACES.fetch('https://traces.flisk.si/v1/trace', init);
     else await fetchImpl('https://traces.flisk.si/v1/trace', init);

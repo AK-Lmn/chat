@@ -255,6 +255,7 @@ function withNameGuesses(make, env, fetchImpl, chosen, trace = () => {}) {
       if (!r.error || r.kind !== 'model') {
         // Answered by a different name than the one picked, or failed for another reason: a trace says which name, never the key or the prompt.
         if (!r.error && tried.length) trace({ kind: 'rerouted', why: `${chosen.model} not found, tried ${tried.join(', ')}`.slice(0, 300), expected: chosen.model, actual: name });
+        else if (!r.error) trace({ kind: 'unexpected', why: `${chosen.model} is not released, yet OpenAI answered it`, expected: chosen.model, actual: name });
         else if (r.error) trace({ kind: 'error', why: `${name}: ${r.kind || 'error'}`, expected: chosen.model, actual: 'none', detail: [...tried, name].join(', ').slice(0, 300) });
         return r;
       }
