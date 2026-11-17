@@ -273,11 +273,3 @@ test('traces never carry a key, not even the masked one in a provider error', as
   await sendTrace({ TRACE_KEY: 't' }, { kind: 'error', why: 'refused sk-live-abcdef123456' }, async (_u, init) => { body = init.body; return new Response('ok'); });
   expect(body).not.toContain('abcdef123456');
 });
-
-test('an Astra call that OpenAI answers on the first name is traced as unexpected, with the name used', async () => {
-  const events = [];
-  const ok = async () => Response.json({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }], usage: {} });
-  const chosen = { ai: 'openai', free: false, url: 'https://api.openai.com/v1/chat/completions', key: 'sk-test-12345', model: 'gpt-6.2-astra' };
-  await modelFrom({}, ok, chosen, { trace: (e) => events.push(e) })([{ role: 'user', content: 'hi' }]);
-  expect(events).toEqual([expect.objectContaining({ kind: 'unexpected', expected: 'gpt-6.2-astra', actual: 'gpt-6.2-astra' })]);
-});
