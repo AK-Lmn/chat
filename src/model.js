@@ -275,10 +275,13 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
   return async (messages, o = {}) => {
     const tried = [];
     // Wolf is the planned first stop. Whoever answers instead is a reroute worth a row, with the reason.
+    // Whether wolf was skipped is decided once, before anything runs, so a pause that ends mid-request cannot change the story.
+    const skipped = now() < wolfOutUntil;
+    const rest = skipped ? Math.max(1, Math.ceil((wolfOutUntil - now()) / 60000)) : 0;
     const rerouted = (by, model) => {
       if (by === 'wolf') return;
-      const rest = wolfOutUntil > now() ? Math.ceil((wolfOutUntil - now()) / 60000) : 0;
-      trace({ kind: 'rerouted', why: (tried.length ? tried.join('; ') : `wolf skipped: resting${rest ? ` ${rest} more min` : ''} after a limit`).slice(0, 300), expected: 'wolf', actual: by, detail: `answered by ${model || by}${tried.length ? ` after ${tried.length} failed` : ''}` });
+      const why = [skipped ? `wolf skipped: resting ${rest} more min after a limit` : '', ...tried].filter(Boolean).join('; ') || 'wolf did not answer';
+      trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: by, detail: `answered by ${model || by} after ${tried.length} failed` });
     };
     if (now() >= wolfOutUntil) {
       const r = await wolf(messages, { effort: o.effort });
