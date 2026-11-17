@@ -99,9 +99,9 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
   const call = chosen.free && env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl;
   return async (messages, o = {}) => {
     if (!key) return { error: 'chat has no model key yet (INFERENCE_KEY)' };
-    // Voice talk reads the answer aloud while it is still being written: the model's own key streams it. Flisk Wolf
-    // (inference.flisk.si) answers 400 to stream: true, so the free choice never streams.
-    const stream = typeof o.onDelta === 'function' && !chosen.free;
+    // Voice talk and the chat page show the answer while it is still being written. Flisk Wolf streams too since
+    // flisk-inference#74 (before that it answered 400 to stream: true).
+    const stream = typeof o.onDelta === 'function';
     // Newer models refuse settings other models take: Claude 4.7 and later answer 400 to any `temperature` below 1, and
     // OpenAI's newer models want `max_completion_tokens` instead of `max_tokens`. So a model the visitor brings is called
     // without `temperature` (and OpenAI with `max_completion_tokens`), and a 400 that names one of them is retried once
