@@ -32,7 +32,7 @@ test('another model answering is one rerouted row with the reason', async () => 
   const r = await modelFrom(env, fetchImpl, { ai: 'wolf', free: true }, { trace: (e) => seen.push(e) })(msgs);
   expect(r.error).toBeUndefined();
   expect(seen).toHaveLength(1);
-  expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai' });
+  expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai (@cf/meta/llama-3.1-8b-instruct-fast)' });
   expect(seen[0].why).toContain('wolf');
   expect(seen[0].detail).toContain('@cf/meta/llama-3.1-8b-instruct-fast');
 });
@@ -85,4 +85,20 @@ test('runEvents flags an answer in another language than the turn asked for, wit
   expect(JSON.stringify(ev)).not.toContain('Flisk Wolf');
   expect(runEvents({ answer: 'Hello there', ms: 1000, steps: [] }, '', '/api/run', 'en')).toEqual([]);
   expect(runEvents({ answer: 'Привіт, як справи?', ms: 1000, steps: [] }, '', '/api/run', 'uk')).toEqual([]);
+});
+
+test('a picked build kind whose model tried to draw is traced; a 70 s single-step answer is slow', () => {
+  expect(runEvents({ answer: 'ok', steps: [{}], stats: {}, ms: 2000, provider: 'wolf', picked: 'website', refusedImage: 1 }, null)[0]).toMatchObject({ kind: 'unexpected', why: expect.stringContaining('picked website') });
+  expect(runEvents({ answer: 'ok', steps: [{}], stats: {}, ms: 73_000 }, null)[0]).toMatchObject({ kind: 'slow' });
+});
+
+test('a Ukrainian request skips weak Workers AI for the backups, and the row records the language', async () => {
+  const { env, fetchImpl: base } = world({ wolf: limited });
+  const fetchImpl = async (u, i) => (String(u).includes('pollinations') ? ok('poll answer') : base(u, i));
+  env.NO_POLLINATIONS = '0';
+  const seen = [];
+  const r = await modelFrom(env, fetchImpl, { ai: 'wolf', free: true }, { trace: (e) => seen.push(e) })(msgs, { lang: 'uk' });
+  expect(r.error).toBeUndefined();
+  expect(seen[0].detail).toContain('lang uk');
+  expect(seen[0].actual).toContain('pollinations');
 });
