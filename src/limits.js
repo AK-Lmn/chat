@@ -83,5 +83,6 @@ export function answeredModel(model, defaults = { effort: 'medium' }) {
 
 export const freeModelOpts = (env, login = '', anon = false) => ({
   overLimit: async () => (login && (await overDailyLimit(login, { cache: env.LIMIT_CACHE, limit: anon ? ANON_PER_PERSON_BACKUP : WORKERS_AI_PER_PERSON, scope: anon ? 'workers-ai-anon' : 'workers-ai-person' }))) || overDailyLimit('everyone', { cache: env.LIMIT_CACHE, limit: WORKERS_AI_PER_DAY, scope: 'workers-ai-fallback' }),
+  overVercel: (cap) => overDailyLimit('everyone', { cache: env.LIMIT_CACHE, limit: cap, scope: 'vercel-backup' }),
   log: (tried) => console.log('free model fallbacks all failed', JSON.stringify(tried).slice(0, 600)),
 });
