@@ -1,3 +1,4 @@
+import { sendTrace } from './trace.js';
 // Daily allowances. One place decides how much each kind of request may use per day, for a signed-in login or an
 // anonymous visitor (counted by network address, not by cookie: a cookie can be thrown away, so their share is smaller).
 // Counters live in Cloudflare's Cache API: no storage writes, and not exact across data centres.
@@ -85,4 +86,5 @@ export const freeModelOpts = (env, login = '', anon = false) => ({
   overLimit: async () => (login && (await overDailyLimit(login, { cache: env.LIMIT_CACHE, limit: anon ? ANON_PER_PERSON_BACKUP : WORKERS_AI_PER_PERSON, scope: anon ? 'workers-ai-anon' : 'workers-ai-person' }))) || overDailyLimit('everyone', { cache: env.LIMIT_CACHE, limit: WORKERS_AI_PER_DAY, scope: 'workers-ai-fallback' }),
   overVercel: (cap) => overDailyLimit('everyone', { cache: env.LIMIT_CACHE, limit: cap, scope: 'vercel-backup' }),
   log: (tried) => console.log('free model fallbacks all failed', JSON.stringify(tried).slice(0, 600)),
+  trace: (event) => sendTrace(env, { route: '/api/run', ...event }),
 });

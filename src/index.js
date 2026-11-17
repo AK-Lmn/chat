@@ -24,6 +24,7 @@ import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alex
 import { withSecurityHeaders } from './security-headers.js';
 import { asksBuild, spokenReply, talkMessages, talkReply, transcribe } from './voice.js';
 export * from './voice.js';
+import { runEvents, sendTrace } from './trace.js';
 import { answeredModel, freeModelOpts, limitOf, overDailyLimit, overQuota, refundQuota, taskLimitBody } from './limits.js';
 export * from './limits.js';
 
@@ -725,7 +726,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (missing) return json(400, { error: `${missing} is not connected yet. Connect it, or tick another computer` });
       // Only the shared free model counts against the daily cap; the visitor's own key costs us nothing.
       const admitted = await admitTask(login, chosen);
-      if (admitted.refuse) return json(429, admitted.refuse);
+      if (admitted.refuse) { await sendTrace(env, { route: '/api/run', kind: 'capped', why: 'the free daily limit stopped a task', status: 429 }, fetchImpl); return json(429, admitted.refuse); }
       const { m, refund } = admitted;
       const { readable, writable } = new TransformStream();
       const w = writable.getWriter();
@@ -742,9 +743,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
           for (const e of buffered) send(e);
           await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
+          for (const t of runEvents(r, runProblem(r))) await sendTrace(env, t, fetchImpl);
           if (!needPod) send({ type: 'done', ms: r.ms, error: r.error });
         })
-        .catch((e) => { for (const x of buffered) send(x); send({ type: 'error', error: String(e?.message || e).slice(0, 200) }); })
+        .catch(async (e) => { await sendTrace(env, { route: '/api/run', kind: 'error', why: `task crashed: ${String(e?.message || e).slice(0, 150)}` }, fetchImpl); for (const x of buffered) send(x); send({ type: 'error', error: String(e?.message || e).slice(0, 200) }); })
         .finally(async () => {
           if (needPod) send({ type: 'needcomputer' });
           await refund(needPod);
