@@ -34,6 +34,7 @@ test('another model answering is one rerouted row with the reason', async () => 
   expect(seen).toHaveLength(1);
   expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai' });
   expect(seen[0].why).toContain('wolf');
+  expect(seen[0].detail).toContain('@cf/meta/llama-3.1-8b-instruct-fast');
 });
 
 test('every free model failing is an error row', async () => {
