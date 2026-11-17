@@ -77,3 +77,12 @@ test('sendTrace does nothing without a key, uses the binding, and never throws',
   expect(sent[0][1]).toBe('Bearer k');
   await sendTrace({ TRACE_KEY: 'k' }, { kind: 'error' }, async () => { throw new Error('down'); });
 });
+
+test('runEvents flags an answer in another language than the turn asked for, with codes only', () => {
+  const ev = runEvents({ answer: 'Я Flisk Wolf, вільна модель, розміщена на Flisk.', ms: 1000, steps: [] }, '', '/api/run', 'en');
+  expect(ev).toHaveLength(1);
+  expect(ev[0]).toMatchObject({ kind: 'unexpected', why: 'asked in en, answered in uk' });
+  expect(JSON.stringify(ev)).not.toContain('Flisk Wolf');
+  expect(runEvents({ answer: 'Hello there', ms: 1000, steps: [] }, '', '/api/run', 'en')).toEqual([]);
+  expect(runEvents({ answer: 'Привіт, як справи?', ms: 1000, steps: [] }, '', '/api/run', 'uk')).toEqual([]);
+});
