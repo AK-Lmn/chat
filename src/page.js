@@ -2,6 +2,7 @@ import { icon, fam } from './icons.js';
 import { EARTH_JS, TEXTURES, earthUsers, orbJs } from './earth.js';
 import { LOGOS } from './logos.js';
 import { UK_WORDS, RU_WORDS } from './lang.js';
+import { REASONING_CSS, REASONING_JS } from './reasoning.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // JSON inside a <script>: no "</script>" or "<!--" can close it early.
@@ -525,7 +526,8 @@ export const KEYBOARD_FIT = "(function(){var v=window.visualViewport,r=document.
 import { i18nScript } from './i18n.js';
 const I18N = i18nScript();
 const shell = (title, body, script = '', index = false, theme = '') =>
-  `<!doctype html><html lang="en"${theme ? ` data-theme="${theme}"${theme === 'classic' ? '' : ' class="nt"'}` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>${index ? `<meta name="robots" content="index,follow"><link rel="canonical" href="https://chat.flisk.si/"><meta property="og:title" content="Flisk Chat"><meta property="og:description" content="${DESC}"><meta property="og:url" content="https://chat.flisk.si/"><meta property="og:type" content="website"><meta property="og:image" content="https://chat.flisk.si/og.png?v=1"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Flisk Chat: open a browser, type, it gets done"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Flisk Chat"><meta name="twitter:description" content="${DESC}"><meta name="twitter:image" content="https://chat.flisk.si/og.png?v=1">` : '<meta name="robots" content="noindex">'}<link rel="icon" href="${FAVICON}"><meta name="theme-color" content="#F7F6F2"><meta name="description" content="${index ? DESC : 'Ask for a task or a website. Flisk Chat gets a real computer and does it.'}">${FONTS}<style>${CSS}</style><script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script></head><body>${body}<script>${KEYBOARD_FIT}${script}
+  `<!doctype html><html lang="en"${theme ? ` data-theme="${theme}"${theme === 'classic' ? '' : ' class="nt"'}` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>${index ? `<meta name="robots" content="index,follow"><link rel="canonical" href="https://chat.flisk.si/"><meta property="og:title" content="Flisk Chat"><meta property="og:description" content="${DESC}"><meta property="og:url" content="https://chat.flisk.si/"><meta property="og:type" content="website"><meta property="og:image" content="https://chat.flisk.si/og.png?v=1"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Flisk Chat: open a browser, type, it gets done"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Flisk Chat"><meta name="twitter:description" content="${DESC}"><meta name="twitter:image" content="https://chat.flisk.si/og.png?v=1">` : '<meta name="robots" content="noindex">'}<link rel="icon" href="${FAVICON}"><meta name="theme-color" content="#F7F6F2"><meta name="description" content="${index ? DESC : 'Ask for a task or a website. Flisk Chat gets a real computer and does it.'}">${FONTS}<style>${CSS}${REASONING_CSS}</style><script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script></head><body>${body}<script>${KEYBOARD_FIT}${script}
+;${REASONING_JS}
 ;${I18N}</script></body></html>`;
 
 const LOGO = `<a class="logo" href="/">${icon('chat', 26)}<b style="font-weight:inherit">chat<span>.</span>flisk</b></a>`;
@@ -1262,25 +1264,23 @@ async function run(task){
   {const lu=history[history.length-1];if(sendFiles.length&&lu&&lu.role==='user')lu.files=sendFiles.map(f=>f.name);}
   if(sendFiles.length){const us=talk.querySelectorAll('.u'),u=us[us.length-1];if(u){const fl=node('div','ufiles');sendFiles.forEach(f=>{const c=node('span','fchip');if(f.b64&&/^image[/]/.test(f.type)){const im=document.createElement('img');im.src='data:'+f.type+';base64,'+f.content;im.alt='';c.appendChild(im);}c.appendChild(node('span','',f.name));fl.appendChild(c);});u.appendChild(fl);}}
   const blind=sendFiles.some(f=>f.b64&&/^image[/]/.test(f.type))&&!canSee();
-  const turn=add(node('div','turn')),work=node('div','work'),l=node('span','l'),wt=node('span','',''),ws=node('span','','Thinking');
-  l.append(node('span','spin'),wt);work.append(l,ws);turn.appendChild(work);
+  const turn=add(node('div','turn')),R=reasoning(turn),ws=R.ws,wt=R.wt,work=R.root;
   if(blind){const bn=node('div','blind');bn.textContent=cur.free?'Flisk Wolf cannot see pictures: it only gets the file on the computer (size, metadata). To ask about what is in the picture, pick a model with your own key that sees images, such as Claude, GPT or Gemini.':'This model cannot see pictures: it only gets the file on the computer. To ask about what is in the picture, pick a model marked "sees images".';const pk2=node('button','btn','Pick a model');pk2.type='button';pk2.onclick=()=>openPop();bn.appendChild(pk2);turn.appendChild(bn);}
-  const box2=node('details','stepsbox'),sum2=node('summary','','Steps'),list=node('ol','steps');box2.open=true;box2.append(sum2,list);box2.hidden=true;turn.appendChild(box2);
   let podT=0,pgf=null,pgt=null;const POD_EXP=40;
   const pgDraw=()=>{if(!podT||!pgf)return;const s=(Date.now()-podT)/1000,p=Math.round(s<POD_EXP?s/POD_EXP*90:90+(1-Math.exp(-(s-POD_EXP)/30))*8),left=Math.max(0,Math.ceil(POD_EXP-s));pgf.style.width=p+'%';pgt.textContent=p+'%'+(left>0?' · about '+left+'s left':' · '+T('taking longer than usual, still starting'));ws.textContent=T('Starting a computer')+' · '+p+'%';};
-  const t0=Date.now(),tick=()=>{const e=Date.now()-t0;wt.textContent='Working for '+secs(e)+(e>45000?' · slow: press Stop to give up':'');pgDraw();};let stopped=false;const ac=new AbortController();const stop=node('button','btn','Stop');stop.type='button';stop.onclick=()=>{stopped=true;ac.abort();};work.appendChild(stop);tick();const timer=setInterval(tick,1000);
-  let live=null,liveA=null,liveT='',count=0,answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
-  const step=(html,cls,ic)=>{if(live&&live.classList.contains('live')){live.classList.remove('live');live.classList.add('ok');}const li=node('li','st '+(cls||'live')),si=node('span','si'),t=node('div','t');si.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+(SI[ic]||SI.sparkles)+'</svg>';t.innerHTML=html;li.append(si,t);list.appendChild(li);box2.hidden=false;count++;sum2.textContent='Steps ('+count+')';live=li;down();return li;};
+  const t0=Date.now(),tick=()=>{const e=Date.now()-t0;wt.textContent='Working for '+secs(e)+(e>45000?' · slow: press Stop to give up':'');pgDraw();};let stopped=false;const ac=new AbortController();const stop=node('button','btn','Stop');stop.type='button';stop.onclick=()=>{stopped=true;ac.abort();};R.actions.appendChild(stop);tick();const timer=setInterval(tick,1000);
+  let liveA=null,liveT='',answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
+  const step=R.step;
   const code=(s)=>{const c=document.createElement('code');c.textContent=s;return c.outerHTML;};
   const txt=(s)=>{const c=document.createElement('span');c.textContent=s;return c.innerHTML;};
-  const out=(s,bad)=>{if(!live||!s)return;const p=node('pre','',s.length>1500?s.slice(0,1500)+'\\n…':s);live.querySelector('.t').appendChild(p);if(bad){live.classList.remove('live','ok');live.classList.add('bad');live.querySelector('.si').innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+SI.alert+'</svg>';}down();};
-  const end=(ok)=>{podT=0;clearInterval(timer);stop.remove();if(live&&live.classList.contains('live')){live.classList.remove('live');live.classList.add(ok?'ok':'bad');}work.classList.add(ok?'done':'fail');wt.textContent=(ok?'Worked for ':'Stopped after ')+secs(Date.now()-t0);ws.textContent='';if(ok&&count)box2.open=false;};
+  const out=R.out;
+  const end=(ok)=>{podT=0;clearInterval(timer);stop.remove();R.end(ok,(ok?'Worked for ':'Stopped after ')+secs(Date.now()-t0));};
   // One event of the task, from the cloud stream or from the line to the computer in this tab.
   const onEv=(ev)=>{
     if(ev.type==='thinking'){ws.textContent='Thinking, step '+ev.step;if(liveA){liveA.remove();liveA=null;}}
     else if(ev.type==='sources')ws.textContent='Read '+ev.sources.length+(ev.sources.length>1?' sources':' source')+' on Wikipedia';
-    else if(ev.type==='pod_starting'){step('Starting a computer','','server');ws.textContent='Starting a computer';podT=Date.now();const pg=node('div','pg'),bar=node('div','pgbar');pgf=document.createElement('i');bar.appendChild(pgf);pgt=node('small','pgt');pg.append(bar,pgt);if(live)live.querySelector('.t').appendChild(pg);pgDraw();}
-    else if(ev.type==='pod_started'){podT=0;pgf=null;if(live)live.querySelector('.t').textContent='Computer ready on '+ev.provider;}
+    else if(ev.type==='pod_starting'){step('Starting a computer','','server');ws.textContent='Starting a computer';podT=Date.now();const pg=node('div','pg'),bar=node('div','pgbar');pgf=document.createElement('i');bar.appendChild(pgf);pgt=node('small','pgt');pg.append(bar,pgt);if(R.live)R.live.querySelector('.t').appendChild(pg);pgDraw();}
+    else if(ev.type==='pod_started'){podT=0;pgf=null;if(R.live)R.live.querySelector('.t').textContent='Computer ready on '+ev.provider;}
     else if(ev.type==='run'){step('Ran '+code(ev.command),'',cmdIcon(ev.command));ws.textContent='Running a command';}
     else if(ev.type==='write'){step('Wrote '+code(ev.path)+' '+txt('('+Number(ev.bytes||0).toLocaleString()+' characters)'),'','pen');ws.textContent='Writing files';}
     else if(ev.type==='read')step('Read '+code(ev.path),'','file');
@@ -1310,9 +1310,9 @@ async function run(task){
     if(res.status===401){clearInterval(timer);turn.remove();try{sessionStorage.setItem('chat_pending',task);if(sendFiles.length)sessionStorage.setItem('chat_pending_files',JSON.stringify(sendFiles));}catch(e){}attached=sendFiles;drawFiles();signin.hidden=false;signin.scrollIntoView({block:'center'});go.disabled=false;return;}
     // No cloud computer connected: the task runs on a small Linux inside this tab, no key needed.
     // If the tab cannot load or start it, the old ask for a key is shown instead.
-    if(res.status===409&&podOk()&&(ws.textContent='Starting a computer in this tab',await getPod().then(()=>true,()=>false))){const r=await runInBrowser(payload,onEv,ac.signal);if(r&&r.status===429){clearInterval(timer);work.remove();box2.remove();limitCard(turn,task,r);go.disabled=false;return;}if(r){const er=new Error(r.error||'Chat refused the task. Try again in a minute.');er.kind=r.kind;throw er;}}else{
+    if(res.status===409&&podOk()&&(ws.textContent='Starting a computer in this tab',await getPod().then(()=>true,()=>false))){const r=await runInBrowser(payload,onEv,ac.signal);if(r&&r.status===429){clearInterval(timer);work.remove();limitCard(turn,task,r);go.disabled=false;return;}if(r){const er=new Error(r.error||'Chat refused the task. Try again in a minute.');er.kind=r.kind;throw er;}}else{
     if(res.status===409){clearInterval(timer);turn.remove();pending=task;asstMsg('I need a computer for that. Connect one of your sandbox accounts below, once.');saveChat();setup.hidden=false;setup.scrollIntoView({block:'start'});go.disabled=false;return;}
-    if(res.status===429){const b=await res.json().catch(()=>({}));clearInterval(timer);work.remove();box2.remove();limitCard(turn,task,b);go.disabled=false;return;}
+    if(res.status===429){const b=await res.json().catch(()=>({}));clearInterval(timer);work.remove();limitCard(turn,task,b);go.disabled=false;return;}
     if(!res.ok||!res.body){const b=await res.json().catch(()=>({}));const er=new Error(b.error||('Chat answered '+res.status+'. Try again in a minute.'));er.kind=b.kind;throw er;}
     const rd=res.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
@@ -1462,7 +1462,7 @@ function limitCard(turn,task,b){
 const ZQ=window.__ZQ__||[];
 let treeAnswer=null;
 // Leaving mid-task loses its live progress (the answer is saved only when it arrives), so ask first.
-addEventListener('beforeunload',e=>{if(document.querySelector('.work:not(.done):not(.fail)')){e.preventDefault();e.returnValue='';}});
+addEventListener('beforeunload',e=>{if(document.querySelector('.rsn:not(.done):not(.fail)')){e.preventDefault();e.returnValue='';}});
 function ask6(task){
   chatting(true);
   const wrap=add(node('div','zq'));wrap.appendChild(node('div','h','A few quick questions so it fits you. Click a square to choose it and see more, or type your own answer.'));
