@@ -1269,7 +1269,7 @@ async function run(task){
   let podT=0,pgf=null,pgt=null;const POD_EXP=40;
   const pgDraw=()=>{if(!podT||!pgf)return;const s=(Date.now()-podT)/1000,p=Math.round(s<POD_EXP?s/POD_EXP*90:90+(1-Math.exp(-(s-POD_EXP)/30))*8),left=Math.max(0,Math.ceil(POD_EXP-s));pgf.style.width=p+'%';pgt.textContent=p+'%'+(left>0?' · about '+left+'s left':' · '+T('taking longer than usual, still starting'));ws.textContent=T('Starting a computer')+' · '+p+'%';};
   const t0=Date.now(),tick=()=>{const e=Date.now()-t0;wt.textContent='Working for '+secs(e)+(e>45000?' · slow: press Stop to give up':'');pgDraw();};let stopped=false;const ac=new AbortController();const stop=node('button','btn','Stop');stop.type='button';stop.onclick=()=>{stopped=true;ac.abort();};work.appendChild(stop);tick();const timer=setInterval(tick,1000);
-  let live=null,count=0,answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
+  let live=null,liveA=null,liveT='',count=0,answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
   const step=(html,cls,ic)=>{if(live&&live.classList.contains('live')){live.classList.remove('live');live.classList.add('ok');}const li=node('li','st '+(cls||'live')),si=node('span','si'),t=node('div','t');si.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+(SI[ic]||SI.sparkles)+'</svg>';t.innerHTML=html;li.append(si,t);list.appendChild(li);box2.hidden=false;count++;sum2.textContent='Steps ('+count+')';live=li;down();return li;};
   const code=(s)=>{const c=document.createElement('code');c.textContent=s;return c.outerHTML;};
   const txt=(s)=>{const c=document.createElement('span');c.textContent=s;return c.innerHTML;};
@@ -1277,7 +1277,7 @@ async function run(task){
   const end=(ok)=>{podT=0;clearInterval(timer);stop.remove();if(live&&live.classList.contains('live')){live.classList.remove('live');live.classList.add(ok?'ok':'bad');}work.classList.add(ok?'done':'fail');wt.textContent=(ok?'Worked for ':'Stopped after ')+secs(Date.now()-t0);ws.textContent='';if(ok&&count)box2.open=false;};
   // One event of the task, from the cloud stream or from the line to the computer in this tab.
   const onEv=(ev)=>{
-    if(ev.type==='thinking')ws.textContent='Thinking, step '+ev.step;
+    if(ev.type==='thinking'){ws.textContent='Thinking, step '+ev.step;if(liveA){liveA.remove();liveA=null;}}
     else if(ev.type==='sources')ws.textContent='Read '+ev.sources.length+(ev.sources.length>1?' sources':' source')+' on Wikipedia';
     else if(ev.type==='pod_starting'){step('Starting a computer','','server');ws.textContent='Starting a computer';podT=Date.now();const pg=node('div','pg'),bar=node('div','pgbar');pgf=document.createElement('i');bar.appendChild(pgf);pgt=node('small','pgt');pg.append(bar,pgt);if(live)live.querySelector('.t').appendChild(pg);pgDraw();}
     else if(ev.type==='pod_started'){podT=0;pgf=null;if(live)live.querySelector('.t').textContent='Computer ready on '+ev.provider;}
@@ -1298,6 +1298,8 @@ async function run(task){
     else if(ev.type==='pod_stopped')step('Computer stopped','ok','power');
     else if(ev.type==='pod_kept')step(ev.days?'Computer kept running for the live app: it sleeps when idle, wakes on a visit, deleted after '+Number(ev.days)+' days':'Computer kept running for the live app until '+(ev.until?new Date(ev.until).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'the provider stops it'),'ok','power');
     else if(ev.type==='widget'){const w=drawWidget(ev);if(w){turn.appendChild(w);down();}}
+    else if(ev.type==='delta'){if(!liveA){liveA=node('div','a');turn.appendChild(liveA);liveT='';}liveT+=ev.text;md(liveA,liveT);down();}
+    else if(ev.type==='retry'){if(liveA){liveA.remove();liveA=null;}}
     else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
@@ -1321,6 +1323,7 @@ async function run(task){
   }catch(err){failed=true;if(stopped)turn.appendChild(node('div','err',T('You stopped this task.')));else errCard(turn,String(err.message||err),err.kind||'other',task);}
   if(needPod&&!failed){end(true);turn.remove();attached=sendFiles;drawFiles();podNext=true;return run(task);}
   end(!failed||answer!==null);
+  if(liveA){liveA.remove();liveA=null;}
   if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();roll();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
     const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);
     const sv=node('div','asave'),dl2=node('button','btn','Save as file'),cp2=node('button','btn','Copy');dl2.type=cp2.type='button';

@@ -35,6 +35,9 @@ export function runEvents(result, problem, route = '/api/run', lang = '') {
   if (asked && said && said !== asked) out.push({ route, kind: 'unexpected', why: `asked in ${asked}, answered in ${said}`, detail: `${result.provider || 'no provider'}`, ms: result.ms || 0 });
   // The person picked a build kind, yet the model reached for a picture: the decision worth seeing next to the reroute rows.
   if (result.refusedImage) out.push({ route, kind: 'unexpected', why: `picked ${result.picked}, model tried to draw a picture (refused ${result.refusedImage}x)`, detail: `${result.provider || 'no provider'}`, ms: result.ms || 0 });
+  // Jev read the reply and judged it bad: the code of what is wrong (never the text), and whether it was asked again.
+  const g = result.stats?.graded;
+  if (g) out.push({ route, kind: 'unexpected', why: `Jev graded the reply ${g.verdict}${g.retried ? ', asked again' : ', words already streamed'}`, detail: `${result.provider || 'no provider'} · ${Math.round((g.confidence || 0) * 100)}%`, ms: result.ms || 0 });
   const ms = result.ms || 0;
   const steps = result.steps?.length || 0;
   const detail = `${steps} steps · ${result.stats?.errors || 0} failed · ${result.provider || 'no provider'}`;

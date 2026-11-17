@@ -1,4 +1,6 @@
 import { asksAnalysis } from './analysis-style.js';
+import { sayStreamer } from './say-stream.js';
+import { BAD_REPLIES } from './model.js';
 import { MAX_STEPS, asksToBuild, githubSourceIn, isBigApp, taskPrompt } from './prompt.js';
 import { parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -307,7 +309,7 @@ const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
 // Kinds picked in the chat that make something other than a picture: the name is what the model is told.
 export const BUILD_KINDS = { website: 'a website to build', build: 'a website, app or system to build', app: 'a small app to build', system: 'a system to build' };
-export async function runTask({ decision = null, classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', kind = '', memo = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ grade = null, stream = false, decision = null, classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', kind = '', memo = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image) : [];
@@ -345,6 +347,7 @@ export async function runTask({ decision = null, classify = null, task, history 
   // What went wrong or right, counted for the build analytics (src/index.js recordRun): why a build came out weak.
   const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, refused: 0, refusedWhy: null, podMs: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
   let refusedImage = 0;
+  let gradeRetried = false;
   const t0 = Date.now();
   const finish = async (answer, error = null) => {
     if (podId && kept) {
@@ -393,7 +396,9 @@ export async function runTask({ decision = null, classify = null, task, history 
       emit({ type: 'thinking', step });
       const last = step === maxSteps;
       if (last) messages.push({ role: 'user', content: 'That was the last action. Reply with {"say": ...} now.' });
-      const reply = await model(messages, lang ? { lang } : undefined);
+      // Words go out as the model writes them (Workers AI streams); the finished answer then replaces them on the page.
+      const say = stream ? sayStreamer(emit) : null;
+      const reply = await model(messages, lang || say ? { ...(lang ? { lang } : {}), ...(say ? { onDelta: say } : {}) } : undefined);
       // An empty reply is usually a one-off (a long command output, a reasoning model that only thought): ask again, twice at most,
       // without using up a step.
       if (reply.kind === 'empty' && emptyRetries < 2) {
@@ -454,6 +459,18 @@ export async function runTask({ decision = null, classify = null, task, history 
       if (action.type === 'say' || last) {
         // Out of steps with an action still planned: never show that raw JSON as the answer.
         const text = action.type === 'say' ? withSources(splitPoints(noteDeadLinks(action.text, !!podId)), sources) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
+        // Jev reads the reply before it is final. A reply nobody saw yet and judged bad is asked again once, with the reason; words
+        // already streamed stay (the page replaces them), so then the verdict is only traced.
+        const g = grade && action.type === 'say' && !last ? await Promise.resolve(grade(task, text)).catch(() => null) : null;
+        if (g && g.verdict !== 'good') stats.graded = { verdict: g.verdict, confidence: g.confidence, retried: false };
+        if (g?.bad && !say?.sent() && !gradeRetried) {
+          gradeRetried = true;
+          stats.graded.retried = true;
+          emit({ type: 'retry' });
+          messages.push({ role: 'user', content: `That reply was judged bad (${BAD_REPLIES[g.verdict]}). Answer the ask again properly as {"say": ...}, in the language of the ask.` });
+          step--;
+          continue;
+        }
         emit({ type: 'answer', text });
         return await finish(text);
       }

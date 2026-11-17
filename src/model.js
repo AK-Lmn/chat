@@ -1,3 +1,4 @@
+import { readAiStream } from './say-stream.js';
 // Calling a model: which provider a choice means (the free Flisk Wolf, or the visitor's own key), the free fallback
 // chain behind Wolf (OpenRouter, Workers AI, Pollinations), and how a failed call is explained. loop.js only asks.
 // Who answers. "wolf" is Flisk Inference (free, shared, answers capped at 2048 tokens). The others use the visitor's own API key,
@@ -246,6 +247,22 @@ export function decide(env) {
   };
 }
 
+// Jev grades a finished reply: good, or one of the ways a reply goes wrong. A few neurons per ask (300 + 600 characters in). Null when
+// Jev is unavailable or not sure, so a reply is never held back or redone on a guess.
+export const BAD_REPLIES = { wrong_language: 'It is written in another language than the ask', off_topic: 'It does not answer what was asked', refusal: 'It refuses or says it cannot, with no real attempt', broken: 'It is empty, cut off, or raw code, JSON or markup instead of an answer', ignores_format: 'It ignores the length or format the ask gave (for example "two sentences")' };
+const GRADE_QUESTIONS = { verdict: { type: 'choice', instructions: 'Is the reply a good answer to the ask?', criteria: { good: 'It answers the ask, in the ask\'s language, in the asked length and format', ...BAD_REPLIES } } };
+export function gradeReply(env) {
+  if (!env?.AI) return null;
+  return async (task, answer) => {
+    try {
+      const j = await env.AI.run(JEV_MODEL, { state: `ASK: ${String(task).slice(0, 300)}\nREPLY: ${String(answer).slice(0, 600)}`, questions: GRADE_QUESTIONS });
+      const a = j?.answers?.verdict;
+      if (a?.type !== 'choice' || !(a.choice === 'good' || a.choice in BAD_REPLIES)) return null;
+      return { verdict: a.choice, confidence: Number(a.confidence) || 0, bad: a.choice !== 'good' && Number(a.confidence) >= 0.8 };
+    } catch { return null; }
+  };
+}
+
 // The small fallback model drifts from the person's wording: it ignores "two sentences" and pads with markdown. These rules are added to
 // the system message, where it weighs them most.
 export const FALLBACK_RULES = 'Follow the length and format the user asks for exactly (for example "two sentences" means two sentences). Answer the question asked, with no extra facts and no closing offer. Write plain text, no ** or # marks, unless the user asks for a list or code.';
@@ -256,10 +273,18 @@ export function withFallbackRules(messages = []) {
 }
 
 function workersAiModel(env, overLimit) {
-  return async (messages) => {
+  return async (messages, o = {}) => {
     if (!env.AI) return { error: 'no Workers AI binding', kind: 'provider' };
     if (overLimit && (await overLimit())) return { error: 'the Workers AI fallback is used up for today', kind: 'limit' };
     try {
+      // Workers AI streams natively: with onDelta every token goes out as it is written.
+      if (typeof o.onDelta === 'function') {
+        const s = await env.AI.run(WORKERS_AI_FALLBACK, { messages: withFallbackRules(messages), max_tokens: 1024, temperature: 0, stream: true });
+        if (s && typeof s.getReader === 'function') {
+          const text = await readAiStream(s, o.onDelta);
+          return text.trim() ? { text } : { error: 'the model sent an empty answer', kind: 'empty' };
+        }
+      }
       const r = await env.AI.run(WORKERS_AI_FALLBACK, { messages: withFallbackRules(messages), max_tokens: 1024, temperature: 0 });
       // Older models answer { response }; newer ones (llama-3.1-8b-fast-v2 behind the same name) answer OpenAI-style choices.
       const raw = r?.response ?? r?.choices?.[0]?.message?.content ?? '';
@@ -357,7 +382,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
       }
     }
     const viaWorkers = async () => {
-      const r = await workers(messages);
+      const r = await workers(messages, { onDelta: o.onDelta });
       if (!r.error) { rerouted('workers-ai', WORKERS_AI_FALLBACK); return { ...r, by: WORKERS_AI_FALLBACK }; }
       tried.push(`workers-ai: ${r.error}`);
       return null;
