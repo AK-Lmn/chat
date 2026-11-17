@@ -1170,3 +1170,9 @@ test('the first screen says what the product does and offers example tasks', () 
   expect(page).toContain('Free, no sign-up.');
   expect((page.match(/class="eg"/g) || []).length).toBe(3);
 });
+
+test('the pitch is shown in every theme, including voice and focus', () => {
+  const page = appPageUi({ login: null, connected: [] });
+  expect(page).not.toMatch(/data-theme=voice\] \.pitch[^{]*\{display:none/);
+  expect(page).not.toMatch(/data-theme=focus\] \.pitch[^{]*\{display:none/);
+});
