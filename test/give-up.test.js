@@ -70,3 +70,10 @@ test('a GitHub org named in the task is read before anything is built', async ()
   expect(sourceNote('portfolio for flisk-sh org on github')).toContain('api.github.com/orgs/flisk-sh/repos');
   expect(sourceNote('hello')).toBe('');
 });
+
+test('a who-cited question gets a search playbook, not a news feed', () => {
+  const pb = playbooksFor('who cited flisk.sh');
+  expect(pb).toContain('hn.algolia.com');
+  expect(pb).toContain('duckduckgo');
+  expect(pb).not.toContain('hnrss');
+});
