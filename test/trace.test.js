@@ -111,5 +111,6 @@ test('a Ukrainian request skips weak Workers AI for the backups, and the row rec
   const r = await modelFrom(env, fetchImpl, { ai: 'wolf', free: true }, { trace: (e) => seen.push(e) })(msgs, { lang: 'uk' });
   expect(r.error).toBeUndefined();
   expect(seen[0].detail).toContain('lang uk');
+  expect(seen[0].lang).toBe('uk');
   expect(seen[0].actual).toContain('pollinations');
 });

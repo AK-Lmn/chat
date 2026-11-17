@@ -295,7 +295,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const rerouted = (by, model) => {
       if (by === 'wolf') return;
       const why = [skipped ? `wolf skipped: resting ${rest} more min after a limit` : '', ...tried].filter(Boolean).join('; ') || 'wolf did not answer';
-      trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: model && model !== by ? `${by} (${model})` : by, detail: `answered by ${model || by} after ${tried.length} failed${lang ? ` · lang ${lang}` : ''}` });
+      trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: model && model !== by ? `${by} (${model})` : by, detail: `answered by ${model || by} after ${tried.length} failed${lang ? ` · lang ${lang}` : ''}`, lang: lang || undefined });
     };
     if (now() >= wolfOutUntil) {
       const r = await wolf(messages, { effort: o.effort });
@@ -333,7 +333,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const order = weakHere ? [viaBackups, viaWorkers] : [viaWorkers, viaBackups];
     for (const step of order) { const hit = await step(); if (hit) return hit; }
     log(tried);
-    trace({ kind: 'error', why: 'every free model failed', expected: 'wolf', actual: 'none', detail: `${tried.join('; ')}${lang ? ` · lang ${lang}` : ''}`.slice(0, 300) });
+    trace({ kind: 'error', why: 'every free model failed', expected: 'wolf', actual: 'none', detail: `${tried.join('; ')}${lang ? ` · lang ${lang}` : ''}`.slice(0, 300), lang: lang || undefined });
     return { error: FREE_BUSY, kind: 'busy' };
   };
 }
