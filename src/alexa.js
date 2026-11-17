@@ -6,7 +6,7 @@ import { talkMessages, talkReply } from './voice.js';
 
 export const ALEXA_PER_DAY = 300;
 const MAX_AGE_MS = 150_000;
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 const same = (a, b) => {
   a = String(a); b = String(b);
   let d = a.length ^ b.length;

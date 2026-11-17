@@ -98,7 +98,7 @@ describe('the chat page shows the picture', () => {
     expect(page).toContain("const picture=(src,alt)=>");
     expect(page).toContain("if(im){n.appendChild(picture(im[2],im[1]));i++;continue;}");
     expect(page).toContain("step('Drawing the picture','','image')");
-    for (const [, s] of page.matchAll(/<script>([\s\S]*?)<\/script>/g)) expect(() => new Function(s)).not.toThrow();
+    for (const [, s] of page.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(s)).not.toThrow();
   });
 });
 

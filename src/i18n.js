@@ -159,6 +159,8 @@ export const UK = {
   // Errors and the "what to do next" buttons.
   'What to do next': 'Що робити далі',
   'Try again': 'Спробувати ще раз',
+  'request failed': 'Запит не вдався',
+  'upstream request failed': 'Запит до сервісу не вдався',
   'Use free Flisk Wolf': 'Використати безкоштовний Flisk Wolf',
   'Set up the key again': 'Налаштувати ключ знову',
   'Choose another model': 'Обрати іншу модель',

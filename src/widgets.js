@@ -151,7 +151,7 @@ export async function web({ url }, { fetch }) {
   if (r.error) return { error: `could not reach ${u.hostname}: ${r.error}. Try another address.` };
   if (!r.ok) return { error: `${u.hostname} answered ${r.status}. Try another address.` };
   const body = (await r.text().catch(() => '')).slice(0, 400000);
-  const dec = (t) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/\s+/g, ' ').trim();
+  const dec = (t) => t.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
   const items = [...body.matchAll(/<(item|entry)\b[\s\S]*?<\/\1>/gi)].slice(0, 15).map((m) => {
     const x = m[0];
     const title = dec(x.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');

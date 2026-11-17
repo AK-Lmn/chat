@@ -242,7 +242,7 @@ describe('the page', () => {
     expect(page).toContain("import(window.__POD__+'pod.js')");
     expect(page).toContain('I need a computer for that. Connect one of your sandbox accounts below, once.');
     // The inline script still parses.
-    const js = page.match(/<script>([\s\S]*?)<\/script>/g).map((x) => x.slice(8, -9));
+    const js = page.match(/<script>([\s\S]*?)<\/script[^>]*>/gi).map((x) => x.slice(8, -9));
     for (const code of js) expect(() => new Function(`return async()=>{${code}\n}`)).not.toThrow();
   });
 });

@@ -3,7 +3,7 @@ import { appPage } from '../src/page.js';
 
 // The GEL five-second rules (flisk-sh/gel guards/five-second-test), applied to the home page a visitor lands on.
 const JARGON = /\b(?:pods?|orchestrat\w*|endpoints?|openai-compatible|inference|mcp|llms?|sdks?|serverless|runtimes?|kubernetes|k8s|namespaces?|tensors?|latency)\b/i;
-const text = (h) => h.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+const text = (h) => h.replace(/<script[\s\S]*?<\/script[^>]*>|<style[\s\S]*?<\/style[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 const words = (s) => (s.match(/\S+/g) || []).length;
 
 test('the home first screen passes the five-second rules', () => {

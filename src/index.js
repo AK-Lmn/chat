@@ -293,7 +293,7 @@ try{Object.defineProperty(window,'localStorage',{configurable:true,get:function(
 
 // Put the shim before any script of the page, without dropping the page into quirks mode (no text before the doctype).
 export function withStorageShim(html) {
-  for (const tag of [/<head(\s[^>]*)?>/i, /<html(\s[^>]*)?>/i, /<!doctype[^>]*>/i]) {
+  for (const tag of [/<head(?:\s[^<>]*)?>/i, /<html(?:\s[^<>]*)?>/i, /<!doctype[^<>]*>/i]) {
     const m = tag.exec(html);
     if (m) return html.slice(0, m.index + m[0].length) + STORAGE_SHIM + html.slice(m.index + m[0].length);
   }
@@ -359,7 +359,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         const text = r.status >= 500 || r.status === 403 ? (await r.text()).slice(0, 120) : '';
         return { status: r.status, ...(text ? { body: text } : {}) };
       } catch (e) {
-        return { status: 0, error: String(e?.message || e).slice(0, 120) };
+        console.log('probe failed', String(e?.message || e));
+        return { status: 0, error: 'request failed' };
       }
     };
     const fleet = (env.FLEET_URL || 'https://fleet.flisk.si').replace(/\/$/, '');
@@ -559,7 +560,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       // Time to the first audio and how many asks it took, so a slow voice can be told apart in the browser.
       return new Response(stream, { headers: { 'content-type': info.type || 'audio/mpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'server-timing': `voice;dur=${Date.now() - t0};desc="${voiceDesc(info)}"` } });
     } catch (e) {
-      const res = json(502, { error: String(e?.message || e).slice(0, 160) });
+      console.log('upstream failed', String(e?.message || e));
+      const res = json(502, { error: 'upstream request failed' });
       res.headers.set('server-timing', `voice;desc="${voiceDesc(info)}"`);
       return res;
     }
