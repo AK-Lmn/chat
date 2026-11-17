@@ -8,7 +8,7 @@ test('the model picker and the + menu are placed inside the window when they ope
   // clamps to the flisk bar and to any clipping parent, so neither menu is cut off
   expect(page).toContain("document.querySelector('flisk-bar')");
   expect(page).toContain("st.overflowX!=='visible'||st.overflowY!=='visible'");
-  expect(page).toContain('placeFloat(pop,mpBtn);mq.focus({preventScroll:true});');
+  expect(page).toContain("placeFloat(pop,mpBtn);if(!matchMedia('(max-width:860px)').matches)mq.focus({preventScroll:true});");
   expect(page).toContain('if(on)placeFloat(pm,pb);');
   expect(page).toContain("addEventListener('resize',()=>{if(!pop.hidden)placeFloat(pop,mpBtn);");
   // an open menu sits above the blurred idea buttons

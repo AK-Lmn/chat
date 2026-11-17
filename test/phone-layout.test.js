@@ -73,7 +73,7 @@ test('the shared top bar never makes the page wider and never clips its menus', 
 test('the API key form stacks Save and Remove as full-width 44px buttons on phones', () => {
   expect(page).toContain('#byo .bystat{flex-direction:column;align-items:stretch');
   expect(page).toContain('#byo .byacts button{flex:1;height:44px');
-  expect(page).toContain('.plusmenu:has(#mppop:not([hidden]))>:not(.mp){display:none}');
+  expect(page).not.toContain('.plusmenu:has(#mppop:not([hidden]))>:not(.mp){display:none}');
 });
 
 test('Earth pills stay readable over the globe and the picker focus never scrolls the page', () => {
@@ -90,4 +90,25 @@ test('phone + menu is a bottom sheet, the plus glyph is centered, key buttons ar
   expect(pg).toContain('#plus{display:inline-flex;align-items:center;justify-content:center;padding:0}');
   expect(pg).toContain('e.target.isConnected&&!e.target.closest(\'#plus,#plusmenu\')');
   expect(pg).toContain('#byo .byacts button{flex:1;height:44px;font-size:13px;justify-content:center');
+});
+
+test('phone sheet: kinds in two columns, everything else behind one collapsed Settings row', () => {
+  expect(page).toContain('html.plus .plusmenu .cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))');
+  expect(page).toContain("more.className='more'");
+  expect(page).toContain('AI model, computers, voice, files');
+  // collapsed by default: the details element is never created open
+  expect(page).not.toContain("more.open=true");
+});
+
+test('phone sheet uses plain labels, brand names only as the second line', () => {
+  expect(page).toContain('<b>AI model</b><small class="phv"><span class="pv1">Free model</span> <span class="pv2">Flisk Wolf</span>');
+  expect(page).toContain('<b>Computers</b><small id="sbsum2">Cheapest first</small>');
+  expect(page).not.toContain('Fleet, automatic</');
+});
+
+test('phone model picker is one column: title and Done, provider pills in one row, one-line rows', () => {
+  expect(page).toContain('#mppop .pgrid{display:contents}');
+  expect(page).toContain('#mppop .rail{flex:none;flex-direction:row');
+  expect(page).toContain('-webkit-line-clamp:1');
+  expect(page).toContain('id="popx"');
 });
