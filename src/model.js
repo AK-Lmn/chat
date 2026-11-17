@@ -201,12 +201,21 @@ export function imageIntent(env) {
   };
 }
 
+// The small fallback model drifts from the person's wording: it ignores "two sentences" and pads with markdown. These rules are added to
+// the system message, where it weighs them most.
+export const FALLBACK_RULES = 'Follow the length and format the user asks for exactly (for example "two sentences" means two sentences). Answer the question asked, with no extra facts and no closing offer. Write plain text, no ** or # marks, unless the user asks for a list or code.';
+export function withFallbackRules(messages = []) {
+  const i = messages.findIndex((m) => m.role === 'system');
+  if (i < 0) return [{ role: 'system', content: FALLBACK_RULES }, ...messages];
+  return messages.map((m, j) => (j === i ? { ...m, content: `${m.content}\n\n${FALLBACK_RULES}` } : m));
+}
+
 function workersAiModel(env, overLimit) {
   return async (messages) => {
     if (!env.AI) return { error: 'no Workers AI binding', kind: 'provider' };
     if (overLimit && (await overLimit())) return { error: 'the Workers AI fallback is used up for today', kind: 'limit' };
     try {
-      const r = await env.AI.run(WORKERS_AI_FALLBACK, { messages, max_tokens: 1024, temperature: 0 });
+      const r = await env.AI.run(WORKERS_AI_FALLBACK, { messages: withFallbackRules(messages), max_tokens: 1024, temperature: 0 });
       // Older models answer { response }; newer ones (llama-3.1-8b-fast-v2 behind the same name) answer OpenAI-style choices.
       const raw = r?.response ?? r?.choices?.[0]?.message?.content ?? '';
       const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
