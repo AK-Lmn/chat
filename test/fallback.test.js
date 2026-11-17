@@ -281,3 +281,13 @@ test('an Astra call that OpenAI answers on the first name is traced as unexpecte
   await modelFrom({}, ok, chosen, { trace: (e) => events.push(e) })([{ role: 'user', content: 'hi' }]);
   expect(events).toEqual([expect.objectContaining({ kind: 'unexpected', expected: 'gpt-6.2-astra', actual: 'gpt-6.2-astra' })]);
 });
+
+import { withFallbackRules, FALLBACK_RULES } from '../src/model.js';
+test('the Workers AI fallback gets length and format rules in its system message', () => {
+  const a = withFallbackRules([{ role: 'system', content: 'Be kind.' }, { role: 'user', content: 'hi' }]);
+  expect(a[0].content).toBe(`Be kind.\n\n${FALLBACK_RULES}`);
+  expect(a.length).toBe(2);
+  const b = withFallbackRules([{ role: 'user', content: 'hi' }]);
+  expect(b[0]).toEqual({ role: 'system', content: FALLBACK_RULES });
+  expect(b[1].content).toBe('hi');
+});
