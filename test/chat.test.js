@@ -406,6 +406,18 @@ test('the page reads its models from inference /v1/catalog through the binding',
   expect(await loadCatalog({}, 2e13)).toBe(DEFAULT_MODELS);
 });
 
+test('a coming-soon model is listed in the picker but cannot be picked', () => {
+  const models = cleanModels([
+    { id: 'flisk-wolf-chat', name: 'Flisk Wolf', provider: 'flisk', providerName: 'Flisk', key: '', model: 'flisk-wolf-chat' },
+    { id: 'gpt-6-2-astra', name: 'GPT-6.2 Astra', provider: 'openai', providerName: 'OpenAI', key: 'openai', model: 'gpt-6.2-astra', soon: true },
+  ]);
+  expect(models[1].soon).toBe(true);
+  expect(models[0].soon).toBeUndefined();
+  const page = appPageUi({ login: 'ann', connected: [], models });
+  expect(page).toContain('GPT-6.2 Astra');
+  expect(page).toContain("if(m.soon)return;pick(m)");
+});
+
 test('the page uses the Flisk icons and shows the four kinds of task', () => {
   const page = appPageUi({ login: 'ann', connected: [] });
   for (const k of ['data-cat="website"', 'data-cat="app"', 'data-cat="answer"', 'data-cat="check"', 'id="mppop"', 'id="newchat"']) expect(page).toContain(k);

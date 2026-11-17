@@ -35,7 +35,7 @@ export function cleanModels(list) {
   const out = (Array.isArray(list) ? list : [])
     .filter((m) => m && typeof m.id === 'string' && typeof m.name === 'string' && keys.has(String(m.key ?? '')))
     .slice(0, 60)
-    .map((m) => ({ id: s(m.id, 60), name: s(m.name, 60), provider: s(m.provider, 30), providerName: s(m.providerName, 30), description: s(m.description, 140), price: s(m.price, 5), free: m.key === '', key: s(m.key, 20), model: /^[A-Za-z0-9._:\/-]{0,80}$/.test(String(m.model ?? '')) ? s(m.model, 80) : '' }));
+    .map((m) => ({ id: s(m.id, 60), name: s(m.name, 60), provider: s(m.provider, 30), providerName: s(m.providerName, 30), description: s(m.description, 140), price: s(m.price, 5), free: m.key === '', key: s(m.key, 20), model: /^[A-Za-z0-9._:\/-]{0,80}$/.test(String(m.model ?? '')) ? s(m.model, 80) : '', ...(m.soon === true ? { soon: true } : {}) }));
   return out.some((m) => m.free) ? out : DEFAULT_MODELS;
 }
 
@@ -245,9 +245,9 @@ html .plusmenu>.chip.ico.on{background:transparent;color:var(--ink);border-color
 .lt{width:26px;height:26px;border-radius:var(--radius);display:grid;place-items:center;font:600 12px/1 var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line)}
 .mlist{overflow:auto;padding:6px}
 .mi{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;width:100%;text-align:left;border:0;background:none;border-radius:var(--radius);padding:9px 10px;cursor:pointer}
-.mi:hover,.mi.on{background:var(--bg)}.mi svg{border-radius:var(--radius)}
+.mi:hover,.mi.on{background:var(--bg)}.mi.soon{cursor:default;opacity:.6}.mi.soon:hover{background:none}.mi svg{border-radius:var(--radius)}
 .mi .n{font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mi .d{font-size:13px;color:var(--dim)}
-.price{font:500 11px var(--mono);color:var(--soft)}.price.free{color:var(--green);background:var(--tint);border-radius:var(--radius);padding:1px 7px}
+.price{font:500 11px var(--mono);color:var(--soft)}.price.soon{border:1px solid var(--line,currentColor);border-radius:var(--radius);padding:0 6px}.price.free{color:var(--green);background:var(--tint);border-radius:var(--radius);padding:1px 7px}
 .mi .ck{width:16px;height:16px;margin-top:3px;opacity:0}.mi.on .ck{opacity:1}
 .mgroup{font-size:12px;color:var(--soft);padding:8px 10px 2px}
 #byo{border-top:1px solid var(--line);padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}#byo[hidden]{display:none}
@@ -772,7 +772,7 @@ let cur=MODELS[0],railOn='';
 // One OpenRouter model as a row of its own: picking it fills in the model id, so only the key is left to paste.
 const orModel=(id,name,ppm,ctx)=>({id:'or:'+id,name:(name||id.split('/').pop()).replace(/^[^:]*: /,''),provider:'openrouter',providerName:'OpenRouter',description:id+(ctx?' · '+Math.round(ctx/1000)+'K context':''),price:ppm===0?'free':ppm<1?'$':ppm<5?'$$':'$$$',free:false,key:'openrouter',model:id,orFree:ppm===0});
 let OR=[];
-try{const v=sessionStorage.getItem('chat_model');const m=MODELS.find(x=>x.id===v)||(v&&v.indexOf('or:')===0?orModel(v.slice(3),'',1,0):null);if(m)cur=m;}catch(e){}
+try{const v=sessionStorage.getItem('chat_model');const m=MODELS.find(x=>x.id===v&&!x.soon)||(v&&v.indexOf('or:')===0?orModel(v.slice(3),'',1,0):null);if(m)cur=m;}catch(e){}
 const svgAt=(svg,size)=>svg.replace('<svg ','<svg width="'+size+'" height="'+size+'" aria-hidden="true" ');
 const tile=(m,size)=>m.provider==='flisk'?svgAt(IC.wolf,size):LG[m.provider]?'<span class="lg" style="width:'+size+'px;height:'+size+'px" aria-hidden="true"><img src="'+LG[m.provider]+'" alt=""></span>':'<span class="lt" aria-hidden="true">'+((m.providerName||'?').replace(/[^A-Z]/g,'').slice(0,2)||(m.providerName||'?')[0])+'</span>';
 const providers=[...new Map(MODELS.map(m=>[m.provider,m])).values()];
@@ -787,10 +787,10 @@ function drawList(){const q=mq.value.trim().toLowerCase();mlist.textContent='';l
   MODELS.filter(m=>(!railOn||m.provider===railOn)&&(!q||(m.name+' '+m.providerName+' '+m.description).toLowerCase().includes(q))).concat(ors).forEach(m=>{
     const g=m.orFree!==undefined?'OpenRouter models · your key':m.providerName+(m.free?'':' · your key');
     if(g!==last){last=g;mlist.appendChild(node('div','mgroup',g));}
-    const b=node('button','mi'+(m.id===cur.id?' on':''));b.type='button';b.setAttribute('role','option');b.setAttribute('aria-selected',String(m.id===cur.id));
+    const b=node('button','mi'+(m.id===cur.id?' on':'')+(m.soon?' soon':''));b.type='button';if(m.soon)b.setAttribute('aria-disabled','true');b.setAttribute('role','option');b.setAttribute('aria-selected',String(m.id===cur.id));
     b.innerHTML=tile(m,28)+'<span><span class="n"></span><span class="d"></span></span><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const n=b.querySelector('.n');n.textContent=m.name;const pr=node('span','price'+(m.free||m.orFree?' free':''),m.free?'free':m.price);n.appendChild(pr);b.querySelector('.d').textContent=m.description;
-    b.onclick=()=>{pick(m);if(m.free)closePop();else{(m.model?byoKey:byoModel).focus();}};mlist.appendChild(b);});
+    const n=b.querySelector('.n');n.textContent=m.name;const pr=m.soon?node('span','price soon','coming soon'):node('span','price'+(m.free||m.orFree?' free':''),m.free?'free':m.price);n.appendChild(pr);b.querySelector('.d').textContent=m.description;
+    b.onclick=()=>{if(m.soon)return;pick(m);if(m.free)closePop();else{(m.model?byoKey:byoModel).focus();}};mlist.appendChild(b);});
   if(railOn==='openrouter'&&!OR.length)mlist.appendChild(node('div','mgroup','Loading OpenRouter models…'));
   else if(railOn==='openrouter'&&!q)mlist.appendChild(node('div','mgroup','Search above for any of '+OR.length+' OpenRouter models.'));
   if(!mlist.children.length)mlist.appendChild(node('div','mgroup','No model matches.'));}
@@ -865,7 +865,7 @@ mpBtn.onclick=()=>pop.hidden?openPop():closePop();mq.addEventListener('input',()
 // The picker lives inside the composer form: Enter there must never send the task. Search: choose the first match.
 // Model name: on to the key. Key (or both filled): done, close the picker and go back to the task box.
 pop.addEventListener('keydown',(e)=>{if(e.key!=='Enter')return;const t=e.target;if(t.tagName!=='INPUT')return;e.preventDefault();e.stopPropagation();
-  if(t===mq){const first=mlist.querySelector('.mi');if(first)first.click();}else if(t===byoModel&&!bySug.hidden&&bySug.firstChild&&bySug.firstChild.querySelector('b')){bySug.firstChild.onmousedown(e);}else if(t===byoModel&&!byoKey.value.trim()&&!byoKey.parentElement.parentElement.hidden){byoKey.focus();}else{closePop();box.focus();}});
+  if(t===mq){const first=mlist.querySelector('.mi:not(.soon)');if(first)first.click();}else if(t===byoModel&&!bySug.hidden&&bySug.firstChild&&bySug.firstChild.querySelector('b')){bySug.firstChild.onmousedown(e);}else if(t===byoModel&&!byoKey.value.trim()&&!byoKey.parentElement.parentElement.hidden){byoKey.focus();}else{closePop();box.focus();}});
 pick(cur);
 // The encrypted keys load a moment after the page: fill the key field when they arrive.
 vaultReady.then(()=>{if(!cur.free&&!byoKey.value)pick(cur);});
