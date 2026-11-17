@@ -21,6 +21,11 @@ test('an ambiguous Cyrillic clip keeps the chat language, then the page language
   expect(resolveLang({ text: 'Все добрые, ты кто?', heard: 'uk', sticky: 'uk', ui: 'uk' })).toBe('ru');
   expect(resolveLang({ text: 'Hello there', heard: 'en', sticky: 'uk', ui: 'uk' })).toBe('en');
   expect(resolveLang({ text: '', heard: '', sticky: '', ui: '' })).toBe('');
+  // An English question in a chat that was Ukrainian is answered in English; a Latin sticky language is kept.
+  expect(resolveLang({ text: 'hello, which model are you?', sticky: 'uk', ui: 'uk' })).toBe('en');
+  expect(resolveLang({ text: 'hello, which model are you?', sticky: 'ru', ui: 'en' })).toBe('en');
+  expect(resolveLang({ text: 'hola, que tal', sticky: 'es', ui: 'en' })).toBe('es');
+  expect(resolveLang({ text: 'ok', sticky: '', ui: 'uk' })).toBe('en');
 });
 
 test('the model gets an explicit reply language and the facts about itself, with one persona for each mode', () => {

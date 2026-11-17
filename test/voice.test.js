@@ -116,7 +116,7 @@ test('/api/talk answers with the free model, short and plain, and needs a sign-i
   expect((await call({ history: [] }, cookie)).status).toBe(400);
   const res = await call({ history: [{ role: 'user', content: 'Will I ship?' }], ai: { ai: 'wolf' } }, cookie);
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ heard: '', lang: '', text: 'You will ship it today.' });
+  expect(await res.json()).toEqual({ heard: '', lang: 'en', text: 'You will ship it today.' });
   expect(sent[0].messages[0].role).toBe('system');
   expect(sent[0].messages.at(-1)).toEqual({ role: 'user', content: 'Will I ship?' });
 });
@@ -516,7 +516,7 @@ test('/api/talk with stream:true sends the sentences one line at a time, then do
   expect(res.status).toBe(200);
   expect(res.headers.get('content-type')).toContain('ndjson');
   const lines = await readNd(res);
-  expect(lines[0]).toEqual({ heard: '', lang: '' });
+  expect(lines[0]).toEqual({ heard: '', lang: 'en' });
   expect(lines.filter((l) => l.say).map((l) => l.say)).toEqual(['You will ship it today.', 'Then rest, you earned it.']);
   const done = lines.at(-1);
   expect(done.done).toBe(true);

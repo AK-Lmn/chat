@@ -1,6 +1,7 @@
 // Sends a problem to traces.flisk.si (flisk-sh/traces): only when something went wrong or took an unexpected path, never a normal request.
 // Never throws, never waits more than 2 s, and does nothing until TRACE_KEY is set. No prompt, answer or name is ever sent.
 // Needs the TRACES service binding (a Worker cannot call a Worker on the same domain by its public address) or falls back to the public URL.
+import { detectLang } from './lang.js';
 export const SLOW_ASK_MS = 30_000;
 export const SLOW_STEP_MS = 90_000;
 
@@ -26,8 +27,12 @@ export async function sendTrace(env, event, fetchImpl = fetch) {
 }
 
 // What a finished task says about itself: a failure is an error, a weak result is unexpected, a long one is slow. Nothing otherwise.
-export function runEvents(result, problem, route = '/api/run') {
+export function runEvents(result, problem, route = '/api/run', lang = '') {
   const out = [];
+  // The answer came back in another language than the turn asked for (English asked, Ukrainian answered). Only codes are sent, never text.
+  const said = detectLang(result.answer || '');
+  const asked = String(lang || '').slice(0, 2).toLowerCase();
+  if (asked && said && said !== asked) out.push({ route, kind: 'unexpected', why: `asked in ${asked}, answered in ${said}`, detail: `${result.provider || 'no provider'}`, ms: result.ms || 0 });
   const ms = result.ms || 0;
   const steps = result.steps?.length || 0;
   const detail = `${steps} steps · ${result.stats?.errors || 0} failed · ${result.provider || 'no provider'}`;

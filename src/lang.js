@@ -25,6 +25,7 @@ export function detectLang(text) {
 // The chat's language for this turn. text = what was written or heard; heard = Whisper's guess (voice only);
 // sticky = the language this chat has been in; ui = the page language ('uk' or 'en').
 // Ambiguous Cyrillic (Whisper says ru or uk, the words say nothing) keeps the sticky language, else the page language.
+const LATIN_LANGS = new Set(['en', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'nl', 'tr', 'cs', 'sk', 'ro', 'hu', 'sv', 'da', 'no', 'fi', 'vi', 'id', 'ms', 'lt', 'lv', 'et', 'sl', 'hr']);
 const CYRILLIC_PAIR = new Set(['uk', 'ru', 'be']);
 export function resolveLang({ text = '', heard = '', sticky = '', ui = '' } = {}) {
   const t = detectLang(text);
@@ -38,6 +39,9 @@ export function resolveLang({ text = '', heard = '', sticky = '', ui = '' } = {}
     if (u === 'uk') return 'uk';
     return h === 'be' ? 'ru' : h || 'ru';
   }
+  // Plain Latin text names no language itself. It must not inherit a non-Latin sticky language (an English question in a chat that
+  // was Ukrainian got a Ukrainian answer): keep a Latin sticky (Spanish, German...), otherwise it is English.
+  if (!h && /[a-z]{2,}/i.test(String(text))) return LATIN_LANGS.has(s) ? s : 'en';
   return h || s || '';
 }
 
