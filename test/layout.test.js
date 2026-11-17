@@ -55,3 +55,13 @@ test('picking a kind of task in the + menu shows a result: menu closes, hint cha
   expect(page).toContain("const ti=document.querySelector('[data-ex=ideas]');if(ti&&ti.getAttribute('aria-expanded')!=='true')ti.click();");
   expect(page).toContain("answer:'Ask anything'");
 });
+
+test('OpenRouter login is the first, primary choice in the key panel; pasting a key comes after it', () => {
+  const page = appPage({ login: 'ann', connected: [] });
+  const at = (s) => page.indexOf(s);
+  expect(at('id="byor"')).toBeGreaterThan(-1);
+  expect(at('id="byor"')).toBeLessThan(at('id="byomodel"'));
+  expect(at('id="byor"')).toBeLessThan(at('id="byokey"'));
+  expect(page).toContain('or paste an API key');
+  expect(page).not.toContain('No key? Log in with OpenRouter');
+});
