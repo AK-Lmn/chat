@@ -20,3 +20,9 @@ describe('Jev decides language and kind of ask', () => {
     expect(decide({})).toBeNull();
   });
 });
+
+test('language question is skipped when the word lists already know', async () => {
+  await decide(ai({ type: ch('code', 0.9) }))('x', { needLang: false });
+  expect(Object.keys(ai.last.i.questions)).toEqual(['type']);
+  expect(ai.last.i.state.length).toBeLessThanOrEqual(300);
+});

@@ -223,15 +223,18 @@ export function imageIntent(env) {
 // word lists, the regexes and the Llama question keep deciding as before.
 export const ASK_TYPES = { weather: 'weather or a forecast', stats: 'numbers, statistics, figures or a chart of data', fact: 'a fact about the world, a person, a place or a thing', image: 'a picture, photo, drawing or illustration generated for them', video: 'a video or clip made for them', code: 'code, a script, a bug fix or a technical how-to', website: 'a website, web page, landing page or app built for them', chat: 'small talk, a greeting, an opinion or advice', other: 'anything else' };
 const LANG_CODES = ['en', 'uk', 'ru', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'nl', 'tr', 'cs', 'ro', 'hu', 'sv', 'el', 'ar', 'he', 'hi', 'ja', 'ko', 'zh', 'vi', 'th', 'id'];
+const TYPE_Q = { type: { type: 'choice', instructions: 'What kind of ask is this?', criteria: Object.fromEntries(Object.entries(ASK_TYPES).map(([k, v]) => [k, `The user wants ${v}`])) } };
 const DECIDE_QUESTIONS = {
   lang: { type: 'choice', instructions: 'Which language is the message written in?', criteria: Object.fromEntries(LANG_CODES.map((c) => [c, `Written in ${c}`])) },
-  type: { type: 'choice', instructions: 'What kind of ask is this?', criteria: Object.fromEntries(Object.entries(ASK_TYPES).map(([k, v]) => [k, `The user wants ${v}`])) },
+  ...TYPE_Q,
 };
+// Cost: the free Workers AI allowance is 10,000 neurons a day. The language question (25 criteria) is only asked when the word lists
+// could not name the language, and the ask is cut to 300 characters, so a call stays at a few neurons.
 export function decide(env) {
   if (!env?.AI) return null;
-  return async (task) => {
+  return async (task, { needLang = true } = {}) => {
     try {
-      const j = await env.AI.run(JEV_MODEL, { state: String(task).slice(0, 600), questions: DECIDE_QUESTIONS });
+      const j = await env.AI.run(JEV_MODEL, { state: String(task).slice(0, 300), questions: needLang ? DECIDE_QUESTIONS : TYPE_Q });
       const pick = (k) => { const a = j?.answers?.[k]; return a?.type === 'choice' && typeof a.choice === 'string' ? { choice: a.choice, confidence: Number(a.confidence) || 0 } : null; };
       const l = pick('lang'), t = pick('type');
       const out = {
