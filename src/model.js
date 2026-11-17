@@ -161,6 +161,11 @@ export const POLLINATIONS_TEXT_URL = 'https://text.pollinations.ai/openai';
 export const POLLINATIONS_MS = 25_000; // it queues anonymous callers: a stuck call must end, not hang the chat
 export const WORKERS_AI_PER_DAY = 300; // about 1,500 neurons at most: chat's share of the account's free 10,000
 export const FREE_BUSY = 'The free AI is busy right now. Try again in a minute, or keep going free with your own OpenRouter account.';
+// Step 4, our Vercel AI Gateway (pay per use, no markup): off unless a key AND a daily request cap are set. A request cap is a
+// hard ceiling on cost (each call is limited to max_tokens), so a missing or zero cap means the route is never called.
+export const VERCEL_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
+export const VERCEL_MODEL = 'alibaba/qwen3.8-27b';
+export const vercelCap = (env) => (env.VERCEL_AI_KEY ? Math.max(0, Math.floor(Number(env.VERCEL_DAILY_REQUESTS) || 0)) : 0);
 const WOLF_REST_MS = 10 * 60 * 1000;
 let wolfOutUntil = 0; // after a budget or rate-limit answer, skip Wolf for a while instead of asking it every step
 let orModels = { at: 0, ids: null };
@@ -233,7 +238,7 @@ function ownFreeModel(env, fetchImpl, chosen) {
   };
 }
 
-export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, now = () => Date.now(), log = () => {} } = {}) {
+export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);
   if (!chosen.free) return oneModel(env, fetchImpl, chosen);
   const wolf = oneModel(env, fetchImpl, chosen);
@@ -257,6 +262,11 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const r = await workers(messages);
     if (!r.error) return { ...r, by: WORKERS_AI_FALLBACK };
     tried.push(`workers-ai: ${r.error}`);
+    if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
+      const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
+      if (!v.error) return { ...v, by: 'vercel' };
+      tried.push(`vercel: ${v.error}`);
+    }
     if (env.NO_POLLINATIONS !== '1') {
       const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
       if (!p.error) return { ...p, by: 'pollinations' };
