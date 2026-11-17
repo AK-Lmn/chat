@@ -324,7 +324,7 @@ describe('the two pickers', () => {
     const w = world();
     const app = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: await authed(e) } }), e, { fetchImpl: w.fetchImpl })).text();
     expect(app).toContain('id="ai"');
-    expect(app).toContain('Fleet, automatic');
+    expect(app).toContain('Cheapest first, automatic');
     expect(app).toContain('name="sb" value="daytona"');
     expect(app).not.toContain('name="sb" value="e2b"');
     expect(app).toMatch(/E2B<\/span><a class="cbtn" href="#setup">Connect<\/a>/);

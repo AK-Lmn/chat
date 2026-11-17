@@ -69,5 +69,53 @@ for (const t of targets) {
   if (report.overflowX > 0 || report.offscreen.length || report.zoom.length || report.overlapped.length || !typing.startsWith("ok")) bad++;
   await browser.close();
 }
+
+// Phone "+" sheet and model picker, every look at 320/360/390: no sideways scroll, Settings collapsed,
+// 44px rows, picker opens as one full-width column.
+const looks = ["classic", "ivory", "glow", "focus", "voice", "earth"];
+const origin = new URL(url).origin;
+const sheetBrowser = await chromium.launch();
+for (const width of [320, 360, 390]) for (const look of looks) {
+  const ctx = await sheetBrowser.newContext({ ...devices["Pixel 7"], viewport: { width, height: 760 } });
+  await ctx.addCookies([{ name: "chat_theme", value: look, url: origin }]);
+  const page = await ctx.newPage();
+  await page.goto(url, { waitUntil: "load" }).catch(() => {});
+  await page.waitForTimeout(1000);
+  const probs = [];
+  const over = () => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+  if ((await over()) > 0) probs.push("home overflows");
+  await page.locator("#plus").tap().catch(() => probs.push("no + button"));
+  await page.waitForTimeout(350);
+  const sheet = await page.evaluate(() => {
+    const more = document.querySelector(".plusmenu .more");
+    const rows = [...document.querySelectorAll(".plusmenu summary, .plusmenu .cats > *")].filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().height));
+    return { more: !!more, open: !!more?.open, minRow: Math.min(...rows, 999), over: document.documentElement.scrollWidth - innerWidth };
+  });
+  if (!sheet.more) probs.push("no Settings group");
+  if (sheet.open) probs.push("Settings open by default");
+  if (sheet.minRow < 44) probs.push(`sheet row ${sheet.minRow}px`);
+  if (sheet.over > 0) probs.push("sheet overflows");
+  await page.locator(".more > summary").tap().catch(() => {});
+  await page.locator("#mpbtn:visible").first().tap().catch(() => probs.push("no model button"));
+  await page.waitForTimeout(500);
+  const pick = await page.evaluate(() => {
+    const pop = document.querySelector("#mppop"), r = pop.getBoundingClientRect();
+    const rows = [...pop.querySelectorAll(".mi")].filter((e) => e.offsetParent);
+    const xs = new Set(rows.map((e) => Math.round(e.getBoundingClientRect().left)));
+    return { shown: !pop.hidden && r.width > 0, w: Math.round(r.width), vw: innerWidth, cols: xs.size, rows: rows.length, tiny: rows.filter((e) => e.getBoundingClientRect().height < 44).length, over: document.documentElement.scrollWidth - innerWidth };
+  });
+  if (!pick.shown) probs.push("picker did not open");
+  else {
+    if (pick.w < pick.vw - 2) probs.push(`picker ${pick.w}px of ${pick.vw}`);
+    if (pick.cols > 1) probs.push("picker has several columns");
+    if (!pick.rows) probs.push("picker has no rows");
+    if (pick.tiny) probs.push(`${pick.tiny} picker rows under 44px`);
+    if (pick.over > 0) probs.push("picker overflows");
+  }
+  console.log(`${probs.length ? "FAIL" : "ok  "} sheet ${look} ${width}px${probs.length ? " - " + probs.join("; ") : ""}`);
+  if (probs.length) bad++;
+  await ctx.close();
+}
+await sheetBrowser.close();
 console.log(bad ? `\n${bad} device(s) with problems` : "\nall clean");
 process.exit(bad ? 1 : 0);
