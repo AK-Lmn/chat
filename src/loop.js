@@ -342,6 +342,7 @@ export async function runTask({ classify = null, task, history = [], github = un
   const links = [];
   // What went wrong or right, counted for the build analytics (src/index.js recordRun): why a build came out weak.
   const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
+  let refusedImage = 0;
   const t0 = Date.now();
   const finish = async (answer, error = null) => {
     if (podId && kept) {
@@ -351,7 +352,7 @@ export async function runTask({ classify = null, task, history = [], github = un
       emit({ type: 'pod_stopped', ok: s?.status === 200 });
       if (s?.status === 200) await Promise.resolve(track.stopped?.(podId)).catch(() => {});
     }
-    return { answer, error, steps, links, provider, ms: Date.now() - t0, stats };
+    return { answer, error, steps, links, provider, ms: Date.now() - t0, stats, ...(picked ? { picked: String(kind).toLowerCase(), refusedImage } : {}) };
   };
   let emptyRetries = 0;
   let giveUps = 0;
@@ -390,7 +391,7 @@ export async function runTask({ classify = null, task, history = [], github = un
       emit({ type: 'thinking', step });
       const last = step === maxSteps;
       if (last) messages.push({ role: 'user', content: 'That was the last action. Reply with {"say": ...} now.' });
-      const reply = await model(messages);
+      const reply = await model(messages, lang ? { lang } : undefined);
       // An empty reply is usually a one-off (a long command output, a reasoning model that only thought): ask again, twice at most,
       // without using up a step.
       if (reply.kind === 'empty' && emptyRetries < 2) {
@@ -506,6 +507,7 @@ export async function runTask({ classify = null, task, history = [], github = un
       let shown;
       let ours = false; // chat itself refused the action (a rule, not a broken computer or file)
       if (action.type === 'image' && picked) {
+        refusedImage++;
         shown = { error: `Refused: the person picked ${picked}, not a picture. Build it: send a "site" action (or write and publish an index.html), then "say".` };
         ours = true;
       } else if (action.type === 'image') {
