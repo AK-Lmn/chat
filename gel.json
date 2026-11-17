@@ -21,7 +21,7 @@
     "max_age_days": 30
   },
   "input_in_viewport": {
-    "result": "bench/input-viewport.json",
+    "result": "docs/north-star/input-viewport.json",
     "max_age_days": 30
   }
 }
