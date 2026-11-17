@@ -110,7 +110,7 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
       const r = await call(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${key}`, 'user-agent': 'flisk-chat', ...(chosen.referer ? { 'http-referer': 'https://chat.flisk.si', 'x-title': 'Flisk Chat' } : {}) },
-        body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}), ...(stream ? { stream: true } : {}) }),
+        body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}), ...(chosen.free ? { reasoning_effort: o.effort === 'medium' ? 'medium' : 'low' } : {}), ...(stream ? { stream: true } : {}) }),
         ...(chosen.ms ? { signal: AbortSignal.timeout(chosen.ms) } : {}),
       });
       return { res: r, body: stream && r.ok ? null : await r.json().catch(() => null) };
@@ -238,10 +238,10 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
   if (!chosen.free) return oneModel(env, fetchImpl, chosen);
   const wolf = oneModel(env, fetchImpl, chosen);
   const workers = workersAiModel(env, overLimit);
-  return async (messages) => {
+  return async (messages, o = {}) => {
     const tried = [];
     if (now() >= wolfOutUntil) {
-      const r = await wolf(messages);
+      const r = await wolf(messages, { effort: o.effort });
       if (!r.error) return { ...r, by: 'wolf' };
       tried.push(`wolf: ${r.error}`);
       if (r.kind === 'limit') wolfOutUntil = now() + WOLF_REST_MS;

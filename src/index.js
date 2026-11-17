@@ -32,8 +32,6 @@ export const SITES_PER_LOGIN = 5;
 export const VIDEOS_PER_LOGIN = 5;
 export const IMAGES_PER_LOGIN = 50;
 export const IMAGE_DAYS = 30;
-// MeloTTS is robotic next to Ava, so Ava gets this long to start before the backup is asked (it was 0.8 s, and in a slow
-// spell of Microsoft's that meant Melo spoke every answer). Melo still covers a longer stall.
 const alexaCache = (env) => env.VOICE_CACHE || (typeof caches !== 'undefined' && caches.default) || null;
 const alexaAudio = (bytes) => new Response(bytes, { headers: { 'content-type': 'audio/mpeg', 'content-length': String(bytes.length), 'cache-control': 'public, max-age=86400' } });
 async function alexaVoiceBytes(env, text) {
@@ -122,24 +120,6 @@ export function cspWithPod(pod, origin) {
   return SECURITY['content-security-policy'].replace("script-src 'unsafe-inline'", `script-src 'unsafe-inline' 'wasm-unsafe-eval' blob: ${from} ${new URL('../cfworker2browser/', from).href}`).replace("connect-src 'self'", `connect-src 'self' ${ws} ${from}`) + `; worker-src blob: ${new URL('../cfworker2browser/', from).href}`;
 }
 const html = (body, status = 200, extra = {}) => new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...SECURITY, ...extra } });
-// The backup voice when Ava (Microsoft) is slow: MeloTTS on the account's Workers AI. It costs about 18 neurons per
-// minute of speech (Aura, the nicer one, costs ~75 times more and would eat the free 10,000 a day), answers a short
-// reply in 0.4-1.4 s, and comes as 44.1 kHz WAV (about 700 KB for a 150-character answer; 4 ms CPU to decode).
-// It speaks only these languages; other answers wait for Ava.
-export const MELO_MODEL = '@cf/myshell-ai/melotts';
-const MELO_LANGS = new Set(['en', 'es', 'fr', 'zh', 'ja', 'ko']);
-export function meloBackup(env, lang = '') {
-  const l = String(lang || 'en').slice(0, 2).toLowerCase();
-  if (!env.AI || !MELO_LANGS.has(l)) return null;
-  const say = async (words) => {
-    const r = await env.AI.run(MELO_MODEL, { prompt: words, lang: l });
-    const audio = String(r?.audio || '');
-    const bytes = typeof Uint8Array.fromBase64 === 'function' ? Uint8Array.fromBase64(audio) : Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
-    if (bytes.length < 500) throw new Error('the backup voice sent no audio');
-    return new Response(bytes).body;
-  };
-  return Object.assign(say, { kind: 'melo', type: 'audio/wav' });
-}
 // '2 tries, won 2 | 1 at0 o412 s520 a- x | 2 at800 o1190 s1290 a1450': for each ask of the voice, ms from the request
 // to its start (at), socket open (o), Microsoft's turn start (s) and first audio (a); x = it failed.
 export function voiceDesc(info = {}) {
