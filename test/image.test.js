@@ -161,3 +161,21 @@ describe('a small model decides, not the wording', () => {
     expect(await imageIntent({ AI: { run: async () => ({ choices: [{ message: { content: 'Image' } }] }) } })('draw a cat')).toBe('image');
   });
 });
+
+describe('a picked website is never drawn as a picture', () => {
+  test('"draw me something cool" with the website picked goes to the model, which is told what was picked', async () => {
+    const prompts = [];
+    let asked = 0;
+    const r = await runTask({ task: 'draw me something cool', kind: 'website', model: async (m) => { prompts.push(JSON.stringify(m)); asked++; return { text: '{"say":"I will build the site."}' }; }, computer: noComputer, photo: async () => { throw new Error('no picture when a website was picked'); }, publish: async () => ({}) });
+    expect(asked).toBeGreaterThan(0);
+    expect(prompts[0]).toContain('picked');
+    expect(r.answer).not.toContain('![');
+  });
+
+  test('a model "image" action is refused when a website was picked', async () => {
+    let drew = 0;
+    const r = await runTask({ task: 'something cool', kind: 'website', model: scripted('{"image": {"prompt": "a city", "caption": "A city."}}', '{"say":"done"}'), computer: noComputer, photo: async () => { drew++; return PIC; }, saveImage: async () => 'https://chat.flisk.si/i/0123456789abcdef.jpg', publish: async () => ({}) });
+    expect(drew).toBe(0);
+    expect(r.answer).not.toContain('![');
+  });
+});
