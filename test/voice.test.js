@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { handle, voiceDesc, meloBackup, MELO_MODEL, MAX_AUDIO_B64, transcribe, hedgedRun, VOICE_PARTS_PER_DAY, VOICE_PER_DAY, WHISPER_MODEL } from '../src/index.js';
+import { handle, voiceDesc, MAX_AUDIO_B64, transcribe, hedgedRun, VOICE_PARTS_PER_DAY, VOICE_PER_DAY, WHISPER_MODEL } from '../src/index.js';
 import { makeSession } from '../src/session.js';
 import { appPage } from '../src/page.js';
 
@@ -423,20 +423,6 @@ test('voice: a fast Ava never waits for the backup, and a failing backup still l
   expect(calls).toBe(1);
 });
 
-test('voice: the Melo backup decodes Workers AI audio, only for languages Melo speaks', async () => {
-  const wav = new Uint8Array(900).fill(5);
-  const runs = [];
-  const env = { AI: { run: async (m, i) => { runs.push([m, i]); return { audio: btoa(String.fromCharCode(...wav)) }; } } };
-  expect(meloBackup(env, 'uk')).toBeNull();
-  expect(meloBackup({}, 'en')).toBeNull();
-  const b = meloBackup(env, 'fr-FR');
-  expect(b.type).toBe('audio/wav');
-  expect(new Uint8Array(await new Response(await b('Bonjour')).arrayBuffer())).toEqual(wav);
-  expect(runs).toEqual([[MELO_MODEL, { prompt: 'Bonjour', lang: 'fr' }]]);
-  expect(meloBackup(env, '')).not.toBeNull(); // no language means English
-  await expect(meloBackup({ AI: { run: async () => ({ audio: '' }) } }, 'en')('x')).rejects.toThrow('no audio');
-});
-
 test('Dutch is read by Fenna, a native Dutch lady voice; other languages keep Ava', () => {
   expect(voiceFor('nl')).toBe('nl-NL-FennaNeural');
   expect(ssml('Hallo', 'nl')).toContain("<voice name='nl-NL-FennaNeural'>");
@@ -462,12 +448,11 @@ test('the page hears Dutch text, says Dutch mm-hm in talk, and skips the Dutch m
   expect(pick([{ name: 'Xander', lang: 'nl-NL', default: true }, { name: 'Ellen', lang: 'nl-BE' }], 'nl').name).toBe('Ellen');
 });
 
-test('the page waits less for Ava in languages MeloTTS cannot speak, and knows the same languages as the server', async () => {
+test('MeloTTS (retired by Cloudflare on 20 Nov 2026) is gone from the server and the page', async () => {
   const page = appPage({ login: 'ann', connected: [] });
-  expect(page).toContain("const MELO_SPEAKS=['en','es','fr','zh','ja','ko']");
-  expect(page).toContain('Math.min(opts.budget,2000)');
-  for (const l of ['en', 'es', 'fr', 'zh', 'ja', 'ko']) expect(meloBackup({ AI: {} }, l)).not.toBeNull();
-  expect(meloBackup({ AI: {} }, 'uk')).toBeNull();
+  expect(page).not.toContain('MELO_SPEAKS');
+  const src = await Bun.file(new URL('../src/index.js', import.meta.url)).text();
+  expect(src).not.toMatch(/melotts|meloBackup/i);
 });
 
 test('Spanish browser fallback takes a lady (Mónica, Paulina), never Jorge or Juan', () => {

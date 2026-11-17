@@ -961,14 +961,11 @@ const playVoice=(text,lang,gen,budget)=>new Promise((ok)=>{if(gen!==sayGen||!win
   AUD.src='/voice?l='+encodeURIComponent(lang)+'&t='+encodeURIComponent(text.slice(0,1200));const p=AUD.play();if(p)p.catch(()=>{if(!started)fin(false);});});
 const browserSay=(x,lang,gen)=>new Promise((ok)=>{if(!TTS||gen!==sayGen){ok(false);return;}const u=utter(x,lang,pickVoice(lang));let done=false,w=0,began=false;
   const fin=()=>{if(done)return;done=true;clearInterval(w);ok(began);};u.onstart=()=>{began=true;};u.onend=u.onerror=fin;w=setInterval(()=>{if(gen!==sayGen){try{TTS.cancel();}catch(e){}fin();}},150);TTS.speak(u);setTimeout(fin,4000+x.length*120);});
-// Ava gets 'budget' ms to start (voice talk waits 7 s: the server gives Ava 3 s before Melo steps in, which takes about 1.5 s more), then the browser's own voice
+// Ava gets 'budget' ms to start, then the browser's own voice
 // reads it at once. When neither makes a sound (a blocked autoplay, a muted tab), 'onSilent' offers a button, because a
 // tap is always allowed to play sound.
-// When Ava stalls the server falls back to MeloTTS, but only for these languages; for any other the wait buys nothing,
-// so the browser's voice takes over after 2 s instead of 3 s.
-const MELO_SPEAKS=['en','es','fr','zh','ja','ko'];
 async function say(t,hint,opts){stopTalk();opts=opts||{};const gen=sayGen,lang=langOf(t,hint),words=spoken(t);if(!words)return;
-  const budget=opts.budget&&MELO_SPEAKS.indexOf(lang)<0?Math.min(opts.budget,2000):opts.budget;
+  const budget=opts.budget;
   if(await playVoice(words,lang,gen,budget))return;
   let heard=false;
   for(const x of sentences(t)){if(gen!==sayGen)return;if(await browserSay(x,lang,gen))heard=true;else if(!heard)break;}
@@ -991,7 +988,7 @@ function talkSpeaker(hint,opts){stopTalk();opts=opts||{};const gen=sayGen,items=
   const done=(async()=>{for(;;){if(gen!==sayGen)return;
     if(n>=items.length){if(ended)break;await new Promise(r=>{wake=r;});wake=null;continue;}
     const it=items[n],first=n===0;n++;let ok=false;
-    if(first){const budget=opts.budget&&MELO_SPEAKS.indexOf(it.lg)<0?Math.min(opts.budget,2000):opts.budget;ok=await playVoice(it.words,it.lg,gen,budget);}
+    if(first){const budget=opts.budget;ok=await playVoice(it.words,it.lg,gen,budget);}
     else{let url=await it.url;if(gen!==sayGen)return;if(!url)url=await getBlob(it.words,it.lg);if(gen!==sayGen)return;ok=url?await playBlob(url,gen):false;if(url)URL.revokeObjectURL(url);}
     if(gen!==sayGen)return;
     if(!ok)ok=await browserSay(it.words,it.lg,gen);

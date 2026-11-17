@@ -70,10 +70,11 @@ export function taskLimitBody(anon, now = new Date()) {
 }
 
 // Wraps a model so the task can tell, at its end, whether the model answered even once.
-export function answeredModel(model) {
+// A task (a website, code, a video) thinks harder than a chat reply: Flisk Wolf is asked at medium reasoning effort, chat at low.
+export function answeredModel(model, defaults = { effort: 'medium' }) {
   let answered = false;
-  const ask = async (messages) => {
-    const r = await model(messages);
+  const ask = async (messages, o = {}) => {
+    const r = await model(messages, { ...defaults, ...o });
     if (!r?.error) answered = true;
     return r;
   };
