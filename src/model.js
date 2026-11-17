@@ -238,13 +238,15 @@ function ownFreeModel(env, fetchImpl, chosen) {
   };
 }
 
-export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {} } = {}) {
+export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {}, trace = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);
   if (!chosen.free) return oneModel(env, fetchImpl, chosen);
   const wolf = oneModel(env, fetchImpl, chosen);
   const workers = workersAiModel(env, overLimit);
   return async (messages, o = {}) => {
     const tried = [];
+    // Wolf is the planned first stop. Whoever answers instead is a reroute worth a row, with the reason.
+    const rerouted = (by) => { if (by !== 'wolf') trace({ kind: 'rerouted', why: (tried.length ? tried.join('; ') : 'wolf was resting after a limit').slice(0, 300), expected: 'wolf', actual: by }); };
     if (now() >= wolfOutUntil) {
       const r = await wolf(messages, { effort: o.effort });
       if (!r.error) return { ...r, by: 'wolf' };
@@ -255,24 +257,25 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
       const ids = (await freeOpenRouterModels(fetchImpl)).slice(0, 3);
       for (const id of ids) {
         const r = await oneModel(env, fetchImpl, { ai: 'openrouter', url: OPENROUTER_URL, model: id, key: env.OPENROUTER_KEY, referer: true })(messages);
-        if (!r.error) return { ...r, by: id };
+        if (!r.error) { rerouted('openrouter'); return { ...r, by: id }; }
         tried.push(`${id}: ${r.error}`);
       }
     }
     const r = await workers(messages);
-    if (!r.error) return { ...r, by: WORKERS_AI_FALLBACK };
+    if (!r.error) { rerouted('workers-ai'); return { ...r, by: WORKERS_AI_FALLBACK }; }
     tried.push(`workers-ai: ${r.error}`);
     if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
       const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
-      if (!v.error) return { ...v, by: 'vercel' };
+      if (!v.error) { rerouted('vercel'); return { ...v, by: 'vercel' }; }
       tried.push(`vercel: ${v.error}`);
     }
     if (env.NO_POLLINATIONS !== '1') {
       const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
-      if (!p.error) return { ...p, by: 'pollinations' };
+      if (!p.error) { rerouted('pollinations'); return { ...p, by: 'pollinations' }; }
       tried.push(`pollinations: ${p.error}`);
     }
     log(tried);
+    trace({ kind: 'error', why: 'every free model failed', expected: 'wolf', actual: 'none', detail: tried.join('; ').slice(0, 300) });
     return { error: FREE_BUSY, kind: 'busy' };
   };
 }

@@ -26,6 +26,11 @@ service = "flisk-inference"
 binding = "CITABLE"
 service = "citable"
 
+# Problems go to traces.flisk.si (flisk-sh/traces). Secret TRACE_KEY is this app's key there.
+[[services]]
+binding = "TRACES"
+service = "flisk-traces"
+
 # Speech to text for the mic button (Whisper), on the account's Workers AI.
 [ai]
 binding = "AI"
