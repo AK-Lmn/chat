@@ -387,7 +387,7 @@ html[data-theme=earth].home .side{background:rgba(0,0,0,.4);backdrop-filter:blur
 /* Phone composer: + , mic, send. Modes and the model picker live in the + menu (moved by script below). */
 @media (max-width:860px){.composer .bar{gap:8px}.composer .bar .grow{display:none}.composer .bar #mic:not([hidden]){margin-left:auto}.composer .bar #go{margin-left:auto}.composer .bar #mic:not([hidden])+#go{margin-left:0}.plusmenu .modes{display:flex;flex:none;width:100%;margin:0 0 4px}.plusmenu .mp{flex:none}.plusmenu .modes .md{flex:1;min-width:0}}
 /* Generated pictures reserve their square so the page does not jump when they load; the top bar scrolls instead of clipping. */
-.gimg img{aspect-ratio:1/1;object-fit:cover}flisk-bar{display:block;max-width:100vw;overflow-x:auto}
+.gimg img{aspect-ratio:1/1;object-fit:cover}flisk-bar{display:block;max-width:100vw;overflow-x:clip}
 /* Key form on phones: note on top, full-width 44px Save / Remove under it, 16px fields so iOS does not zoom. */
 /* Phone: the + menu is a bottom sheet over a dimmed page, full width, big rows, never cut off. */
 @media (max-width:860px){html.plus .plusmenu{position:fixed!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;width:auto!important;max-height:78vh!important;max-height:78dvh!important;overflow-y:auto!important;border-radius:0!important;border-width:1px 0 0!important;padding:12px 12px calc(14px + env(safe-area-inset-bottom))!important;gap:4px;box-shadow:0 0 0 100vmax rgba(0,0,0,.62)!important;z-index:60}.plusmenu::before{content:"";flex:none;align-self:center;width:36px;height:4px;margin:0 0 8px;background:var(--line2)}html.plus .plusmenu #mppop{position:static!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;width:auto!important;max-height:none!important;overflow:visible!important;box-shadow:none!important;margin:4px 0}html.plus .composer{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transform:none!important}.plusmenu>.chip,.plusmenu>.attach,.plusmenu .mp>.chip,.plusmenu details.pick>summary{min-height:48px}}
@@ -921,7 +921,7 @@ fileIn.onchange=()=>{[...fileIn.files].forEach(f=>{if(attached.length>=3){fileNo
 // With Voice on, a spoken task is sent by itself and each answer is read aloud, a sentence at a time (Chrome stops
 // reading one long text after about 15 seconds).
 const voiceBtn=$('voice'),micBtn=$('mic'),TTS=window.speechSynthesis;
-let voiceOn=lsGet('chat_voice')==='1',rec=null,recTimer=null,byVoice=false;
+let voiceOn=lsGet('chat_voice2')==='1',rec=null,recTimer=null,byVoice=false;
 const TICK=String.fromCharCode(96),spoken=(t)=>String(t).split(TICK+TICK+TICK).filter((x,i)=>i%2===0).join(' ').replace(/https?:[^ ]+/g,' link ').replace(/[*_#>|~]/g,' ').split(String.fromCharCode(10)).join('. ').split(TICK).join('').replace(/ +/g,' ').replace(/([.!?]) *[.] +/g,'$1 ').trim().slice(0,3000);
 // The voice is Ava Multilingual, the one the video factory uses (streamed from /voice); the browser's own voice reads
 // the answer when it fails. stopTalk ends whatever is being read.
@@ -1000,7 +1000,7 @@ if(TTS&&TTS.onvoiceschanged!==undefined)TTS.onvoiceschanged=()=>{};
 const SV='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">',SPK_ON=SV+'<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>',SPK_OFF=SV+'<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/></svg>';
 const drawVoice=()=>{voiceBtn.innerHTML=voiceOn?SPK_ON:SPK_OFF;voiceBtn.classList.toggle('on',voiceOn);voiceBtn.setAttribute('aria-pressed',voiceOn);const t=voiceOn?'Reading answers aloud. Tap to stop':'Read answers aloud';voiceBtn.title=t;voiceBtn.setAttribute('aria-label',t);};
 if(!TTS){voiceBtn.title='This browser cannot speak';voiceBtn.disabled=true;}
-voiceBtn.onclick=()=>{unlockAudio();voiceOn=!voiceOn;lsSet('chat_voice',voiceOn?'1':'');drawVoice();if(!voiceOn)stopTalk();else talkBack('Answers will be read aloud.');};
+voiceBtn.onclick=()=>{unlockAudio();voiceOn=!voiceOn;lsSet('chat_voice2',voiceOn?'1':'');drawVoice();if(!voiceOn)stopTalk();else talkBack('Answers will be read aloud.');};
 drawVoice();
 
 const micIdle=(label)=>{micBtn.classList.remove('rec','busy');micBtn.disabled=false;micBtn.setAttribute('aria-label',label||'Speak your task');micBtn.title=label||'Speak your task';};

@@ -66,8 +66,8 @@ test('generated pictures reserve a square and keep their top in view when they l
   expect(page).not.toContain('im.onload=down');
 });
 
-test('the shared top bar scrolls instead of clipping on narrow phones', () => {
-  expect(page).toContain('flisk-bar{display:block;max-width:100vw;overflow-x:auto}');
+test('the shared top bar never makes the page wider and never clips its menus', () => {
+  expect(page).toContain('flisk-bar{display:block;max-width:100vw;overflow-x:clip}');
 });
 
 test('the API key form stacks Save and Remove as full-width 44px buttons on phones', () => {
