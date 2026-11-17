@@ -6,7 +6,7 @@ falling bounce rate is the measurable sign that the first five seconds work.
 
 **Baseline:** 66% (49 visitors, 197 visits, 7 days to 2026-11-17, before the clear first screen).
 
-**Target:** 1.5x lower, so 44% or less. `gel` fails the guard until `bench/north-star.json` shows it.
+**Target:** 1.5x lower, so 44% or less. `gel` fails the guard until `docs/north-star/result.json` shows it.
 
 **How to re-measure:** read `site_stats` for `chat.flisk.si`, range 7d, copy `bounceRate` into `value`, set
 `measuredAt`, commit. Do it once a week. The sample is small and includes the team testing the site; read
