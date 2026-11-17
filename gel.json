@@ -4,6 +4,19 @@
     "secret-scan": "report",
     "pinned-actions": "report",
     "dead-links": "report",
-    "done-without-green": "report"
+    "done-without-green": "report",
+    "five-second-test": "report",
+    "north-star": "report"
+  },
+  "north_star": {
+    "metric": "bounce rate of chat.flisk.si visits",
+    "baseline": "66% bounce before the clear first screen",
+    "target": {
+      "ratio": 1.5,
+      "better": "lower"
+    },
+    "evidence": "bench/README.md",
+    "result": "bench/north-star.json",
+    "max_age_days": 30
   }
 }
