@@ -14,3 +14,17 @@ export const ICONS = {
   thunder: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 128 128\" width=\"128\" height=\"128\">\n  \n  <defs>\n    <linearGradient id=\"g\" x1=\"20%\" y1=\"0%\" x2=\"80%\" y2=\"100%\">\n      <stop offset=\"0\" stop-color=\"#5ee0a0\"/>\n      <stop offset=\"1\" stop-color=\"#1f9d6b\"/>\n    </linearGradient>\n  </defs>\n  <path d=\"M76 8 30 70h28l-8 50 48-66H70z\" fill=\"url(#g)\" stroke=\"#16805a\" stroke-width=\"3\" stroke-linejoin=\"round\"/>\n  <path d=\"M74 20 44 62h22\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".45\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</svg>",
 };
 export const icon = (name, size = 20) => (ICONS[name] || '').replace('<svg ', '<svg width="' + size + '" height="' + size + '" aria-hidden="true" focusable="false" ');
+
+// Plain line icons (Lucide shapes) that people already know, used on phones next to the labels.
+const FAM = {
+  website: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  app: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  system: '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/>',
+  answer: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  video: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="m10 9 5 3-5 3z"/>',
+  check: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  settings: '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  model: '<path d="M9.94 14.06 8 20l-1.94-5.94L0 12l6.06-2.06L8 4l1.94 5.94L16 12z" transform="translate(4 0)"/><path d="M20 3v4M22 5h-4"/>',
+  computers: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
+};
+export const fam = (name, size = 24) => '<svg class="fam" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (FAM[name] || '') + '</svg>';
