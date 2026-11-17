@@ -5,6 +5,12 @@
 export const UK = {
   'Flisk Chat': 'Flisk Chat',
   'New': 'Новий',
+  'Say what you want. A computer builds it.': 'Скажіть, що хочете. Комп’ютер це створить.',
+  'A website, an app, a video or an answer, with a live link in minutes. Free, no sign-up.': 'Сайт, застосунок, відео чи відповідь, з живим посиланням за кілька хвилин. Безкоштовно, без реєстрації.',
+  'A coffee shop website': 'Сайт для кав’ярні',
+  'A wedding invite page': 'Сторінка весільного запрошення',
+  'A bakery menu page': 'Сторінка меню пекарні',
+  'Examples': 'Приклади',
   'new': 'новий',
   'History': 'Історія',
   'Computers': 'Комп’ютери',
