@@ -1,13 +1,13 @@
 import { OG_PNG } from './og.js';
 import { cleanMemo, memoMessages } from './memo.js';
-import { resolveLang } from './lang.js';
+import { detectLang, resolveLang } from './lang.js';
 import { verifyLoginToken } from './login-token.js';
 import { githubAuthorizeUrl, githubLogin } from './auth.js';
 import { forgetGithubToken, loadGithubToken, saveGithubToken } from './github.js';
 import { THREE_SRC, TEXTURES } from './earth.js';
 import { fleetClient } from './fleet.js';
 import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, runTask } from './loop.js';
-import { imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
+import { decide, imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
 import { lookup } from './lookup.js';
 import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
@@ -740,8 +740,12 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const emit = (e) => { if (!noPod) return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
       const computer = noPod ? { ...fleet, start: async () => ({ error: ['needs', 'a computer'].join(' ') }) } : fleet;
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
-      const turnLang = resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui });
-      const job = runTask({ classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: turnLang, kind: String(body?.cat || '').slice(0, 12), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const heuristicLang = resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui });
+      // Jev names the language and the kind of ask; the word lists only win when they are certain (Ukrainian vs Russian words).
+      const decision = await (decide(env)?.(task) ?? null);
+      const turnLang = decision?.lang && !detectLang(task) ? decision.lang : heuristicLang;
+      if (decision?.lang && heuristicLang && decision.lang !== heuristicLang) await sendTrace(env, { route: '/api/run', kind: 'unexpected', why: `Jev says ${decision.lang}, word lists say ${heuristicLang}`, lang: turnLang }, fetchImpl);
+      const job = runTask({ decision, classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: turnLang, kind: String(body?.cat || '').slice(0, 12), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
         .then(async (r) => {
           if (needPod) return;
           for (const e of buffered) send(e);
