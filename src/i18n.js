@@ -33,6 +33,7 @@ export const UK = {
   'System': 'Система',
   'Answer': 'Відповідь',
   'Video': 'Відео',
+  'taking longer than usual, still starting': 'триває довше ніж зазвичай, ще запускається',
   'Check a page': 'Перевірити сторінку',
   'Try an idea': 'Спробувати ідею',
   'Who uses it': 'Хто користується',

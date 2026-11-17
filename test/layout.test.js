@@ -65,3 +65,8 @@ test('OpenRouter login is the first, primary choice in the key panel; pasting a 
   expect(page).toContain('or paste an API key');
   expect(page).not.toContain('No key? Log in with OpenRouter');
 });
+
+test('every kind tile on the page tells the server what was picked, so "something cool" on Website builds a website', () => {
+  expect(page).toContain("b.onclick=()=>{window.__cat=b.dataset.cat||'';showCat(b.dataset.cat);}");
+  expect(page).toContain("cat:window.__cat||''");
+});
