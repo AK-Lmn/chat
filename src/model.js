@@ -244,23 +244,31 @@ export const NAME_GUESSES = {
   'gpt-6.2-astra': ['gpt-6.2-astra', 'gpt-6.2', 'gpt-6-astra', 'gpt-6.2-astra-preview', 'gpt-6.2-astra-latest'],
 };
 export const NOT_RELEASED = (name) => `"${name}" is not released yet: OpenAI does not list it for your key. Flisk tried the likely names and none exists. Pick another model, or try again when OpenAI ships it.`;
-function withNameGuesses(make, env, fetchImpl, chosen) {
+function withNameGuesses(make, env, fetchImpl, chosen, trace = () => {}) {
   const names = chosen.ai === 'openai' ? NAME_GUESSES[chosen.model] : null;
   if (!names) return make(env, fetchImpl, chosen);
   return async (messages, o = {}) => {
     let last;
+    const tried = [];
     for (const name of names) {
       const r = await make(env, fetchImpl, { ...chosen, model: name })(messages, o);
-      if (!r.error || r.kind !== 'model') return r;
+      if (!r.error || r.kind !== 'model') {
+        // Answered by a different name than the one picked, or failed for another reason: a trace says which name, never the key or the prompt.
+        if (!r.error && tried.length) trace({ kind: 'rerouted', why: `${chosen.model} not found, tried ${tried.join(', ')}`.slice(0, 300), expected: chosen.model, actual: name });
+        else if (r.error) trace({ kind: 'error', why: `${name}: ${r.kind || 'error'}`, expected: chosen.model, actual: 'none', detail: [...tried, name].join(', ').slice(0, 300) });
+        return r;
+      }
+      tried.push(name);
       last = r;
     }
+    trace({ kind: 'error', why: 'model not released: OpenAI answered not found for every name', expected: chosen.model, actual: 'none', detail: tried.join(', ').slice(0, 300) });
     return { ...last, error: NOT_RELEASED(chosen.model), kind: 'model' };
   };
 }
 
 export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {}, trace = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);
-  if (!chosen.free) return withNameGuesses(oneModel, env, fetchImpl, chosen);
+  if (!chosen.free) return withNameGuesses(oneModel, env, fetchImpl, chosen, trace);
   const wolf = oneModel(env, fetchImpl, chosen);
   const workers = workersAiModel(env, overLimit);
   return async (messages, o = {}) => {

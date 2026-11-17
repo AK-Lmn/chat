@@ -248,3 +248,18 @@ test('the first guess that works answers', async () => {
   const r = await modelFrom({}, fetchImpl, { ai: 'openai', free: false, url: 'https://api.openai.com/v1/chat/completions', key: 'sk-test-12345', model: 'gpt-6.2-astra' })([{ role: 'user', content: 'hi' }]);
   expect(r.error).toBeUndefined();
 });
+
+test('an unreleased model sends a trace naming every name tried, and a reroute names the one that answered', async () => {
+  const events = [];
+  const gone = () => Response.json({ error: { message: 'The model does not exist' } }, { status: 404 });
+  const chosen = { ai: 'openai', free: false, url: 'https://api.openai.com/v1/chat/completions', key: 'sk-test-12345', model: 'gpt-6.2-astra' };
+  await modelFrom({}, async () => gone(), chosen, { trace: (e) => events.push(e) })([{ role: 'user', content: 'hi' }]);
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ kind: 'error', expected: 'gpt-6.2-astra', actual: 'none' });
+  expect(events[0].detail).toContain('gpt-6.2-astra-latest');
+  expect(JSON.stringify(events)).not.toContain('sk-test');
+  events.length = 0;
+  const ok = async (_u, init) => JSON.parse(init.body).model === 'gpt-6.2' ? Response.json({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }], usage: {} }) : gone();
+  await modelFrom({}, ok, chosen, { trace: (e) => events.push(e) })([{ role: 'user', content: 'hi' }]);
+  expect(events).toEqual([expect.objectContaining({ kind: 'rerouted', expected: 'gpt-6.2-astra', actual: 'gpt-6.2' })]);
+});
