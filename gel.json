@@ -6,7 +6,8 @@
     "dead-links": "report",
     "done-without-green": "report",
     "five-second-test": "report",
-    "north-star": "report"
+    "north-star": "report",
+    "input-in-viewport": "report"
   },
   "north_star": {
     "metric": "bounce rate of chat.flisk.si visits",
@@ -17,6 +18,10 @@
     },
     "evidence": "bench/README.md",
     "result": "bench/north-star.json",
+    "max_age_days": 30
+  },
+  "input_in_viewport": {
+    "result": "docs/north-star/input-viewport.json",
     "max_age_days": 30
   }
 }
