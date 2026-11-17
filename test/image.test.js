@@ -162,6 +162,28 @@ describe('a small model decides, not the wording', () => {
   });
 });
 
+describe('Jev decides image or not', () => {
+  const jev = (choice, confidence, seen = []) => ({ AI: { run: async (model, input) => { seen.push([model, input]); return model === 'typesafe/jev' ? { answers: { wants: { type: 'choice', choice, confidence, probabilities: {} } } } : { response: 'image' }; } } });
+  test('a confident image answer is an image, and Jev gets the typed question', async () => {
+    const seen = [];
+    expect(await imageIntent(jev('image', 0.95, seen))('draw a cat')).toBe('image');
+    expect(seen[0][0]).toBe('typesafe/jev');
+    expect(seen[0][1].state).toBe('draw a cat');
+    expect(Object.keys(seen[0][1].questions.wants.criteria)).toEqual(['image', 'other']);
+    expect(seen.length).toBe(1);
+  });
+  test('a weak image guess or an "other" answer is not an image, and Llama is not asked', async () => {
+    const seen = [];
+    expect(await imageIntent(jev('image', 0.4, seen))('something cool')).toBe('other');
+    expect(await imageIntent(jev('other', 0.99, seen))('write a plan')).toBe('other');
+    expect(seen.every((c) => c[0] === 'typesafe/jev')).toBe(true);
+  });
+  test('when Jev fails the Llama question still decides', async () => {
+    const env = { AI: { run: async (model) => { if (model === 'typesafe/jev') throw new Error('not in your plan'); return { response: 'image' }; } } };
+    expect(await imageIntent(env)('draw a cat')).toBe('image');
+  });
+});
+
 describe('a picked website is never drawn as a picture', () => {
   test('"draw me something cool" with the website picked goes to the model, which is told what was picked', async () => {
     const prompts = [];

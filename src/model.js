@@ -184,11 +184,29 @@ export async function freeOpenRouterModels(fetchImpl = fetch, now = Date.now()) 
   return ids;
 }
 
-// Does this message ask for a picture to be drawn (and nothing else)? One cheap Workers AI call, one word back.
+// Does this message ask for a picture to be drawn (and nothing else)? Jev, a Cloudflare Workers AI decision model, answers a typed
+// choice with a confidence, so a weak guess counts as "other". If Jev is unavailable, one cheap Llama call answers one word instead.
 // Anything unclear, any error, any missing binding answers null, and the main model handles the message as usual.
+export const JEV_MODEL = 'typesafe/jev';
+export const JEV_MIN_CONFIDENCE = 0.7;
+const JEV_QUESTIONS = {
+  wants: {
+    type: 'choice',
+    instructions: 'What does the user want?',
+    criteria: {
+      image: 'They want a picture, photo, drawing or illustration generated for them, and nothing else',
+      other: 'Anything else: writing or text about pictures, plans, code, websites, videos, charts, questions, edits, analysis',
+    },
+  },
+};
 export function imageIntent(env) {
   if (!env?.AI) return null;
   return async (task) => {
+    try {
+      const j = await env.AI.run(JEV_MODEL, { state: String(task).slice(0, 600), questions: JEV_QUESTIONS });
+      const a = j?.answers?.wants;
+      if (a?.type === 'choice' && (a.choice === 'image' || a.choice === 'other')) return a.choice === 'image' && Number(a.confidence) >= JEV_MIN_CONFIDENCE ? 'image' : 'other';
+    } catch { /* Jev is in early access: fall through to the Llama question */ }
     const r = await env.AI.run(WORKERS_AI_FALLBACK, {
       messages: [
         { role: 'system', content: 'Decide what the user wants. Answer with ONE word. "image" = they want a picture, photo, drawing or illustration generated for them, and nothing else. "other" = anything else: writing or text about pictures, plans, code, websites, videos, charts, questions, edits, analysis. When unsure answer "other".' },
@@ -198,6 +216,33 @@ export function imageIntent(env) {
     });
     const raw = r?.response ?? r?.choices?.[0]?.message?.content ?? '';
     return /^\W*image\b/i.test(String(raw)) ? 'image' : 'other';
+  };
+}
+
+// One Jev call per ask decides the language and the kind of ask together. Jev is in early access, so any failure answers null and the
+// word lists, the regexes and the Llama question keep deciding as before.
+export const ASK_TYPES = { weather: 'weather or a forecast', stats: 'numbers, statistics, figures or a chart of data', fact: 'a fact about the world, a person, a place or a thing', image: 'a picture, photo, drawing or illustration generated for them', video: 'a video or clip made for them', code: 'code, a script, a bug fix or a technical how-to', website: 'a website, web page, landing page or app built for them', chat: 'small talk, a greeting, an opinion or advice', other: 'anything else' };
+const LANG_CODES = ['en', 'uk', 'ru', 'es', 'de', 'fr', 'it', 'pt', 'pl', 'nl', 'tr', 'cs', 'ro', 'hu', 'sv', 'el', 'ar', 'he', 'hi', 'ja', 'ko', 'zh', 'vi', 'th', 'id'];
+const TYPE_Q = { type: { type: 'choice', instructions: 'What kind of ask is this?', criteria: Object.fromEntries(Object.entries(ASK_TYPES).map(([k, v]) => [k, `The user wants ${v}`])) } };
+const DECIDE_QUESTIONS = {
+  lang: { type: 'choice', instructions: 'Which language is the message written in?', criteria: Object.fromEntries(LANG_CODES.map((c) => [c, `Written in ${c}`])) },
+  ...TYPE_Q,
+};
+// Cost: the free Workers AI allowance is 10,000 neurons a day. The language question (25 criteria) is only asked when the word lists
+// could not name the language, and the ask is cut to 300 characters, so a call stays at a few neurons.
+export function decide(env) {
+  if (!env?.AI) return null;
+  return async (task, { needLang = true } = {}) => {
+    try {
+      const j = await env.AI.run(JEV_MODEL, { state: String(task).slice(0, 300), questions: needLang ? DECIDE_QUESTIONS : TYPE_Q });
+      const pick = (k) => { const a = j?.answers?.[k]; return a?.type === 'choice' && typeof a.choice === 'string' ? { choice: a.choice, confidence: Number(a.confidence) || 0 } : null; };
+      const l = pick('lang'), t = pick('type');
+      const out = {
+        lang: l && LANG_CODES.includes(l.choice) && l.confidence >= JEV_MIN_CONFIDENCE ? l.choice : '',
+        type: t && t.choice in ASK_TYPES && t.confidence >= JEV_MIN_CONFIDENCE ? t.choice : '',
+      };
+      return out.lang || out.type ? out : null;
+    } catch { return null; }
   };
 }
 
