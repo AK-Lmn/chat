@@ -35,7 +35,7 @@ export function cleanModels(list) {
   const out = (Array.isArray(list) ? list : [])
     .filter((m) => m && typeof m.id === 'string' && typeof m.name === 'string' && keys.has(String(m.key ?? '')))
     .slice(0, 60)
-    .map((m) => ({ id: s(m.id, 60), name: s(m.name, 60), provider: s(m.provider, 30), providerName: s(m.providerName, 30), description: s(m.description, 140), price: s(m.price, 5), free: m.key === '', key: s(m.key, 20), model: /^[A-Za-z0-9._:\/-]{0,80}$/.test(String(m.model ?? '')) ? s(m.model, 80) : '' }));
+    .map((m) => ({ id: s(m.id, 60), name: s(m.name, 60), provider: s(m.provider, 30), providerName: s(m.providerName, 30), description: s(m.description, 140), price: s(m.price, 5), free: m.key === '', key: s(m.key, 20), model: /^[A-Za-z0-9._:\/-]{0,80}$/.test(String(m.model ?? '')) ? s(m.model, 80) : '', ...(m.soon === true ? { soon: true } : {}) }));
   return out.some((m) => m.free) ? out : DEFAULT_MODELS;
 }
 
@@ -247,7 +247,7 @@ html .plusmenu>.chip.ico.on{background:transparent;color:var(--ink);border-color
 .mi{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:start;width:100%;text-align:left;border:0;background:none;border-radius:var(--radius);padding:9px 10px;cursor:pointer}
 .mi:hover,.mi.on{background:var(--bg)}.mi svg{border-radius:var(--radius)}
 .mi .n{font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.mi .d{font-size:13px;color:var(--dim)}
-.price{font:500 11px var(--mono);color:var(--soft)}.price.free{color:var(--green);background:var(--tint);border-radius:var(--radius);padding:1px 7px}
+.price{font:500 11px var(--mono);color:var(--soft)}.price.soon{border:1px solid var(--line,currentColor);border-radius:var(--radius);padding:0 6px}.price.free{color:var(--green);background:var(--tint);border-radius:var(--radius);padding:1px 7px}
 .mi .ck{width:16px;height:16px;margin-top:3px;opacity:0}.mi.on .ck{opacity:1}
 .mgroup{font-size:12px;color:var(--soft);padding:8px 10px 2px}
 #byo{border-top:1px solid var(--line);padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}#byo[hidden]{display:none}
@@ -789,7 +789,7 @@ function drawList(){const q=mq.value.trim().toLowerCase();mlist.textContent='';l
     if(g!==last){last=g;mlist.appendChild(node('div','mgroup',g));}
     const b=node('button','mi'+(m.id===cur.id?' on':''));b.type='button';b.setAttribute('role','option');b.setAttribute('aria-selected',String(m.id===cur.id));
     b.innerHTML=tile(m,28)+'<span><span class="n"></span><span class="d"></span></span><svg class="ck" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    const n=b.querySelector('.n');n.textContent=m.name;const pr=node('span','price'+(m.free||m.orFree?' free':''),m.free?'free':m.price);n.appendChild(pr);b.querySelector('.d').textContent=m.description;
+    const n=b.querySelector('.n');n.textContent=m.name;const pr=m.soon?node('span','price soon','coming soon'):node('span','price'+(m.free||m.orFree?' free':''),m.free?'free':m.price);n.appendChild(pr);b.querySelector('.d').textContent=m.description;
     b.onclick=()=>{pick(m);if(m.free)closePop();else{(m.model?byoKey:byoModel).focus();}};mlist.appendChild(b);});
   if(railOn==='openrouter'&&!OR.length)mlist.appendChild(node('div','mgroup','Loading OpenRouter models…'));
   else if(railOn==='openrouter'&&!q)mlist.appendChild(node('div','mgroup','Search above for any of '+OR.length+' OpenRouter models.'));

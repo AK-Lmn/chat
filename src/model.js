@@ -238,9 +238,29 @@ function ownFreeModel(env, fetchImpl, chosen) {
   };
 }
 
+// Models announced but not out yet: when the provider says the name does not exist, try these likely names too, then say plainly
+// that it is not released. The first name in each list is the one the picker sends.
+export const NAME_GUESSES = {
+  'gpt-6.2-astra': ['gpt-6.2-astra', 'gpt-6.2', 'gpt-6-astra', 'gpt-6.2-astra-preview', 'gpt-6.2-astra-latest'],
+};
+export const NOT_RELEASED = (name) => `"${name}" is not released yet: OpenAI does not list it for your key. Flisk tried the likely names and none exists. Pick another model, or try again when OpenAI ships it.`;
+function withNameGuesses(make, env, fetchImpl, chosen) {
+  const names = chosen.ai === 'openai' ? NAME_GUESSES[chosen.model] : null;
+  if (!names) return make(env, fetchImpl, chosen);
+  return async (messages, o = {}) => {
+    let last;
+    for (const name of names) {
+      const r = await make(env, fetchImpl, { ...chosen, model: name })(messages, o);
+      if (!r.error || r.kind !== 'model') return r;
+      last = r;
+    }
+    return { ...last, error: NOT_RELEASED(chosen.model), kind: 'model' };
+  };
+}
+
 export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {}, trace = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);
-  if (!chosen.free) return oneModel(env, fetchImpl, chosen);
+  if (!chosen.free) return withNameGuesses(oneModel, env, fetchImpl, chosen);
   const wolf = oneModel(env, fetchImpl, chosen);
   const workers = workersAiModel(env, overLimit);
   return async (messages, o = {}) => {

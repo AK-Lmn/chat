@@ -229,3 +229,22 @@ test('a Pollinations call that hangs ends with the busy line instead of hanging 
   expect(await modelFrom(w.env, w.fetchImpl)(msgs)).toEqual({ error: FREE_BUSY, kind: 'busy' });
   expect(signal).toBeInstanceOf(AbortSignal);
 }, 30_000);
+
+test('an unreleased OpenAI model tries its likely names, then says it is not released', async () => {
+  const { NAME_GUESSES } = await import('../src/model.js');
+  const seen = [];
+  const fetchImpl = async (_u, init) => { seen.push(JSON.parse(init.body).model); return Response.json({ error: { message: 'The model does not exist', code: 'model_not_found' } }, { status: 404 }); };
+  const r = await modelFrom({}, fetchImpl, { ai: 'openai', free: false, url: 'https://api.openai.com/v1/chat/completions', key: 'sk-test-12345', model: 'gpt-6.2-astra' })([{ role: 'user', content: 'hi' }]);
+  expect(seen).toEqual(NAME_GUESSES['gpt-6.2-astra']);
+  expect(seen.length).toBeGreaterThanOrEqual(3);
+  expect(r.kind).toBe('model');
+  expect(r.error).toContain('not released yet');
+});
+
+test('the first guess that works answers', async () => {
+  const fetchImpl = async (_u, init) => JSON.parse(init.body).model === 'gpt-6.2'
+    ? Response.json({ choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }], usage: {} })
+    : Response.json({ error: { message: 'The model does not exist' } }, { status: 404 });
+  const r = await modelFrom({}, fetchImpl, { ai: 'openai', free: false, url: 'https://api.openai.com/v1/chat/completions', key: 'sk-test-12345', model: 'gpt-6.2-astra' })([{ role: 'user', content: 'hi' }]);
+  expect(r.error).toBeUndefined();
+});
