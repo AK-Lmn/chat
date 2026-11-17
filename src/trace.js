@@ -37,6 +37,11 @@ export function runEvents(result, problem, route = '/api/run', lang = '') {
   const steps = result.steps?.length || 0;
   const detail = `${steps} steps · ${result.stats?.errors || 0} failed · ${result.provider || 'no provider'}`;
   if (problem) out.push({ route, kind: result.error ? 'error' : 'unexpected', why: String(problem).slice(0, 200), detail, ms });
+  // A computer that took long to start, a rule that refused the model once, a reply that only describes the model: each is a problem to see.
+  const podMs = result.stats?.podMs || 0;
+  if (podMs > 30_000) out.push({ route, kind: 'slow', why: `a computer took ${Math.round(podMs / 1000)} s to start`, detail, ms: podMs });
+  if (result.stats?.refused === 1) out.push({ route, kind: 'unexpected', why: `chat refused the model once: ${result.stats.refusedWhy}`.slice(0, 200), detail, ms });
+  if (/^\s*Flisk Wolf, a free model[^.]*\.?\s*$/i.test(result.answer || '')) out.push({ route, kind: 'unexpected', why: 'the answer says nothing useful', detail, ms });
   const slow = steps ? ms / steps > SLOW_STEP_MS : ms > SLOW_ASK_MS;
   if (slow) out.push({ route, kind: 'slow', why: steps ? `a step took ${Math.round(ms / steps / 1000)} s on average` : `answered in ${Math.round(ms / 1000)} s`, detail, ms });
   return out;

@@ -156,6 +156,7 @@ export function runProblem(result) {
   if (result.error) return `failed: ${String(result.error).slice(0, 150)}`;
   if (st.big && !st.system) return 'a bigger app did not use the system builder';
   if (st.errors >= 3) return `${st.errors} steps failed`;
+  if (st.refused >= 2) return `chat refused the model ${st.refused} times: ${st.refusedWhy}`;
   if (st.failed) return `a step failed: ${st.failed}`;
   if (st.big && !st.shared) return 'a bigger app ended without a live link';
   return null;

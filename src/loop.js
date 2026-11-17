@@ -341,7 +341,7 @@ export async function runTask({ classify = null, task, history = [], github = un
   const steps = [];
   const links = [];
   // What went wrong or right, counted for the build analytics (src/index.js recordRun): why a build came out weak.
-  const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
+  const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, refused: 0, refusedWhy: null, podMs: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
   const t0 = Date.now();
   const finish = async (answer, error = null) => {
     if (podId && kept) {
@@ -483,7 +483,9 @@ export async function runTask({ classify = null, task, history = [], github = un
       // A layout page is made on the Worker: it needs no computer.
       if (!podId && action.type !== 'site' && action.type !== 'image') {
         emit({ type: 'pod_starting' });
+        const podT0 = Date.now();
         const made = await computer.start(order);
+        stats.podMs = Date.now() - podT0;
         if (made.error) {
           emit({ type: 'error', error: made.error, kind: 'computer' });
           return await finish(null, made.error);
@@ -645,6 +647,7 @@ export async function runTask({ classify = null, task, history = [], github = un
         shown = r.error ? { error: scrub(r.error, token) } : { content: clip(scrub(r.data.content, token)) };
       }
       if (shown.error || shown.exitCode > 0) stats.errors++;
+      if (ours && shown.error) { stats.refused++; if (!stats.refusedWhy) stats.refusedWhy = String(shown.error).replace(/\s+/g, ' ').slice(0, 120); }
       // The first action the computer or the site could not do (a write, read, publish or share that failed), for the alert.
       // A command that exits non-zero is normal trial and error and is not one.
       if (shown.error && !ours && !stats.failed) stats.failed = `${action.type} ${action.path || ''}: ${String(shown.error)}`.replace(/\s+/g, ' ').slice(0, 300);

@@ -86,3 +86,14 @@ test('runEvents flags an answer in another language than the turn asked for, wit
   expect(runEvents({ answer: 'Hello there', ms: 1000, steps: [] }, '', '/api/run', 'en')).toEqual([]);
   expect(runEvents({ answer: 'Привіт, як справи?', ms: 1000, steps: [] }, '', '/api/run', 'uk')).toEqual([]);
 });
+
+test('runEvents sees a slow computer start, a refusal and a reply that only describes the model', () => {
+  const base = { steps: [{}], ms: 5000, provider: 'p' };
+  const slow = runEvents({ ...base, answer: 'ok', stats: { podMs: 45_000 } }, null);
+  expect(slow.some((e) => e.kind === 'slow' && /to start/.test(e.why))).toBe(true);
+  const ref = runEvents({ ...base, answer: 'ok', stats: { refused: 1, refusedWhy: 'Refused: question' } }, null);
+  expect(ref.some((e) => /refused the model once/.test(e.why))).toBe(true);
+  const empty = runEvents({ ...base, answer: 'Flisk Wolf, a free model hosted by Flisk, is answering your questions.', stats: {} }, null);
+  expect(empty.some((e) => /says nothing useful/.test(e.why))).toBe(true);
+  expect(runEvents({ ...base, answer: 'Four.', stats: {} }, null)).toEqual([]);
+});
