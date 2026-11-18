@@ -4,6 +4,7 @@
 
 export const UK = {
   'Flisk Chat': 'Flisk Chat',
+  'Flisk Wolf is resting after a limit, using a free backup model': 'Flisk Wolf відпочиває після ліміту, відповідає безкоштовна резервна модель',
   'New': 'Новий',
   'Say what you want. A computer builds it.': 'Скажіть, що хочете. Комп’ютер це створить.',
   'A website, an app, a video or an answer, with a live link in minutes. Free, no sign-up.': 'Сайт, застосунок, відео чи відповідь, з живим посиланням за кілька хвилин. Безкоштовно, без реєстрації.',
@@ -232,6 +233,9 @@ export const UK = {
 
 // Strings with a number or a name in them.
 export const UK_PATTERNS = [
+  [/^(.+) is busy, switching to (.+)$/, (m) => `${m[1]} зайнятий, перемикаюся на ${m[2].replace('(OpenRouter, free)', '(OpenRouter, безкоштовно)')}`],
+  [/^Every free model is busy, trying again in (\d+) s$/, (m) => `Усі безкоштовні моделі зайняті, пробую знову за ${m[1]} с`],
+  [/^Answered by (.+)$/, (m) => `Відповідає ${m[1].replace('(OpenRouter, free)', '(OpenRouter, безкоштовно)')}`],
   [/^(\d+) computers? connected · Fleet picks the cheapest$/, (m) => `${m[1]} ${plural(+m[1], 'комп’ютер підключено', 'комп’ютери підключено', 'комп’ютерів підключено')} · Fleet обирає найдешевший`],
   [/^Computers · (\d+)$/, (m) => `Комп’ютери · ${m[1]}`],
   [/^Connected · (\d+)$/, (m) => `Підключено · ${m[1]}`],

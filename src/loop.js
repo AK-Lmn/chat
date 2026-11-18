@@ -1,6 +1,6 @@
 import { asksAnalysis } from './analysis-style.js';
 import { sayStreamer } from './say-stream.js';
-import { BAD_REPLIES } from './model.js';
+import { BAD_REPLIES, modelShown } from './model.js';
 import { MAX_STEPS, asksToBuild, githubSourceIn, isBigApp, taskPrompt } from './prompt.js';
 import { parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -307,6 +307,8 @@ export function cleanHistory(history) {
 }
 
 // computer: { start, run, write, read, share, stop } (fleet.js, or the visitor's browser: browserpod.js). note: extra instructions about that computer. track: optional { started(podId), kept(podId, url), stopped(podId) }. publish(html, { limit }) -> url. photo(prompt) -> a data: URL or ''. emit(event) gets every step.
+// Waits before going round the free models again when every one is busy.
+export const BUSY_WAITS = [5000, 15000];
 const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
 // Kinds picked in the chat that make something other than a picture: the name is what the model is told.
@@ -378,6 +380,8 @@ export async function runTask({ grade = null, stream = false, decision = null, c
   let emptyRetries = 0;
   let giveUps = 0;
   let providerRetries = 0;
+  let busyRetries = 0;
+  let shownModel = '';
   let kept = null; // the public URL of the running app: the computer is kept, not stopped
   let startedServer = false;
   let builtSystem = false; // a bigger app was built by chat: its generated page must not be replaced by a stub
@@ -418,7 +422,10 @@ export async function runTask({ grade = null, stream = false, decision = null, c
       if (last) messages.push({ role: 'user', content: 'That was the last action. Reply with {"say": ...} now.' });
       // Words go out as the model writes them (Workers AI streams); the finished answer then replaces them on the page.
       const say = stream ? sayStreamer(emit) : null;
-      const reply = await model(messages, lang || say ? { ...(lang ? { lang } : {}), ...(say ? { onDelta: say } : {}) } : undefined);
+      const reply = await model(messages, { ...(lang ? { lang } : {}), ...(say ? { onDelta: say } : {}), onReroute: (text) => emit({ type: 'reroute', text }) });
+      // A backup model answered: the page names it once, so the person knows who wrote the answer.
+      const byName = reply.error ? '' : modelShown(reply.by);
+      if (byName && byName !== shownModel) { shownModel = byName; emit({ type: 'model', name: byName }); }
       // An empty reply is usually a one-off (a long command output, a reasoning model that only thought): ask again, twice at most,
       // without using up a step.
       if (reply.kind === 'empty' && emptyRetries < 2) {
@@ -436,6 +443,16 @@ export async function runTask({ grade = null, stream = false, decision = null, c
         stats.provider++;
         emit({ type: 'retry' });
         await wait(providerRetries * 3000);
+        step--;
+        continue;
+      }
+      // Every free model busy at once is short-lived (rate limits reset within the minute): wait and go round again, twice, instead
+      // of showing an error the person can do nothing about.
+      if (reply.kind === 'busy' && busyRetries < BUSY_WAITS.length) {
+        const ms = BUSY_WAITS[busyRetries++];
+        emit({ type: 'reroute', text: `Every free model is busy, trying again in ${Math.round(ms / 1000)} s` });
+        emit({ type: 'retry' });
+        await wait(ms);
         step--;
         continue;
       }

@@ -126,7 +126,7 @@ describe('a task over the socket', () => {
     const s = fakeSocket(t.page);
     let settled = 0;
     const gate = async () => ({ model: async () => ({ error: 'The free AI is busy right now.', kind: 'busy' }), settle: async () => settled++, maxSteps: 8 });
-    const job = runOverSocket(s, { gate, origin: ORIGIN, publish: async () => ({ error: 'no' }) });
+    const job = runOverSocket(s, { gate, origin: ORIGIN, publish: async () => ({ error: 'no' }), wait: async () => {} });
     s.say({ type: 'task', task: 'make website coffee', history: [], files: [] });
     await job;
     expect(settled).toBe(1);

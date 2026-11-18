@@ -1303,6 +1303,8 @@ async function run(task){
     else if(ev.type==='widget'){const w=drawWidget(ev);if(w){turn.appendChild(w);down();}}
     else if(ev.type==='delta'){if(!liveA){liveA=node('div','a');turn.appendChild(liveA);liveT='';}liveT+=ev.text;md(liveA,liveT);down();}
     else if(ev.type==='retry'){if(liveA){liveA.remove();liveA=null;}}
+    else if(ev.type==='reroute'){step(txt(T(ev.text)),'','server');ws.textContent=T(ev.text);}
+    else if(ev.type==='model'){step(txt(T('Answered by '+ev.name)),'ok','server');}
     else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);

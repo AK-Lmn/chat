@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from 'bun:test';
-import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, POLLINATIONS_TEXT_URL, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/model.js';
+import { FREE_BUSY, freeOpenRouterModels, modelFrom, OPENROUTER_URL, POLLINATIONS_TEXT_URL, modelShown, resetFallbacks, WORKERS_AI_FALLBACK } from '../src/model.js';
 
 const WOLF = 'https://inf.test/v1/chat/completions';
 const msgs = [{ role: 'user', content: 'hi' }];
@@ -290,4 +290,22 @@ test('the Workers AI fallback gets length and format rules in its system message
   const b = withFallbackRules([{ role: 'user', content: 'hi' }]);
   expect(b[0]).toEqual({ role: 'system', content: FALLBACK_RULES });
   expect(b[1].content).toBe('hi');
+});
+
+test('each switch to a backup is told to the page while it happens', async () => {
+  const w = world({ or: { 'nvidia/nemotron-3.5-lightning:free': () => answer('nemotron here') } });
+  const notes = [];
+  const r = await modelFrom(w.env, w.fetchImpl)(msgs, { onReroute: (t) => notes.push(t) });
+  expect(r.text).toBe('nemotron here');
+  expect(notes).toEqual(['Flisk Wolf is busy, switching to gemma-4-31b-it (OpenRouter, free)', 'gemma-4-31b-it (OpenRouter, free) is busy, switching to nemotron-3.5-lightning (OpenRouter, free)']);
+  expect(modelShown(r.by)).toBe('nemotron-3.5-lightning (OpenRouter, free)');
+});
+
+test('Wolf answering says nothing about switching, and is not named', async () => {
+  const w = world({ wolf: () => answer('wolf here') });
+  const notes = [];
+  const r = await modelFrom(w.env, w.fetchImpl)(msgs, { onReroute: (t) => notes.push(t) });
+  expect(notes).toEqual([]);
+  expect(modelShown(r.by)).toBe('');
+  expect(modelShown(WORKERS_AI_FALLBACK)).toBe('Llama 3.1 8B on Cloudflare');
 });

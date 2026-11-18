@@ -168,6 +168,17 @@ export const VERCEL_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 export const VERCEL_MODEL = 'alibaba/qwen3.8-27b';
 export const vercelCap = (env) => (env.VERCEL_AI_KEY ? Math.max(0, Math.floor(Number(env.VERCEL_DAILY_REQUESTS) || 0)) : 0);
 const WOLF_REST_MS = 10 * 60 * 1000;
+export const OPENROUTER_TRIES = 6; // free OpenRouter models tried in turn before the next backup
+// A short name a person can read: 'google/gemma-4-31b-it:free' -> 'gemma-4-31b-it'.
+export const shortModel = (id) => String(id || '').split('/').pop().replace(/:free$/, '').replace(/^@cf\/.*\//, '');
+const BACKUP_NAMES = { 'workers-ai': 'Llama 3.1 8B on Cloudflare', vercel: 'Qwen on Vercel AI Gateway', pollinations: 'Pollinations' };
+// The name the page shows for whoever answered a free ask (reply.by). Wolf, the planned model, is not named.
+export function modelShown(by) {
+  if (!by || by === 'wolf') return '';
+  if (by === WORKERS_AI_FALLBACK) return BACKUP_NAMES['workers-ai'];
+  if (BACKUP_NAMES[by]) return BACKUP_NAMES[by];
+  return `${shortModel(by)} (OpenRouter, free)`;
+}
 let wolfOutUntil = 0; // after a budget or rate-limit answer, skip Wolf for a while instead of asking it every step
 let orModels = { at: 0, ids: null };
 
@@ -362,6 +373,10 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     // Whether wolf was skipped is decided once, before anything runs, so a pause that ends mid-request cannot change the story.
     const skipped = now() < wolfOutUntil;
     const rest = skipped ? Math.max(1, Math.ceil((wolfOutUntil - now()) / 60000)) : 0;
+    // The page shows each switch while it happens ("Flisk Wolf is busy, switching to ..."), so a slow free answer is never a silent wait.
+    const say = (text) => { try { o.onReroute?.(text); } catch {} };
+    let prev = 'Flisk Wolf';
+    const switchTo = (name) => { say(`${prev} is busy, switching to ${name}`); prev = name; };
     const rerouted = (by, model) => {
       if (by === 'wolf') return;
       const why = [skipped ? `wolf skipped: resting ${rest} more min after a limit` : '', ...tried].filter(Boolean).join('; ') || 'wolf did not answer';
@@ -373,15 +388,19 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
       tried.push(`wolf: ${r.error}`);
       if (r.kind === 'limit') wolfOutUntil = now() + WOLF_REST_MS;
     }
+    if (skipped) say('Flisk Wolf is resting after a limit, using a free backup model');
     if (env.OPENROUTER_KEY) {
-      const ids = (await freeOpenRouterModels(fetchImpl)).slice(0, 3);
+      const ids = (await freeOpenRouterModels(fetchImpl)).slice(0, OPENROUTER_TRIES);
       for (const id of ids) {
+        switchTo(`${shortModel(id)} (OpenRouter, free)`);
         const r = await oneModel(env, fetchImpl, { ai: 'openrouter', url: OPENROUTER_URL, model: id, key: env.OPENROUTER_KEY, referer: true })(messages);
         if (!r.error) { rerouted('openrouter', id); return { ...r, by: id }; }
         tried.push(`${id}: ${r.error}`);
+        if (dailyFreeUsed(r)) break; // the key's daily free allowance is shared by every free model
       }
     }
     const viaWorkers = async () => {
+      switchTo(BACKUP_NAMES['workers-ai']);
       const r = await workers(messages, { onDelta: o.onDelta });
       if (!r.error) { rerouted('workers-ai', WORKERS_AI_FALLBACK); return { ...r, by: WORKERS_AI_FALLBACK }; }
       tried.push(`workers-ai: ${r.error}`);
@@ -389,11 +408,13 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     };
     const viaBackups = async () => {
       if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
+        switchTo(BACKUP_NAMES.vercel);
         const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
         if (!v.error) { rerouted('vercel', env.VERCEL_MODEL || VERCEL_MODEL); return { ...v, by: 'vercel' }; }
         tried.push(`vercel: ${v.error}`);
       }
       if (env.NO_POLLINATIONS !== '1') {
+        switchTo(BACKUP_NAMES.pollinations);
         const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
         if (!p.error) { rerouted('pollinations', 'openai'); return { ...p, by: 'pollinations' }; }
         tried.push(`pollinations: ${p.error}`);
