@@ -26,7 +26,7 @@ The only thing the loop may change is `src/answer-style.js`, one block of the sy
 ```bash
 export EVAL_URL=https://.../v1/chat/completions   # any OpenAI-compatible address
 export EVAL_KEY=...
-export EVAL_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
+export EVAL_MODEL=@cf/mistralai/mistral-small-3.1-24b-instruct
 
 node evals/answers/run.mjs --answers          # score the current prompt, show the answers
 node evals/answers/run.mjs --check            # exit 1 below the baseline

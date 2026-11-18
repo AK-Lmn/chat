@@ -307,5 +307,5 @@ test('Wolf answering says nothing about switching, and is not named', async () =
   const r = await modelFrom(w.env, w.fetchImpl)(msgs, { onReroute: (t) => notes.push(t) });
   expect(notes).toEqual([]);
   expect(modelShown(r.by)).toBe('');
-  expect(modelShown(WORKERS_AI_FALLBACK)).toBe('Llama 3.1 8B on Cloudflare');
+  expect(modelShown(WORKERS_AI_FALLBACK)).toBe('Mistral Small 3.1 on Cloudflare');
 });

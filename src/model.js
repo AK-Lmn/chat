@@ -157,7 +157,9 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
 // and it says the free AI is busy, not why.
 export const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const OPENROUTER_PREFERRED = ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3.5-lightning:free', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'nvidia/nemotron-3.5-super-vl:free'];
-export const WORKERS_AI_FALLBACK = '@cf/meta/llama-3.1-8b-instruct-fast';
+// Was @cf/meta/llama-3.1-8b-instruct-fast: hidden from the Workers AI catalog, and its fp8 twin is set for deprecation on 2026-11-20.
+// Mistral Small 3.1 24B has no deprecation date, runs on the free plan, does not spend the answer thinking, and writes good Ukrainian.
+export const WORKERS_AI_FALLBACK = '@cf/mistralai/mistral-small-3.1-24b-instruct';
 // The last fallback needs no key and no Cloudflare neurons: when the account's free 10,000 daily neurons are used up,
 // Wolf and Workers AI both fail at once, and without it every free chat said "busy" until midnight UTC.
 export const POLLINATIONS_TEXT_URL = 'https://text.pollinations.ai/openai';
@@ -173,7 +175,7 @@ const WOLF_REST_MS = 10 * 60 * 1000;
 export const OPENROUTER_TRIES = 6; // free OpenRouter models tried in turn before the next backup
 // A short name a person can read: 'google/gemma-4-31b-it:free' -> 'gemma-4-31b-it'.
 export const shortModel = (id) => String(id || '').split('/').pop().replace(/:free$/, '').replace(/^@cf\/.*\//, '');
-const BACKUP_NAMES = { 'workers-ai': 'Llama 3.1 8B on Cloudflare', vercel: 'Qwen on Vercel AI Gateway', pollinations: 'Pollinations' };
+const BACKUP_NAMES = { 'workers-ai': 'Mistral Small 3.1 on Cloudflare', vercel: 'Qwen on Vercel AI Gateway', pollinations: 'Pollinations' };
 // The name the page shows for whoever answered a free ask (reply.by). Wolf, the planned model, is not named.
 export function modelShown(by) {
   if (!by || by === 'wolf') return '';
@@ -359,7 +361,7 @@ function withNameGuesses(make, env, fetchImpl, chosen, trace = () => {}) {
   };
 }
 
-// Languages Llama 3.1 8B officially supports; anything else (Ukrainian, Russian, Arabic...) is steered to the stronger backups first.
+// Languages the Workers AI fallback is trusted in (the old Llama 3.1 8B list, kept): anything else (Ukrainian, Russian, Arabic...) tries the other backups first.
 const WORKERS_AI_LANGS = new Set(['en', 'de', 'fr', 'it', 'pt', 'hi', 'es', 'th']);
 export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true }, { overLimit = null, overVercel = null, now = () => Date.now(), log = () => {}, trace = () => {} } = {}) {
   if (ownFreeOpenRouter(chosen)) return ownFreeModel(env, fetchImpl, chosen);

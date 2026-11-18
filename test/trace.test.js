@@ -32,9 +32,9 @@ test('another model answering is one rerouted row with the reason', async () => 
   const r = await modelFrom(env, fetchImpl, { ai: 'wolf', free: true }, { trace: (e) => seen.push(e) })(msgs);
   expect(r.error).toBeUndefined();
   expect(seen).toHaveLength(1);
-  expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai (@cf/meta/llama-3.1-8b-instruct-fast)' });
+  expect(seen[0]).toMatchObject({ kind: 'rerouted', expected: 'wolf', actual: 'workers-ai (@cf/mistralai/mistral-small-3.1-24b-instruct)' });
   expect(seen[0].why).toContain('wolf');
-  expect(seen[0].detail).toContain('@cf/meta/llama-3.1-8b-instruct-fast');
+  expect(seen[0].detail).toContain('@cf/mistralai/mistral-small-3.1-24b-instruct');
 });
 
 test('wolf resting then a failed fallback keeps both facts in the row', async () => {
