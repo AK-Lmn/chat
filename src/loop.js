@@ -474,6 +474,8 @@ export async function runTask({ grade = null, stream = false, decision = null, c
         if (askedWeb && results?.length) {
           const text = answerFromWeb(results);
           emit({ type: 'answer', text });
+          // The tab can write a better answer from these same sources, with a model inference serves (see docs/ai-via-inference.md).
+          emit({ type: 'browseranswer', question: String(task).slice(0, 400), results: results.slice(0, 5).map((r) => ({ title: String(r.title).slice(0, 120), snippet: String(r.snippet || '').slice(0, 400) })) });
           return await finish(text);
         }
       }

@@ -24,6 +24,19 @@ describe('no AI available: the web answers', () => {
     expect(c.calls).toEqual([]);
   });
 
+  test('the page is given the sources, so the tab can write the answer with a model from inference (and only then)', async () => {
+    const ev = [];
+    await runTask({ task: 'who is json?', mode: 'search', model: busy, computer: computer(), search: async () => ({ results: RESULTS }), emit: (e) => ev.push(e) });
+    const b = ev.find((e) => e.type === 'browseranswer');
+    expect(b.question).toBe('who is json?');
+    expect(b.results[0]).toEqual({ title: 'JSON', snippet: RESULTS[0].snippet });
+    expect(Object.keys(b.results[0]).sort()).toEqual(['snippet', 'title']); // no urls or ids: only what the model needs
+    // A model that answered, or an error with no web answer, offers nothing.
+    const fine = [];
+    await runTask({ task: 'who is json?', mode: 'search', model: async () => ({ text: '{"say":"JSON is a format [1]."}' }), computer: computer(), search: async () => ({ results: RESULTS }), emit: (e) => fine.push(e) });
+    expect(fine.some((e) => e.type === 'browseranswer')).toBe(false);
+  });
+
   test('a plain question in Chat mode searches the web when no AI is available', async () => {
     let asked = 0;
     const r = await runTask({ task: 'who invented the JSON format?', mode: 'chat', wait: async () => {}, model: busy, computer: computer(), search: async () => { asked++; return { results: RESULTS }; } });

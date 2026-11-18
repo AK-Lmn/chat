@@ -1270,7 +1270,7 @@ async function run(task){
   let podT=0,pgf=null,pgt=null;const POD_EXP=40;
   const pgDraw=()=>{if(!podT||!pgf)return;const s=(Date.now()-podT)/1000,p=Math.round(s<POD_EXP?s/POD_EXP*90:90+(1-Math.exp(-(s-POD_EXP)/30))*8),left=Math.max(0,Math.ceil(POD_EXP-s));pgf.style.width=p+'%';pgt.textContent=p+'%'+(left>0?' · about '+left+'s left':' · '+T('taking longer than usual, still starting'));ws.textContent=T('Starting a computer')+' · '+p+'%';};
   const t0=Date.now(),tick=()=>{const e=Date.now()-t0;wt.textContent='Working for '+secs(e)+(e>45000?' · slow: press Stop to give up':'');pgDraw();};let stopped=false;const ac=new AbortController();const stop=node('button','btn','Stop');stop.type='button';stop.onclick=()=>{stopped=true;ac.abort();};R.actions.appendChild(stop);tick();const timer=setInterval(tick,1000);
-  let liveA=null,liveT='',answer=null,failed=false,link=null,video=null,lastNote='',needPod=false;
+  let liveA=null,liveT='',answer=null,failed=false,link=null,video=null,lastNote='',needPod=false,browserInfo=null;
   const step=R.step;
   const code=(s)=>{const c=document.createElement('code');c.textContent=s;return c.outerHTML;};
   const txt=(s)=>{const c=document.createElement('span');c.textContent=s;return c.innerHTML;};
@@ -1305,7 +1305,7 @@ async function run(task){
     else if(ev.type==='retry'){if(liveA){liveA.remove();liveA=null;}}
     else if(ev.type==='reroute'){step(txt(T(ev.text)),'','server');ws.textContent=T(ev.text);}
     else if(ev.type==='model'){step(txt(T('Answered by '+ev.name)),'ok','server');}
-    else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;
+    else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;else if(ev.type==='browseranswer')browserInfo=ev;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
   };
@@ -1329,7 +1329,7 @@ async function run(task){
   if(needPod&&!failed){end(true);turn.remove();attached=sendFiles;drawFiles();podNext=true;return run(task);}
   end(!failed||answer!==null);
   if(liveA){liveA.remove();liveA=null;}
-  if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);history.push({role:'assistant',content:answer});saveChat();roll();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
+  if(answer!==null){const a=node('div','a');md(a,answer);turn.appendChild(a);if(browserInfo)offerBrowserModel(turn,browserInfo);history.push({role:'assistant',content:answer});saveChat();roll();if(voiceOn)talkBack(answer.replace(/^\\s*!\\[.*$/gm,''));
     const onlyPic=/^\\s*!\\[[^\\n]*\\]\\([^)\\n]+\\)\\s*(?:\\n[^\\n]*)?$/.test(answer);
     const sv=node('div','asave'),dl2=node('button','btn','Save as file'),cp2=node('button','btn','Copy');dl2.type=cp2.type='button';
     dl2.onclick=()=>{const u=URL.createObjectURL(new Blob([answer],{type:'text/markdown'})),x=document.createElement('a');x.href=u;x.download='flisk-chat-answer.md';document.body.appendChild(x);x.click();x.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);dl2.textContent='Saved ✓';setTimeout(()=>dl2.textContent='Save as file',1500);};
@@ -1380,6 +1380,38 @@ function workerCard(ev){
   row.append(inp,go);body.append(row);if(paths.length)body.append(chips);body.append(res);c.append(top,body);return c;
 }
 // The computer in this tab (fleet's browser pod): a small Linux on WebAssembly. Loaded on the first task that needs it.
+// Every free model was busy and the answer came from the web alone: the tab can write it. A model inference serves runs in a hidden
+// iframe on inference's origin (WebGPU; the weights download once, then stay in the browser). Nothing here costs the server a token.
+function writeInBrowser(turn,info,btn){return new Promise((resolve)=>{
+  const INF=window.__INF__,f=document.createElement('iframe'),out=node('div','a');let started=false,text='';
+  f.src=INF+'/browser-model';f.setAttribute('allow','webgpu');f.hidden=true;f.title='Browser model';out.hidden=true;turn.appendChild(out);
+  const say=(t)=>{btn.textContent=t;};
+  const finish=(ok)=>{window.removeEventListener('message',on);clearTimeout(t0);clearInterval(iv);f.remove();if(!text)out.remove();resolve(ok);};
+  const on=(e)=>{if(e.origin!==INF||e.source!==f.contentWindow)return;const d=e.data||{};if(d.from!=='flisk-browser-model')return;
+    if(d.ev==='ready'){if(started)return;started=true;
+      if(!d.webgpu){say('This browser has no WebGPU');return finish(false);}
+      const ids=d.models||[],big=(navigator.deviceMemory||4)>=8,model=big&&ids.indexOf('flisk-browser-chat')>=0?'flisk-browser-chat':ids.indexOf('flisk-browser-chat-lite')>=0?'flisk-browser-chat-lite':ids[0];
+      if(!model){say('No browser model is available');return finish(false);}
+      const src=info.results.map((r,i)=>'['+(i+1)+'] '+r.title+': '+r.snippet).join('\\n');
+      f.contentWindow.postMessage({cmd:'generate',id:'a1',model:model,maxTokens:400,messages:[{role:'system',content:'Answer the question using only the sources. Cite them as [1], [2]. Reply in the language of the question. Be short and exact. If the sources do not answer it, say so.'},{role:'user',content:'Sources:\\n'+src+'\\n\\nQuestion: '+info.question}]},INF);}
+    else if(d.ev==='progress')say('Loading the model in your browser: '+Math.round((d.progress||0)*100)+'%');
+    else if(d.ev==='delta'){text+=d.text;out.hidden=false;md(out,text);say('Writing the answer…');down();}
+    else if(d.ev==='done'){if(btn.parentNode)btn.parentNode.remove();finish(true);}
+    else if(d.ev==='error'){say('The browser model could not run: '+d.error);finish(false);}};
+  const t0=setTimeout(()=>{if(!started){say('The browser model did not start');finish(false);}},20000);
+  // The runner cannot know who framed it when the page sends no Referer, so ask it, again until it answers.
+  const ask=()=>{if(started)return;try{f.contentWindow.postMessage({cmd:'status'},INF);}catch(e){}};
+  const iv=setInterval(()=>{if(started)clearInterval(iv);else ask();},700);f.addEventListener('load',ask);
+  window.addEventListener('message',on);document.body.appendChild(f);
+});}
+function offerBrowserModel(turn,info){
+  if(!window.__INF__||!navigator.gpu||!info||!info.results||!info.results.length)return;
+  const box=node('div','asave'),btn=node('button','btn','Write a better answer in my browser (free, about 0.4 GB once)');btn.type='button';box.appendChild(btn);turn.appendChild(box);
+  const run=()=>{btn.disabled=true;writeInBrowser(turn,info,btn).then((ok)=>{if(ok)lsSet('chat_browser_model','on');else btn.disabled=false;});};
+  btn.onclick=run;
+  let on='';try{on=localStorage.getItem('chat_browser_model')||'';}catch(e){}
+  if(on==='on')run();
+}
 const podOk=()=>!!window.__POD__&&typeof WebAssembly==='object'&&typeof WebSocket==='function';
 let podP=null;
 function getPod(){if(!podP)podP=import(window.__POD__+'pod.js').then(m=>m.startBrowserPod({base:window.__POD__+'vendor/'})).catch(e=>{podP=null;throw e;});return podP;}
@@ -1519,7 +1551,7 @@ const bare = (name) => icon(name, 10).replace(/ width="10" height="10" aria-hidd
 const logo = (id, size = 16, names = PROVIDER_NAMES) =>
   LOGOS[id] ? `<span class="lg" style="width:${size}px;height:${size}px" aria-hidden="true"><img src="${LOGOS[id]}" alt=""></span>` : `<span class="lt" style="width:${size}px;height:${size}px" aria-hidden="true">${esc(String(names[id] || id).slice(0, 2))}</span>`;
 
-export function appPage({ login, anon = false, connected = [], models = DEFAULT_MODELS, theme = 'earth', here = null, pod = '', names = PROVIDER_NAMES }) {
+export function appPage({ login, anon = false, connected = [], models = DEFAULT_MODELS, theme = 'earth', here = null, pod = '', inf = '', names = PROVIDER_NAMES }) {
   if (!THEME_IDS.includes(theme)) theme = 'earth';
   const list = cleanModels(models);
   const cards = PROVIDER_CARDS.map(
@@ -1599,7 +1631,7 @@ ${earthUsers(esc)}
 <button type="button" id="oend" class="oend" aria-label="End voice talk"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
 </div>
 <select id="ai" hidden aria-hidden="true">${AI_CHOICES.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('')}</select>`,
-    `window.__SIGNED__=${login ? 'true' : 'false'};window.__POD__=${inlineJson(pod || '')};window.__ANON__=${anon ? 'true' : 'false'};window.__MODELS__=${inlineJson(list)};window.__CATS__=${inlineJson(CATS)};window.__ZQ__=${inlineJson(ZQ)};window.__LOGOS__=${inlineJson(Object.fromEntries(['anthropic', 'openai', 'openrouter'].filter((k) => LOGOS[k]).map((k) => [k, LOGOS[k]])))};window.__ICONS__=${inlineJson(Object.fromEntries(['wolf', 'website', 'app', 'system', 'answer', 'video'].map((k) => [k, bare(k)])))};` +
+    `window.__SIGNED__=${login ? 'true' : 'false'};window.__POD__=${inlineJson(pod || '')};window.__INF__=${inlineJson(inf || '')};window.__ANON__=${anon ? 'true' : 'false'};window.__MODELS__=${inlineJson(list)};window.__CATS__=${inlineJson(CATS)};window.__ZQ__=${inlineJson(ZQ)};window.__LOGOS__=${inlineJson(Object.fromEntries(['anthropic', 'openai', 'openrouter'].filter((k) => LOGOS[k]).map((k) => [k, LOGOS[k]])))};window.__ICONS__=${inlineJson(Object.fromEntries(['wolf', 'website', 'app', 'system', 'answer', 'video'].map((k) => [k, bare(k)])))};` +
       APP_JS +
       EARTH_JS +
       orbJs(here),

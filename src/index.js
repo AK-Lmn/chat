@@ -115,6 +115,10 @@ export const podBase = (env) => (env.BROWSER_POD_URL === '' ? '' : (env.BROWSER_
 // The chat page may load the browser computer (a script, a WebAssembly file and a Linux image) from that one folder, and
 // open the task's WebSocket back to chat itself. 'wasm-unsafe-eval' allows WebAssembly only, never eval of text.
 // The emulator starts one worker from a blob it builds itself, so worker-src allows blob: and nothing else.
+// The browser model runs on inference's own origin, in a hidden iframe (inference's /browser-model page): chat frames that one
+// origin and loads no script from anywhere new, so the engine and the weights never run in the page that holds the session.
+export const inferenceOrigin = (env) => { try { return new URL(env.INFERENCE_URL || 'https://inference.flisk.si/v1/chat/completions').origin; } catch { return 'https://inference.flisk.si'; } };
+export const withFrame = (csp, inf) => (inf ? csp.replace("default-src 'none';", `default-src 'none'; frame-src ${inf};`) : csp);
 export function cspWithPod(pod, origin) {
   if (!pod) return SECURITY['content-security-policy'];
   const from = new URL(pod).href;
@@ -511,9 +515,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     // The visitor's country goes to the page so a visit from Ukraine opens in Ukrainian (a saved choice or the browser language still decide first).
     const geo = /^[A-Z]{2}$/.test(String(request.cf?.country || '')) ? request.cf.country : '';
     const page = (opts) => {
-      let body = appPage({ ...opts, models, theme, here, pod, names });
+      const inf = inferenceOrigin(env);
+      let body = appPage({ ...opts, models, theme, here, pod, inf, names });
       if (geo === 'UA') body = body.replace('<head>', `<head><script>window.__GEO="UA"</script>`);
-      return html(body, 200, { 'content-security-policy': cspWithPod(pod, origin) });
+      return html(body, 200, { 'content-security-policy': withFrame(cspWithPod(pod, origin), inf) });
     };
     if (!session) {
       if (!env.SESSION_SECRET) return withLook(page({ login: null, connected: [] }));
