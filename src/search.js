@@ -16,14 +16,19 @@ export const cleanQuery = (q) => String(q ?? '').replace(/[\u0000-\u001f]/g, ' '
 
 // Plain text from a snippet that may hold HTML: tags are removed until none are left, entities are decoded in ONE pass
 // (so "&amp;lt;" stays "&lt;" and is never decoded twice), and any angle bracket that is left is dropped.
-const ENTITIES = { amp: '&', quot: '"', lt: '<', gt: '>', '#39': "'", '#x27': "'" };
+const ENTITIES = { amp: '&', quot: '"', lt: '<', gt: '>', apos: "'" };
+const decodeEntity = (_, e) => {
+  if (e[0] !== '#') return ENTITIES[e.toLowerCase()] ?? _;
+  const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+  return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : _;
+};
 const text = (s, n) => {
   let t = String(s ?? '');
   for (let prev = ''; prev !== t; ) {
     prev = t;
     t = t.replace(/<[^>]*>/g, '');
   }
-  return t.replace(/&(amp|quot|lt|gt|#39|#x27);/g, (_, e) => ENTITIES[e]).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, n);
+  return t.replace(/&(amp|quot|lt|gt|apos|#\d{1,7}|#[xX][0-9a-fA-F]{1,6});/g, decodeEntity).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, n);
 };
 
 // Only http(s) links, so a result can never become a javascript: link on the page.
@@ -65,6 +70,15 @@ const topicWords = (q) => [...new Set(String(q).toLowerCase().match(/[\p{L}\p{N}
 // Some sources (Wikipedia, GitHub) always answer with their closest page, even a wrong one ("latest bun release" ->
 // "The Latest", a repo that says "bundle"). A wrong source is worse than none: keep a result only when whole words of
 // the question (not generic ones) appear in it, at least 60% of them.
+// A page named by its subject (Wikipedia, a GitHub repo) has the subject in its title: "Android 17" is not an answer to
+// "bun release" because its text says "Cinnamon Bun" somewhere.
+export function titled(q, r) {
+  const words = topicWords(q);
+  if (!words.length) return true;
+  const have = new Set(String(r.title).toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) || []);
+  return words.some((w) => have.has(w));
+}
+
 export function relevant(q, r) {
   const words = topicWords(q);
   if (!words.length) return true;
@@ -74,6 +88,8 @@ export function relevant(q, r) {
 
 
 const TIMEOUT_MS = 4000;
+const RELEASE_WORDS = new Set(['release', 'releases', 'version', 'versions', 'changelog', 'changes', 'update', 'updates']);
+const RELEASE_Q = /\b(release|releases|version|changelog|changes|update|updates|new in)\b/i;
 const UA = { 'user-agent': 'flisk-chat/1.0 (+https://chat.flisk.si)' };
 const json = async (fetch, url, init) => {
   const r = await fetch(url, { ...init, headers: { ...UA, accept: 'application/json', ...(init?.headers || {}) } });
@@ -84,15 +100,23 @@ const json = async (fetch, url, init) => {
 const SOURCES = {
   wikipedia: async (q, fetch) => {
     const j = await json(fetch, `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=${MAX_RESULTS}&srsearch=${encodeURIComponent(q)}`);
-    return (j?.query?.search || []).map((x) => ({ title: text(x.title, 120), url: `https://en.wikipedia.org/wiki/${encodeURIComponent(String(x.title).replace(/ /g, '_'))}`, snippet: text(x.snippet, 300) })).filter((x) => relevant(q, x)); // it always answers with its closest page, even a wrong one
+    return (j?.query?.search || []).map((x) => ({ title: text(x.title, 120), url: `https://en.wikipedia.org/wiki/${encodeURIComponent(String(x.title).replace(/ /g, '_'))}`, snippet: text(x.snippet, 300) }))  .filter((x) => relevant(q, x) && titled(q, x)); // it always answers with its closest page, even a wrong one
   },
   hackernews: async (q, fetch) => {
     const j = await json(fetch, `https://hn.algolia.com/api/v1/search?tags=story&hitsPerPage=${MAX_RESULTS}&query=${encodeURIComponent(q)}`);
     return (j?.hits || []).map((x) => ({ title: text(x.title, 120), url: safeUrl(x.url) || `https://news.ycombinator.com/item?id=${x.objectID}`, snippet: text(`${x.points ?? 0} points, ${x.num_comments ?? 0} comments on Hacker News. ${x.story_text || ''}`, 300) }));
   },
   github: async (q, fetch) => {
-    const j = await json(fetch, `https://api.github.com/search/repositories?per_page=${MAX_RESULTS - 2}&q=${encodeURIComponent(q)}`);
-    return (j?.items || []).map((x) => ({ title: text(x.full_name, 120), url: safeUrl(x.html_url), snippet: text(`${x.stargazers_count ?? 0} stars. ${x.description || ''}`, 300) })).filter((x) => relevant(q, x));
+    // GitHub's repo search matches names and descriptions: "latest bun release" finds nothing, "bun" finds the repo.
+    const subject = topicWords(q).filter((w) => !RELEASE_WORDS.has(w)).join(' ') || q;
+    const j = await json(fetch, `https://api.github.com/search/repositories?per_page=${MAX_RESULTS - 2}&q=${encodeURIComponent(subject)}`);
+    const repos = (j?.items || []).map((x) => ({ full: x.full_name, title: text(x.full_name, 120), url: safeUrl(x.html_url), snippet: text(`${x.stargazers_count ?? 0} stars. ${x.description || ''}`, 300) })).filter((x) => relevant(subject, x) && titled(subject, x));
+    // "latest bun release": the answer is the top repo's latest release, so read it (one more request).
+    if (repos[0] && RELEASE_Q.test(q)) {
+      const rel = await json(fetch, `https://api.github.com/repos/${repos[0].full}/releases/latest`);
+      if (rel?.html_url) repos.unshift({ title: text(`${repos[0].full} latest release: ${rel.name || rel.tag_name}`, 120), url: safeUrl(rel.html_url), snippet: text(`Released ${String(rel.published_at || '').slice(0, 10)}. ${rel.body || ''}`, 300) });
+    }
+    return repos.map(({ full, ...r }) => r);
   },
   stackoverflow: async (q, fetch) => {
     const j = await json(fetch, `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&site=stackoverflow&pagesize=${MAX_RESULTS - 2}&q=${encodeURIComponent(q)}`);
@@ -180,7 +204,9 @@ export async function searchWeb(query, { fetch = globalThis.fetch, only = null, 
     seen.add(k);
     return true;
   });
-  const ranked = bm25Rank(q, merged).slice(0, MAX_RESULTS);
+  // Every source but a real search engine (DuckDuckGo) answers with its closest items, right or wrong: an item is kept only
+  // when a topic word is in its title.
+  const ranked = bm25Rank(q, merged.filter((r) => r.source === 'duckduckgo' || titled(q, r))).slice(0, MAX_RESULTS);
   if (!ranked.length) return { error: `no web results for "${q}"` };
   const results = ranked.map(({ title, url, snippet, source }) => ({ title, url, snippet, source }));
   await cachePut(cache, q, results);

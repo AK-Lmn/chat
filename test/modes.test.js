@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { handle } from '../src/index.js';
 import { parseAction, runTask } from '../src/loop.js';
-import { bm25Rank, cleanMode, cleanQuery, parseDuckDuckGo, relevant, searchWeb } from '../src/search.js';
+import { bm25Rank, cleanMode, cleanQuery, parseDuckDuckGo, relevant, searchWeb, titled } from '../src/search.js';
 import { makeSession } from '../src/session.js';
 import { fakeD1 } from './d1.js';
 
@@ -59,6 +59,7 @@ describe('mode and search helpers', () => {
     const u = new URL(url);
     if (down.includes(u.host)) throw new Error('down');
     if (u.host === 'hn.algolia.com') return Response.json({ hits: [{ title: 'Bun 1.3 released', url: 'https://bun.sh/blog/bun-v1.3?utm=x', points: 900, num_comments: 300, objectID: '1' }, { title: 'Show HN: my garden', url: null, points: 3, objectID: '2' }] });
+    if (u.host === 'api.github.com' && u.pathname.endsWith('/releases/latest')) return Response.json({ name: 'Bun v1.3.2', tag_name: 'bun-v1.3.2', html_url: 'https://github.com/oven-sh/bun/releases/tag/bun-v1.3.2', published_at: '2026-11-10T10:00:00Z', body: 'Faster installs and a new test runner.' });
     if (u.host === 'api.github.com') return Response.json({ items: [{ full_name: 'oven-sh/bun', html_url: 'https://github.com/oven-sh/bun', description: 'Incredibly fast JavaScript runtime, bundler, test runner', stargazers_count: 80000 }] });
     if (u.host === 'api.stackexchange.com') return Response.json({ items: [{ title: 'How do I install bun &amp; node?', link: 'https://stackoverflow.com/q/1', is_answered: true, score: 5, tags: ['bun'] }] });
     if (u.host === 'en.wikipedia.org') return Response.json({ query: { search: [{ title: 'Bun (software)', snippet: 'Bun is a <span>JavaScript</span> runtime' }, { title: 'Cinnamon roll', snippet: 'a sweet pastry' }] } });
@@ -95,6 +96,31 @@ describe('mode and search helpers', () => {
     const title = r.results[0].title;
     expect(title).not.toMatch(/[<>]/);
     expect(title).toContain('&lt;i&gt;'); // decoded once, not twice
+    const wiki = await searchWeb('men world cup', { fetch: async (u) => (new URL(u).host === 'en.wikipedia.org' ? Response.json({ query: { search: [{ title: 'Men World Cup', snippet: 'the ICC Men&#039;s T20 &#x27;World&#39; Cup' }] } }) : new Response('no', { status: 404 })), cache: memoryCache() });
+    expect(wiki.results[0].snippet).toBe("the ICC Men's T20 'World' Cup"); // decimal and hex entities too
+  });
+
+  test('a release question also reads the top repo\'s latest release, which answers it directly', async () => {
+    const r = await searchWeb('latest bun release', { fetch: internet(), cache: memoryCache() });
+    const top = r.results.find((x) => x.url.includes('/releases/tag/'));
+    expect(top.title).toContain('latest release: Bun v1.3.2');
+    expect(top.snippet).toContain('Released 2026-11-10');
+    expect(r.results.findIndex((x) => x === top)).toBeLessThan(3);
+    // A question that is not about a release makes no extra request.
+    let release = 0;
+    await searchWeb('bun javascript runtime', { fetch: async (u, i) => { if (String(u).includes('/releases/latest')) release++; return internet()(u, i); }, cache: memoryCache() });
+    expect(release).toBe(0);
+  });
+
+  test('Wikipedia and GitHub results must have a topic word in their title: "Android 17" is not about bun', async () => {
+    expect(titled('latest bun release', { title: 'Android 17' })).toBe(false);
+    expect(titled('latest bun release', { title: 'Bun (software)' })).toBe(true);
+    const fetch = async (url) => {
+      const u = new URL(url);
+      if (u.host === 'en.wikipedia.org') return Response.json({ query: { search: [{ title: 'Android 17', snippet: 'codenamed Cinnamon Bun, a stable release' }] } });
+      return new Response('no', { status: 404 });
+    };
+    expect((await searchWeb('latest bun release', { fetch, cache: memoryCache() })).error).toContain('no web results');
   });
 
   test('bm25 puts the result that matches more of the question first, and drops the ones that match nothing', () => {
