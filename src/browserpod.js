@@ -110,7 +110,7 @@ export function runOverSocket(socket, { gate, origin, publish, photo, saveImage 
       }
       // A closed tab cannot run anything: stop asking the model too.
       const model = async (messages) => (pod.closed ? { error: 'the browser tab closed', kind: 'other' } : ok.model(messages));
-      const r = await run({ mode: cleanMode(msg.mode), search: (q) => searchWeb(q, { fetch: fetchImpl }), lookupFacts, task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, photo, saveImage, saveVideo, emit: send });
+      const r = await run({ mode: cleanMode(msg.mode), search: (q) => searchWeb(q, { fetch: fetchImpl }), lookupFacts, task, history: msg.history, origin, model, maxSteps: ok.maxSteps, computer: pod.computer, fetchImpl, files: cleanFiles(msg.files), vision: ok.vision, modelName: ok.modelName, note: BROWSER_NOTE, publish, photo, saveImage, saveVideo, emit: send, ...(wait ? { wait } : {}) });
       send({ type: 'done', ms: r.ms, error: r.error });
     } catch (e) {
       send({ type: 'error', error: String(e?.message || e).slice(0, 200) });
