@@ -1,7 +1,7 @@
 // A task on the computer in the visitor's own browser: chat thinks, the page (here a stand-in) answers the computer calls.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { cspWithPod, handle, podBase } from '../src/index.js';
+import { cspWithPod, handle, podBase, inferenceOrigin, withFrame } from '../src/index.js';
 import { BROWSER_NOTE, browserComputer, runOverSocket } from '../src/browserpod.js';
 import { appPage } from '../src/page.js';
 import { makeSession } from '../src/session.js';
@@ -231,7 +231,8 @@ describe('the page', () => {
     expect(csp).not.toContain("'unsafe-eval'");
     expect(await res.text()).toContain('window.__POD__="https://fleet.test/browserpod/";');
     const off = await handle(new Request(`${ORIGIN}/`), env({ BROWSER_POD_URL: '' }));
-    expect(off.headers.get('content-security-policy')).toBe(cspWithPod('', ORIGIN));
+    // Off: nothing of the browser computer is let in (the only addition is the inference frame, a separate feature, below).
+    expect(off.headers.get('content-security-policy')).toBe(withFrame(cspWithPod('', ORIGIN), inferenceOrigin(env())));
     expect(off.headers.get('content-security-policy')).not.toContain('wasm');
     expect(await off.text()).toContain('window.__POD__="";');
   });
@@ -244,5 +245,24 @@ describe('the page', () => {
     // The inline script still parses.
     const js = page.match(/<script>([\s\S]*?)<\/script[^>]*>/gi).map((x) => x.slice(8, -9));
     for (const code of js) expect(() => new Function(`return async()=>{${code}\n}`)).not.toThrow();
+  });
+});
+
+describe('the browser model frame (inference serves the model; chat frames that one origin)', () => {
+  test('the CSP frames exactly inference\'s origin, and the page learns it', async () => {
+    const e = env();
+    const res = await handle(new Request(`${ORIGIN}/`), e);
+    const csp = res.headers.get('content-security-policy');
+    expect(csp).toMatch(/^default-src 'none'; frame-src https:\/\/inf\.test;/);
+    expect(csp.match(/frame-src [^;]*/)[0]).toBe('frame-src https://inf.test'); // one origin, no wildcard
+    expect(csp).toContain("frame-ancestors 'none'"); // chat itself still cannot be framed
+    expect(csp).not.toContain('huggingface'); // the weights and the engine are inference's business, never chat's page
+    expect(await res.text()).toContain('window.__INF__="https://inf.test";');
+  });
+
+  test('inferenceOrigin follows INFERENCE_URL and falls back to inference.flisk.si on nonsense', () => {
+    expect(inferenceOrigin({ INFERENCE_URL: 'https://x.example/v1/chat/completions' })).toBe('https://x.example');
+    expect(inferenceOrigin({})).toBe('https://inference.flisk.si');
+    expect(inferenceOrigin({ INFERENCE_URL: 'not a url' })).toBe('https://inference.flisk.si');
   });
 });
