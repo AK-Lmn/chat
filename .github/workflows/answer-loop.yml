@@ -26,7 +26,7 @@ jobs:
     env:
       EVAL_URL: ${{ secrets.EVAL_URL }}
       EVAL_KEY: ${{ secrets.EVAL_KEY }}
-      EVAL_MODEL: ${{ vars.EVAL_MODEL || '@cf/meta/llama-3.1-8b-instruct-fast' }}
+      EVAL_MODEL: ${{ vars.EVAL_MODEL || '@cf/mistralai/mistral-small-3.1-24b-instruct' }}
       EDITOR_MODEL: ${{ vars.EDITOR_MODEL }}
       EVAL_SAMPLES: ${{ vars.EVAL_SAMPLES || '2' }}
     steps:
