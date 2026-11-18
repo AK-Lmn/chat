@@ -62,6 +62,7 @@ describe('mode and search helpers', () => {
     if (u.host === 'api.github.com' && u.pathname.endsWith('/releases/latest')) return Response.json({ name: 'Bun v1.3.2', tag_name: 'bun-v1.3.2', html_url: 'https://github.com/oven-sh/bun/releases/tag/bun-v1.3.2', published_at: '2026-11-10T10:00:00Z', body: 'Faster installs and a new test runner.' });
     if (u.host === 'api.github.com') return Response.json({ items: [{ full_name: 'oven-sh/bun', html_url: 'https://github.com/oven-sh/bun', description: 'Incredibly fast JavaScript runtime, bundler, test runner', stargazers_count: 80000 }] });
     if (u.host === 'api.stackexchange.com') return Response.json({ items: [{ title: 'How do I install bun &amp; node?', link: 'https://stackoverflow.com/q/1', is_answered: true, score: 5, tags: ['bun'] }] });
+    if (u.host === 'en.wikipedia.org' && u.pathname.startsWith('/api/rest_v1/page/summary/')) return Response.json({ extract: 'Bun is a JavaScript runtime and toolkit created by Jarred Sumner. Argentina won the final 4-2 on penalties.' });
     if (u.host === 'en.wikipedia.org') return Response.json({ query: { search: [{ title: 'Bun (software)', snippet: 'Bun is a <span>JavaScript</span> runtime' }, { title: 'Cinnamon roll', snippet: 'a sweet pastry' }] } });
     if (u.host === 'export.arxiv.org') return new Response('<feed><entry><id>https://arxiv.org/abs/1</id><title>A study of cats</title><summary>felines</summary></entry></feed>');
     return new Response('blocked', { status: 202 }); // duckduckgo
@@ -112,6 +113,14 @@ describe('mode and search helpers', () => {
     expect(release).toBe(0);
   });
 
+  test('a question phrased in full ("what is new in the latest bun release") searches the subject, not the filler words', async () => {
+    const urls = [];
+    const fetch = async (u, i) => { urls.push(String(u)); return internet()(u, i); };
+    const r = await searchWeb('what is new in the latest bun release', { fetch, cache: memoryCache() });
+    expect(urls.find((u) => u.includes('api.github.com/search/repositories'))).toContain('q=bun');
+    expect(r.results.some((x) => x.title.includes('latest release: Bun v1.3.2'))).toBe(true);
+  });
+
   test('Wikipedia and GitHub results must have a topic word in their title: "Android 17" is not about bun', async () => {
     expect(titled('latest bun release', { title: 'Android 17' })).toBe(false);
     expect(titled('latest bun release', { title: 'Bun (software)' })).toBe(true);
@@ -121,6 +130,16 @@ describe('mode and search helpers', () => {
       return new Response('no', { status: 404 });
     };
     expect((await searchWeb('latest bun release', { fetch, cache: memoryCache() })).error).toContain('no web results');
+  });
+
+  test('the best Wikipedia pages are read for their opening paragraph, so a fact in the page can answer the question', async () => {
+    const r = await searchWeb('bun javascript runtime', { fetch: internet(), cache: memoryCache() });
+    const wiki = r.results.find((x) => x.source === 'wikipedia');
+    expect(wiki.snippet).toContain('created by Jarred Sumner');
+    // A failing summary request keeps the search snippet instead of failing the search.
+    const fetch = async (u, i) => { if (String(u).includes('/page/summary/')) throw new Error('down'); return internet()(u, i); };
+    const again = await searchWeb('bun javascript runtime', { fetch, cache: memoryCache() });
+    expect(again.results.find((x) => x.source === 'wikipedia').snippet).toContain('JavaScript');
   });
 
   test('bm25 puts the result that matches more of the question first, and drops the ones that match nothing', () => {

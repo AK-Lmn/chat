@@ -64,7 +64,7 @@ export function parseDuckDuckGo(html) {
 }
 
 // Words that say nothing about the topic ("latest", "how", "the"): they never count as a match.
-const GENERIC = new Set('the and for with from about what who whom when where why how which that this are was were has have had can will would should could does did into over latest new newest best top news today now current recent'.split(' '));
+const GENERIC = new Set('is in of to on at be by it as or do if we me my up so no an us you your i am he she they them his her its tell give show find the and for with from about what who whom when where why how which that this are was were has have had can will would should could does did into over latest new newest best top news today now current recent'.split(' '));
 const topicWords = (q) => [...new Set(String(q).toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) || [])].filter((w) => !GENERIC.has(w));
 
 // Some sources (Wikipedia, GitHub) always answer with their closest page, even a wrong one ("latest bun release" ->
@@ -162,7 +162,10 @@ export function bm25Rank(query, docs) {
         const idf = Math.log(1 + (docs.length - n + 0.5) / (n + 0.5));
         score += idf * ((f * (k1 + 1)) / (f + k1 * (1 - b + (b * bags[i].length) / avg)));
       }
-      return { ...d, score: score ? score + (PRIOR[d.source] || 0) : 0 };
+      // The more of the question's words a title carries, the more it is about that subject: bm25 alone sees only the fragment.
+      const inTitle = new Set(tokens(d.title));
+      const cover = topicWords(query).filter((w) => inTitle.has(w)).length / (topicWords(query).length || 1);
+      return { ...d, score: score ? score + (PRIOR[d.source] || 0) + 2 * cover : 0 };
     })
     .filter((d) => d.score > 0)
     .sort((x, y) => y.score - x.score);
@@ -173,7 +176,7 @@ const sameUrl = (u) => String(u).toLowerCase().replace(/^https?:\/\/(www\.)?/, '
 
 // ---- cache: the Cache API of the Worker's data centre (free, no binding, nothing to create) ----
 const CACHE_SECONDS = 3600;
-const cacheKey = (q) => new Request(`https://search.chat.flisk.si/v1?q=${encodeURIComponent(q.toLowerCase())}`);
+const cacheKey = (q) => new Request(`https://search.chat.flisk.si/v3?q=${encodeURIComponent(q.toLowerCase())}`);
 async function cacheGet(cache, q) {
   try {
     const hit = await cache?.match(cacheKey(q));
@@ -209,6 +212,14 @@ export async function searchWeb(query, { fetch = globalThis.fetch, only = null, 
   const ranked = bm25Rank(q, merged.filter((r) => r.source === 'duckduckgo' || titled(q, r))).slice(0, MAX_RESULTS);
   if (!ranked.length) return { error: `no web results for "${q}"` };
   const results = ranked.map(({ title, url, snippet, source }) => ({ title, url, snippet, source }));
+  // A search snippet is a fragment ("The 2022 FIFA World Cup was the 22nd..."); the answer is in the page's opening
+  // paragraph. Read it for the best three Wikipedia pages (Wikipedia's summary API: free, no key).
+  await Promise.all(results.filter((r) => r.source === 'wikipedia').slice(0, 3).map(async (r) => {
+    const name = decodeURIComponent(r.url.split('/wiki/')[1] || '');
+    const j = name ? await json(timed, `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`).catch(() => null) : null;
+    const extract = text(j?.extract, 600);
+    if (extract.length > r.snippet.length) r.snippet = extract;
+  }));
   await cachePut(cache, q, results);
   return { results };
 }
