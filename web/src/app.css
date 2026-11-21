@@ -17,3 +17,9 @@ html[data-scheme=earth] .astryx-app-shell-header{background:rgba(0,0,0,.55)!impo
 @keyframes orb{50%{transform:scale(1.06)}}
 @media (prefers-reduced-motion:reduce){.earth-orb{animation:none}}
 html[data-scheme=earth] .astryx-app-shell [class~="x10l6tqk"]{background:transparent!important}
+
+.earthc{display:none}
+html[data-scheme=earth] .earthc{display:block;position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:0;transition:opacity 1.2s}
+html[data-scheme=earth].earthon .earthc{opacity:1}
+html[data-scheme=earth].earthon body::before{opacity:0}
+html[data-scheme=earth] body::before{transition:opacity 1.2s}
