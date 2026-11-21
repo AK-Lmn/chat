@@ -38,3 +38,9 @@ test('the home page is the new design, and the previous one stays at /classic', 
   for (const p of ['/', '/next']) expect(await get(p)).toContain('<div id="root">');
   expect(await get('/classic')).not.toContain('<div id="root">');
 });
+
+test('phones: the starter chips and the + menu stay readable over the Earth', async () => {
+  const css = await Bun.file(new URL('../web/src/app.css', import.meta.url)).text();
+  expect(css).toContain('.chips button');
+  expect(css).toContain('[role=menu]');
+});
