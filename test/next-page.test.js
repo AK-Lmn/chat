@@ -45,3 +45,10 @@ test('phones: the starter chips and the + menu stay readable over the Earth', as
   expect(css).toContain('.chips button');
   expect(css).toContain('[role=menu]');
 });
+
+test('voice talk is wired: the screen listens through /api/talk and speaks through /voice', async () => {
+  const src = await Bun.file(new URL('../web/src/Oracle.jsx', import.meta.url)).text();
+  expect(src).toContain("'/api/talk'");
+  expect(src).toContain("'/voice?l='");
+  expect(src).toContain('getUserMedia');
+});
