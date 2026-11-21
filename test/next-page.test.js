@@ -9,14 +9,15 @@ test('the Astryx page carries the app inline and hands it the visitor facts', ()
   const boot = JSON.parse(/window\.__BOOT__=(.*?)<\/script>/s.exec(html)[1]);
   expect(boot.login).toBe('ada');
   expect(boot.connected).toEqual(['upstash']);
-  expect(html).not.toMatch(/<script[^>]+src=/); // the policy allows inline scripts only
+  expect(html.match(/<script[^>]+src="[^"]+"/g)).toEqual([expect.stringContaining('https://flisk.sh/a.js'), expect.stringContaining('https://flisk.si/assets/bar.js')]); // only the analytics and the shared Flisk bar; the app is inline
+  expect(html).toContain('--fbar'); // the app sits below the bar
   expect(NEXT_JS.length).toBeGreaterThan(1000);
   expect(NEXT_CSS.length).toBeGreaterThan(1000);
 });
 
 test('a hostile value cannot close the boot script', () => {
   const html = nextPage({ login: '</script><script>alert(1)</script>' });
-  expect(html.match(/<\/script>/g).length).toBe(3); // boot + app + Earth, nothing more
+  expect(html.match(/<\/script>/g).length).toBe(6); // analytics + bar + boot + app + Earth + bar offset, nothing more
 });
 
 test('the page policy allows inlined fonts and nothing else new', () => {
