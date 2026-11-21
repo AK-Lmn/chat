@@ -5,3 +5,9 @@ html,body{height:100%;overflow:hidden;overscroll-behavior:none;-webkit-text-size
 :root[data-keyboard="closed"] .vv-root{padding-bottom:env(safe-area-inset-bottom)}
 :root[data-keyboard="open"] .vv-root{padding-bottom:0}
 .caption{position:fixed;z-index:50;left:8px;right:8px;top:calc(var(--vv-top,0px) + 8px);padding:12px 14px;border-radius:12px;background:#1d3a8a;color:#fff;font-size:15px;line-height:1.35;box-shadow:0 6px 24px #0006}
+
+.earth-globe{width:min(72vw,420px);aspect-ratio:1;margin:8px auto;border-radius:50%;background:radial-gradient(circle at 70% 30%,rgba(0,0,0,0) 34%,rgba(0,0,0,.94) 74%),url(https://unpkg.com/three-globe@2.45.6/example/img/earth-blue-marble.jpg) 30% 50%/auto 100%,radial-gradient(circle at 68% 32%,#2a5f96,#0d2a4a 55%,#02060d);box-shadow:0 0 70px rgba(110,160,255,.22)}
+.earth-talk{position:fixed;inset:0;z-index:50;background:#000;color:#EDEDEE;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+.earth-orb{width:min(70vw,320px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 30% 28%,rgba(255,255,255,.18),rgba(255,255,255,0) 40%),radial-gradient(circle at 32% 30%,rgba(0,0,0,0) 40%,rgba(0,0,0,.92) 78%),url(https://unpkg.com/three-globe@2.45.6/example/img/earth-blue-marble.jpg) 45% 50%/auto 100%,radial-gradient(circle at 35% 30%,#2a5f96,#0d2a4a 55%,#02060d);box-shadow:0 0 70px rgba(90,150,255,.28);animation:orb 3s ease-in-out infinite}
+@keyframes orb{50%{transform:scale(1.06)}}
+@media (prefers-reduced-motion:reduce){.earth-orb{animation:none}}

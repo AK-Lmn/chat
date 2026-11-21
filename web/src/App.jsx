@@ -113,6 +113,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   });
   const [connected, setConnected] = useState(BOOT.connected || []);
   const [picked, setPicked] = useState([]);
+  const [talk, setTalk] = useState(false);
   const [mdlOpen, setMdlOpen] = useState(false);
   const [pcOpen, setPcOpen] = useState(false);
   const [explain, setExplain] = useState(false);
@@ -241,7 +242,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={BOOT.anon ? 'Guest' : '@' + BOOT.login} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
           {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
           <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={() => { setExplain((e) => !e); setCaption(''); }} /></Tip>
-          <Tip text="Colours: tap to switch between light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'system' ? 'light' : scheme === 'light' ? 'dark' : 'system')} /></Tip>
+          <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'earth' ? 'light' : scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'earth')} /></Tip>
           <Tip text="Keys, voice language and your data."><Button label="Settings" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
         </HStack>
       </HStack>
@@ -280,7 +281,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                     {label: 'Choose AI model', description: 'Flisk Wolf is free; or use your own Claude, OpenAI or OpenRouter key', icon: KeyIcon, onClick: () => setMdlOpen(true)},
                   ]} /></span></Tip>
                 <Tip text="Hold your voice in: it turns your words into text, phrase by phrase."><Button label="Speak your task" variant="ghost" size="sm" isIconOnly icon={<Icon icon={MicrophoneIcon} size="sm" />} onClick={() => setNotice('Voice typing arrives with the next step of this redesign.')} /></Tip>
-                <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setNotice('Voice talk arrives with the next step of this redesign.')} /></Tip>
+                <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setTalk(true)} /></Tip>
               </HStack>
             }
             footerActions={
@@ -292,6 +293,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           />
         }>
         <ChatMessageList>
+          {!turns.length && scheme === 'earth' && <div className="earth-globe" aria-hidden="true" />}
           {!turns.length && (
             <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
               <ChatMessageBubble variant="ghost"><Markdown density="compact">{BOOT.login ? 'What shall we make today? Ask a question, or describe a website or app.' : 'Flisk Chat makes real websites and apps from a sentence, on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown></ChatMessageBubble>
@@ -317,6 +319,12 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
+      {talk && <div className="earth-talk" role="dialog" aria-label="Voice talk with the Flisk Oracle">
+        <div className="earth-orb" />
+        <Text type="emphasized">Talk with the Flisk Oracle</Text>
+        <Text type="supporting" color="secondary">Live talking arrives with the next step. Type your task for now.</Text>
+        <Button label="Close" variant="secondary" onClick={() => setTalk(false)} />
+      </div>}
       <ComputerDialog open={pcOpen} onClose={() => setPcOpen(false)} connected={connected} onConnected={(id) => setConnected((c) => [...new Set([...c, id])])} picked={picked} setPicked={setPicked} />
     </ExplainContext.Provider>
   );
