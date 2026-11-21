@@ -79,7 +79,7 @@ export async function connectComputer(provider, key) {
 }
 
 // ---- OpenRouter: log in with the visitor's own free account (PKCE, no secret of ours) and the model catalogue ----------
-const b64u = (u) => btoa(String.fromCharCode(...new Uint8Array(u))).replace(/[+]/g, '-').replace(/[/]/g, '_').replace(/=+$/, '');
+const b64u = (u) => btoa(String.fromCharCode(...new Uint8Array(u))).replace(/[+]/g, '-').replace(/[/]/g, '_').replace(/=*$/, '');
 export const OR_FREE = ['google/gemma-4-31b-it:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3.5-lightning:free', 'nvidia/nemotron-3-ultra-550b-a55b:free'];
 
 export async function orStartLogin(task) {

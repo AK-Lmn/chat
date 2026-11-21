@@ -62,7 +62,7 @@ function Answer({t, onAgain, onPick}) {
           <Text weight="semibold" style={{wordBreak: 'break-all'}}>{u}</Text>
           <HStack gap={2}>
             <Tip text="Open the real thing in a new tab."><Button label="Open" variant="primary" href={u} target="_blank" icon={<Icon icon={ArrowTopRightOnSquareIcon} size="sm" />} /></Tip>
-            <Button label="Copy link" variant="secondary" onClick={() => navigator.clipboard && navigator.clipboard.writeText(u)} />
+            <Button label="Copy link" variant="secondary" onClick={() => navigator.clipboard && navigator.clipboard.writeText(u).catch(() => {})} />
           </HStack>
         </VStack></Card>
       ))}
@@ -92,9 +92,9 @@ function LimitCard({info, task, onPick}) {
       <Heading level={4}>Daily limit reached</Heading>
       <Text color="secondary">{info.error || 'You used all ' + (info.limit || '') + ' free tasks today.'} {info.resetsIn ? 'It resets in ' + info.resetsIn + '.' : ''} Use your own key for no limit, or wait.</Text>
       <HStack gap={2} wrap="wrap">
-        <Button label="Log in with OpenRouter, free" variant="primary" size="sm" onClick={() => orStartLogin(task)} />
+        <Button label="Log in with OpenRouter, free" variant="primary" size="sm" onClick={() => orStartLogin(task).catch(() => {})} />
         <Button label="Use my own key" variant="secondary" size="sm" onClick={() => onPick('setup-key')} />
-        <Button label="Copy my task" variant="ghost" size="sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(task)} />
+        <Button label="Copy my task" variant="ghost" size="sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(task).catch(() => {})} />
         <Button label="Ask on Discord" variant="ghost" size="sm" href="https://discord.gg/flisk" target="_blank" />
       </HStack>
     </VStack></Card>
@@ -113,6 +113,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   });
   const [connected, setConnected] = useState(BOOT.connected || []);
   const [picked, setPicked] = useState([]);
+  const [talk, setTalk] = useState(false);
   const [mdlOpen, setMdlOpen] = useState(false);
   const [pcOpen, setPcOpen] = useState(false);
   const [explain, setExplain] = useState(false);
@@ -190,16 +191,16 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     const fs = files; setValue(''); setFiles([]);
-    run(task, {files: fs});
+    run(task, {files: fs}).catch(() => {});
   };
 
   const pick = (what) => {
     if (what === 'setup-key' || what === 'choose-model' || what === 'change-provider' || what === 'change-model') setMdlOpen(true);
     else if (what === 'connect-computer') setPcOpen(true);
     else if (what === 'wolf') { setSel((BOOT.models || []).find((m) => m.free) || WOLF); }
-    else if (what === 'openrouter') orStartLogin(turns.length ? turns[turns.length - 1].task : '');
-    else if (what === 'discord') window.open('https://discord.gg/flisk', '_blank');
-    else if (what === 'retry' && turns.length) run(turns[turns.length - 1].task, {reuse: true});
+    else if (what === 'openrouter') orStartLogin(turns.length ? turns[turns.length - 1].task : '').catch(() => {});
+    else if (what === 'discord') window.open('https://discord.gg/flisk', '_blank', 'noopener,noreferrer');
+    else if (what === 'retry' && turns.length) run(turns[turns.length - 1].task, {reuse: true}).catch(() => {});
   };
   pick.free = sel.free;
 
@@ -210,7 +211,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   // Back from OpenRouter login: the key is saved, so run the task the visitor had typed.
   useEffect(() => {
-    orFinishLogin().then((r) => { if (!r) return; if (r.error) setNotice('OpenRouter login failed: ' + r.error); else { setNotice('OpenRouter connected. Your key is saved in this browser.'); if (r.task) setValue(r.task); } });
+    orFinishLogin().then((r) => { if (!r) return; if (r.error) setNotice('OpenRouter login failed: ' + r.error); else { setNotice('OpenRouter connected. Your key is saved in this browser.'); if (r.task) setValue(r.task); } }, () => {});
     let p = ''; try { p = sessionStorage.getItem('chat_pending') || ''; sessionStorage.removeItem('chat_pending'); } catch (e) { /* storage blocked */ }
     if (p && BOOT.login) setValue(p);
   }, []);
@@ -241,7 +242,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={BOOT.anon ? 'Guest' : '@' + BOOT.login} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
           {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
           <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={() => { setExplain((e) => !e); setCaption(''); }} /></Tip>
-          <Tip text="Colours: tap to switch between light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'system' ? 'light' : scheme === 'light' ? 'dark' : 'system')} /></Tip>
+          <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'earth' ? 'light' : scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'earth')} /></Tip>
           <Tip text="Keys, voice language and your data."><Button label="Settings" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
         </HStack>
       </HStack>
@@ -258,7 +259,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           </SideNavSection>
         </SideNav>
       }>
-      <div style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
+      <div className="earth-content" style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={
           <ChatComposer value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
@@ -280,7 +281,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                     {label: 'Choose AI model', description: 'Flisk Wolf is free; or use your own Claude, OpenAI or OpenRouter key', icon: KeyIcon, onClick: () => setMdlOpen(true)},
                   ]} /></span></Tip>
                 <Tip text="Hold your voice in: it turns your words into text, phrase by phrase."><Button label="Speak your task" variant="ghost" size="sm" isIconOnly icon={<Icon icon={MicrophoneIcon} size="sm" />} onClick={() => setNotice('Voice typing arrives with the next step of this redesign.')} /></Tip>
-                <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setNotice('Voice talk arrives with the next step of this redesign.')} /></Tip>
+                <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setTalk(true)} /></Tip>
               </HStack>
             }
             footerActions={
@@ -306,7 +307,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
               <ChatMessage sender="user"><ChatMessageBubble>{x.task}{x.files && x.files.length ? '\n📎 ' + x.files.join(', ') : ''}</ChatMessageBubble></ChatMessage>
               <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
                 {busy && i === turns.length - 1 && <Text type="supporting" color="secondary">{x.t.status}…</Text>}
-                <Answer t={x.t} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true})} onPick={pick} />
+                <Answer t={x.t} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true}).catch(() => {})} onPick={pick} />
               </ChatMessage>
             </div>
           ))}
@@ -317,6 +318,12 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
+      {talk && <div className="earth-talk" role="dialog" aria-label="Voice talk with the Flisk Oracle">
+        <div className="earth-orb" />
+        <Text type="emphasized">Talk with the Flisk Oracle</Text>
+        <Text type="supporting" color="secondary">Live talking arrives with the next step. Type your task for now.</Text>
+        <Button label="Close" variant="secondary" onClick={() => setTalk(false)} />
+      </div>}
       <ComputerDialog open={pcOpen} onClose={() => setPcOpen(false)} connected={connected} onConnected={(id) => setConnected((c) => [...new Set([...c, id])])} picked={picked} setPicked={setPicked} />
     </ExplainContext.Provider>
   );
