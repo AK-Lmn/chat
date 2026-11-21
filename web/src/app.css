@@ -31,3 +31,8 @@ html[data-scheme=earth] .earth-content{text-shadow:0 1px 3px #000,0 0 12px #000}
 
 html[data-scheme=earth] .chips button{background:rgba(0,0,0,.72)!important;color:#fff!important}
 html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{background:#121214!important;max-height:min(70vh,420px);overflow:auto}
+
+.earth-talk .earth-orb{border:0;padding:0;cursor:pointer}
+.earth-talk.listening .earth-orb{box-shadow:0 0 60px rgba(120,180,255,.5)}
+.earth-talk.speaking .earth-orb{animation:orb .7s ease-in-out infinite alternate}
+.earth-talk.idle .earth-orb{filter:saturate(.55) brightness(.75)}

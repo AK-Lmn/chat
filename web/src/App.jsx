@@ -1,6 +1,7 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
 import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
+import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
 import {BOOT, runTask, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, vaultReady} from './api.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText} from './events.js';
@@ -324,12 +325,14 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
-      {talk && <div className="earth-talk" role="dialog" aria-label="Voice talk with the Flisk Oracle">
-        <div className="earth-orb" />
-        <Text type="emphasized">Talk with the Flisk Oracle</Text>
-        <Text type="supporting" color="secondary">Live talking arrives with the next step. Type your task for now.</Text>
-        <Button label="Close" variant="secondary" onClick={() => setTalk(false)} />
-      </div>}
+      <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
+        onBuild={(t) => { run(t).catch(() => {}); }}
+        onKeep={(ts) => {
+          const pairs = [];
+          for (let k = 0; k + 1 < ts.length; k += 2) pairs.push({task: ts[k].content, files: [], t: {...newTurn(ts[k].content), answer: ts[k + 1].content, status: 'Done'}});
+          setTurns((all) => [...all, ...pairs]);
+          ts.forEach((m) => hist.current.push(m)); persist(chatId); void roll();
+        }} />
       <ComputerDialog open={pcOpen} onClose={() => setPcOpen(false)} connected={connected} onConnected={(id) => setConnected((c) => [...new Set([...c, id])])} picked={picked} setPicked={setPicked} />
     </ExplainContext.Provider>
   );
