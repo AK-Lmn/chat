@@ -112,3 +112,15 @@ test('phone model picker is one column: title and Done, provider pills in one ro
   expect(page).toContain('-webkit-line-clamp:1');
   expect(page).toContain('id="popx"');
 });
+
+test('phones get a menu button in the top bar, so New chat and the chat list can be opened', async () => {
+  const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+  expect(app).toContain('mobileNav={{hasToggle: false, isOpen: navOpen, onOpenChange: setNavOpen, content: drawer}}');
+  expect(app).toMatch(/topNav=\{[\s\S]*?<MobileNavToggle \/>/);
+});
+
+test('starting or opening a chat closes the phone drawer', async () => {
+  const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+  expect(app).toMatch(/const newChat = \(\) => \{ setNavOpen\(false\);/);
+  expect(app).toMatch(/const openChat = \(c\) => \{ newChat\(\);/); // opening a chat starts from newChat, so it closes too
+});

@@ -12,6 +12,8 @@ html[data-scheme=earth] body::before{content:"";position:fixed;z-index:0;pointer
 html[data-scheme=earth] #root{position:relative;z-index:1}
 html[data-scheme=earth] .astryx-app-shell,html[data-scheme=earth] div:has(.earth-content){background:transparent!important}
 html[data-scheme=earth] .astryx-app-shell-header{background:rgba(0,0,0,.55)!important}
+/* The phone chat drawer is solid in Earth too, so the page does not show through its list. */
+html[data-scheme=earth] .astryx-app-shell .astryx-mobile-nav-drawer[class]{background:#0b0b0c!important}
 .earth-talk{position:fixed;inset:0;z-index:50;background:#000;color:#EDEDEE;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
 .earth-orb{width:min(70vw,320px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 30% 28%,rgba(255,255,255,.18),rgba(255,255,255,0) 40%),radial-gradient(circle at 32% 30%,rgba(0,0,0,0) 40%,rgba(0,0,0,.92) 78%),url(https://unpkg.com/three-globe@2.45.6/example/img/earth-blue-marble.jpg) 45% 50%/auto 100%,radial-gradient(circle at 35% 30%,#2a5f96,#0d2a4a 55%,#02060d);box-shadow:0 0 70px rgba(90,150,255,.28);animation:orb 3s ease-in-out infinite}
 @keyframes orb{50%{transform:scale(1.06)}}
