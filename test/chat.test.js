@@ -194,7 +194,7 @@ describe('safety', () => {
   test('the home page and the app page escape the login and their scripts parse', async () => {
     const e = env();
     const w = world();
-    const home = await (await handle(new Request(`${ORIGIN}/`), e, { fetchImpl: w.fetchImpl })).text();
+    const home = await (await handle(new Request(`${ORIGIN}/classic`), e, { fetchImpl: w.fetchImpl })).text();
     expect(home).toContain('Sign in with GitHub');
     expect(home).toContain('id="ask"');
     // Signing in is optional: a visitor gets a private anonymous session, so the page is usable.
@@ -217,7 +217,7 @@ describe('safety', () => {
     expect(home).toContain("pick=[kind]");
     expect(home).toContain("pop.addEventListener('keydown'");
     for (const m of home.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(m[1])).not.toThrow();
-    const app = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: await authed(e, 'a-b') } }), e, { fetchImpl: w.fetchImpl })).text();
+    const app = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: await authed(e, 'a-b') } }), e, { fetchImpl: w.fetchImpl })).text();
     expect(app).toContain('@a-b');
     for (const m of app.matchAll(/<script>([\s\S]*?)<\/script[^>]*>/gi)) expect(() => new Function(m[1])).not.toThrow();
   });
@@ -322,7 +322,7 @@ describe('the two pickers', () => {
   test('the page offers both pickers, lists connected computers as tickable and the rest as connect links', async () => {
     const e = env();
     const w = world();
-    const app = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: await authed(e) } }), e, { fetchImpl: w.fetchImpl })).text();
+    const app = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: await authed(e) } }), e, { fetchImpl: w.fetchImpl })).text();
     expect(app).toContain('id="ai"');
     expect(app).toContain('Cheapest first, automatic');
     expect(app).toContain('name="sb" value="daytona"');
@@ -793,7 +793,7 @@ test('localhost links in an answer get a note that the computer has stopped', as
 describe('search visibility', () => {
   test('the home page can be indexed, published sites and the API cannot', async () => {
     const e = env();
-    const home = await (await handle(new Request(`${ORIGIN}/`), e, {})).text();
+    const home = await (await handle(new Request(`${ORIGIN}/classic`), e, {})).text();
     expect(home).toContain('content="index,follow"');
     expect(home).not.toContain('content="noindex"');
     const robots = await (await handle(new Request(`${ORIGIN}/robots.txt`), e, {})).text();
@@ -808,7 +808,7 @@ describe('search visibility', () => {
 
 // Every Flisk site shows the shared Flisk bar at the top; the page loads it and the CSP lets its script and icons through.
 test('pages load the shared Flisk bar and the CSP allows it', async () => {
-  const res = await handle(new Request(`${ORIGIN}/`), env());
+  const res = await handle(new Request(`${ORIGIN}/classic`), env());
   const html = await res.text();
   expect(html).toContain('<script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>');
   const csp = res.headers.get('content-security-policy');
@@ -818,7 +818,7 @@ test('pages load the shared Flisk bar and the CSP allows it', async () => {
 
 // Flisk Analytics: the script sits in <head>, and the CSP lets it load and lets its beacon reach the analytics app.
 test('pages load Flisk Analytics and the CSP allows its script and beacon', async () => {
-  const res = await handle(new Request(`${ORIGIN}/`), env());
+  const res = await handle(new Request(`${ORIGIN}/classic`), env());
   const html = await res.text();
   const head = html.slice(html.indexOf('<head>'), html.indexOf('</head>'));
   expect(head).toContain('<script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>');
@@ -1020,7 +1020,7 @@ describe('a build ends with a public link', () => {
 // The composer shows only + and Send; the rest opens from +.
 describe('composer plus', () => {
   test('a + button opens a small menu with the model, computers, voice, attach and the start chips', async () => {
-    const html = await (await handle(new Request(`${ORIGIN}/`), env())).text();
+    const html = await (await handle(new Request(`${ORIGIN}/classic`), env())).text();
     expect(html).toContain('id="plus"');
     expect(html).toContain('html:not(.plus) .plusmenu');
     expect(html).toContain('id="plusmenu"');
@@ -1036,19 +1036,19 @@ describe('looks', () => {
       const res = await handle(new Request(`${ORIGIN}${url}`, cookie ? { headers: { cookie } } : {}), env());
       return { look: look(await res.text()), set: res.headers.get('set-cookie') || '' };
     };
-    expect((await get('/?flisk_theme=ivory')).look).toBe('ivory');
-    expect((await get('/?flisk_theme=cool-glow')).look).toBe('glow');
-    expect((await get('/?flisk_theme=graphite')).look).toBe('classic');
-    expect((await get('/?flisk_theme=paper-tool')).look).toBe('focus');
-    expect((await get('/?flisk_theme=ivory', 'chat_theme=glow')).look).toBe('ivory');
-    const shared = await get('/', 'flisk_theme=graphite');
+    expect((await get('/classic?flisk_theme=ivory')).look).toBe('ivory');
+    expect((await get('/classic?flisk_theme=cool-glow')).look).toBe('glow');
+    expect((await get('/classic?flisk_theme=graphite')).look).toBe('classic');
+    expect((await get('/classic?flisk_theme=paper-tool')).look).toBe('focus');
+    expect((await get('/classic?flisk_theme=ivory', 'chat_theme=glow')).look).toBe('ivory');
+    const shared = await get('/classic', 'flisk_theme=graphite');
     expect(shared.look).toBe('classic');
     expect(shared.set).toContain('chat_theme=classic');
-    expect((await get('/', 'chat_theme=focus; flisk_theme=graphite')).look).toBe('focus');
-    expect((await get('/?flisk_theme=%3Cscript%3E')).set).toContain('chat_theme=');
+    expect((await get('/classic', 'chat_theme=focus; flisk_theme=graphite')).look).toBe('focus');
+    expect((await get('/classic?flisk_theme=%3Cscript%3E')).set).toContain('chat_theme=');
   });
   test('each new look also styles the chat screen: your messages, answers and steps', async () => {
-    const html = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=ivory' } }), env())).text();
+    const html = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=ivory' } }), env())).text();
     for (const t of ['ivory', 'glow', 'focus', 'voice']) {
       expect(html).toContain(`html[data-theme=${t}] .u{`);
       expect(html).toMatch(new RegExp(`html\\[data-theme=${t}\\] (#talk>\\.a|\\.a|\\.steps)`));
@@ -1057,7 +1057,7 @@ describe('looks', () => {
   });
   test('a new visitor gets the Earth look and keeps it in a cookie', async () => {
     for (let i = 0; i < 3; i++) {
-      const res = await handle(new Request(`${ORIGIN}/`), env());
+      const res = await handle(new Request(`${ORIGIN}/classic`), env());
       const html = await res.text();
       expect(look(html)).toBe('earth');
       expect(html).toContain('<canvas id="earth" class="earthc" aria-hidden="true"></canvas>');
@@ -1066,7 +1066,7 @@ describe('looks', () => {
     expect(appPageUi({ theme: 'nope' })).toContain('data-theme="earth"');
   });
   test('a saved look is used and not set again', async () => {
-    const res = await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=focus' } }), env());
+    const res = await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=focus' } }), env());
     const html = await res.text();
     expect(look(html)).toBe('focus');
     expect(html).toContain('<html lang="en" data-theme="focus" class="nt">');
@@ -1075,13 +1075,13 @@ describe('looks', () => {
     for (const label of ['Classic', 'Ivory', 'Soft glow', 'Focus', 'Voice first', 'Earth']) expect(html).toContain(`>${label}</option>`);
   });
   test('the classic look has no extra class, and an unknown look gets a new one', async () => {
-    const classic = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=classic' } }), env())).text();
+    const classic = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=classic' } }), env())).text();
     expect(classic).toContain('<html lang="en" data-theme="classic">');
-    const res = await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=evil"x' } }), env());
+    const res = await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=evil"x' } }), env());
     expect(res.headers.get('set-cookie')).toContain('chat_theme=earth;');
   });
   test('the Earth look draws the globe and the users list, and the CSP lets only three.js and its textures in', async () => {
-    const res = await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=earth' } }), env());
+    const res = await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=earth' } }), env());
     const html = await res.text();
     expect(html).toContain('<html lang="en" data-theme="earth" class="nt">');
     expect(res.headers.get('set-cookie') || '').not.toContain('chat_theme');
@@ -1140,12 +1140,12 @@ describe('looks', () => {
     expect(shortCount(802)).toBe('802');
   });
   test('the users list is hidden in every other look', async () => {
-    const html = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=ivory' } }), env())).text();
+    const html = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=ivory' } }), env())).text();
     expect(html).toContain('.earthc{display:none}.ex{display:none}');
     expect(html).toContain('html[data-theme=earth] .welcome .ex{display:block');
   });
   test('every look keeps every feature on the page', async () => {
-    const html = await (await handle(new Request(`${ORIGIN}/`, { headers: { cookie: 'chat_theme=voice' } }), env())).text();
+    const html = await (await handle(new Request(`${ORIGIN}/classic`, { headers: { cookie: 'chat_theme=voice' } }), env())).text();
     for (const id of ['newchat', 'q', 'hist', 'attach', 'mpbtn', 'mic', 'voice', 'orbbtn', 'go', 'vorb', 'slot', 'look']) expect(html).toContain(`id="${id}"`);
     expect(html).toContain('Try saying');
     expect(html).toContain('data-act="voice"');

@@ -30,3 +30,11 @@ test('Earth dims behind the text and sinks once a chat starts', async () => {
   expect(css).toContain('html[data-scheme=earth].chatting');
   expect(css).toContain('text-shadow');
 });
+
+test('the home page is the new design, and the previous one stays at /classic', async () => {
+  const { default: worker } = await import('../src/index.js');
+  const env = { SESSION_SECRET: 'x'.repeat(32) };
+  const get = async (p) => (await worker.fetch(new Request('https://chat.test' + p), env)).text();
+  for (const p of ['/', '/next']) expect(await get(p)).toContain('<div id="root">');
+  expect(await get('/classic')).not.toContain('<div id="root">');
+});

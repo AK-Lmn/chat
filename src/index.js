@@ -501,8 +501,9 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const refund = async (force = false) => chosen.free && (force || !m.answered()) && refundQuota(env, 'chat', { anon, id: await who(login) });
     return { m, refund };
   };
-  if (request.method === 'GET' && (path === '/' || path === '/next')) {
-    const isNext = path === '/next';
+  if (request.method === 'GET' && (path === '/' || path === '/next' || path === '/classic')) {
+    // The new Astryx page is the home page; the previous page stays at /classic.
+    const isNext = path !== '/classic';
     const [models, names] = await Promise.all([loadCatalog(env), loadFleetNames(env, fetchImpl)]);
     const { theme, cookie } = pickTheme(request);
     // The session cookie goes first and the look cookie last.
