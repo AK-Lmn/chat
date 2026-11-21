@@ -1,0 +1,7 @@
+html,body{height:100%;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+.vv-root{position:fixed;left:0;right:0;top:var(--vv-top,0);height:var(--vv-h,100dvh);display:flex;flex-direction:column}
+.vv-root>*{flex:1;min-height:0}
+.vv-root textarea,.vv-root input,.vv-root [contenteditable]{font-size:16px}
+:root[data-keyboard="closed"] .vv-root{padding-bottom:env(safe-area-inset-bottom)}
+:root[data-keyboard="open"] .vv-root{padding-bottom:0}
+.caption{position:fixed;z-index:50;left:8px;right:8px;top:calc(var(--vv-top,0px) + 8px);padding:12px 14px;border-radius:12px;background:#1d3a8a;color:#fff;font-size:15px;line-height:1.35;box-shadow:0 6px 24px #0006}
