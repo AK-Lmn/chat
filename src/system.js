@@ -358,13 +358,17 @@ export const FLISK_INSTALL =
 export const scaffoldCommand = (spec) =>
   `${PATHS}; ${FLISK_INSTALL}; ${BUN_INSTALL}; ${PATHS}; ` +
   `command -v flisk >/dev/null || { echo 'Flisk did not install:'; tail -8 /tmp/install.log 2>/dev/null; exit 2; }; ` +
-  `cd ~ && { [ ! -e app ] || { echo '~/app already exists: the bigger app needs a fresh ~/app (run "rm -rf ~/app" first to replace it)'; exit 2; }; }; ` +
+  // An app left by an earlier try is moved aside, not deleted, so trying again works and nothing is lost.
+  `cd ~ && { [ ! -e app ] || mv app app.old.$(date +%s); }; ` +
   `flisk create app --frontend vanilla --language node --yes > /tmp/create.log 2>&1 || { tail -20 /tmp/create.log; exit 2; }; cd ~/app && ` +
   spec.services.map((x) => `{ flisk resource ${x.name} --type backend --language node --local --stack app --path ${x.name} --port ${x.port} --yes >> /tmp/create.log 2>&1 || { echo 'flisk resource ${x.name} failed:'; tail -10 /tmp/create.log; exit 2; }; }`).join(' && ') +
   ` && echo "ports api=${portOf('api/service.json')} web=${portOf('web/service.json')}"`;
 
 // npm install (only the website has packages) and `flisk up` keep running after this command answers.
-export const START_COMMAND = `${PATHS}; cd ~/app && (nohup sh -c 'cd web && npm install --no-audit --no-fund > /tmp/npm.log 2>&1; cd .. && exec flisk up' > /tmp/up.log 2>&1 &) && echo started`;
+// A crashed npm install leaves no vite and the website dies, so a failed install is retried after a cache clean, with --legacy-peer-deps.
+export const NPM_INSTALL =
+  'npm install --no-audit --no-fund > /tmp/npm.log 2>&1 || { npm cache clean --force >> /tmp/npm.log 2>&1; npm install --no-audit --no-fund --legacy-peer-deps >> /tmp/npm.log 2>&1; }';
+export const START_COMMAND = `${PATHS}; cd ~/app && (nohup sh -c 'cd web && ${NPM_INSTALL}; cd .. && exec flisk up' > /tmp/up.log 2>&1 &) && echo started`;
 
 export const waitCommand = (spec, web) => {
   const ports = spec.services.map((x) => x.port).join(' ');
