@@ -256,6 +256,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           footer={<HStack gap={2} align="center"><Avatar name={BOOT.login || 'Guest'} size="sm" /><Text type="supporting">{BOOT.login ? '@' + BOOT.login : 'Not signed in'}</Text></HStack>}>
           <SideNavSection title="Your chats">
             {shown.map((c) => <SideNavItem key={c.id} label={c.title || 'Untitled'} icon={ChatBubbleLeftIcon} isSelected={c.id === chatId} onClick={() => openChat(c)} />)}
+            {!!BOOT.login && !BOOT.anon && <SideNavItem label="Reviews of your pull requests" href="/reviews" />}
             {!shown.length && <Text type="supporting" color="secondary" style={{padding: 8}}>Nothing here yet. Your chats stay in this browser.</Text>}
           </SideNavSection>
         </SideNav>
