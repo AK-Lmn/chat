@@ -534,7 +534,7 @@ test('a square is chosen only by a click or tap; hover just outlines it, and onl
   expect(page).toContain(".zchip:not(.ok)");
 });
 
-import { cleanFiles, runTask as runTask2 } from '../src/loop.js';
+import { cleanFiles, putFile, runTask as runTask2 } from '../src/loop.js';
 import { explainModelError, modelFrom as modelFrom2 } from '../src/model.js';
 
 describe('model errors a person can act on', () => {
@@ -567,6 +567,34 @@ describe('attached files', () => {
   test('cleanFiles flattens names, drops junk and caps the count', () => {
     const f = cleanFiles([{ name: '../../etc/passwd', content: 'x' }, { name: 'a b.csv', content: '1,2' }, { name: 'bad.bin', content: '***', b64: true }, { name: '', content: 'y' }, { name: 'c', content: 'c' }, { name: 'd', content: 'd' }]);
     expect(f.map((x) => x.path)).toEqual(['passwd', 'a_b.csv']);
+  });
+  test('a file up to 5 MB is kept, the total of all files is 5 MB, and bigger ones are dropped', () => {
+    const mb = (n) => 'A'.repeat(Math.ceil((n * 1024 * 1024 * 4) / 3 / 4) * 4);
+    expect(cleanFiles([{ name: 'a.bin', content: mb(4.9), b64: true }]).map((x) => x.path)).toEqual(['a.bin']);
+    expect(cleanFiles([{ name: 'a.bin', content: mb(5.5), b64: true }])).toEqual([]);
+    expect(cleanFiles([{ name: 'a.bin', content: mb(3), b64: true }, { name: 'b.bin', content: mb(3), b64: true }]).map((x) => x.path)).toEqual(['a.bin']);
+    expect(cleanFiles([{ name: 'big.txt', content: 'é'.repeat(3_000_000) }])).toEqual([]);
+  });
+  test('a big file goes to the computer in parts under fleet\'s 256 KB and is joined there', async () => {
+    const writes = []; const runs = [];
+    const computer = { write: async (id, path, content) => (writes.push([path, content]), { status: 200, data: {} }), run: async (id, cmd) => (runs.push(cmd), { data: { exitCode: 0, stdout: '', stderr: '' } }) };
+    const content = 'QUJD'.repeat(150_000); // 600k base64 characters
+    const r = await putFile(computer, 'p', { path: 'big.bin', content, b64: true });
+    expect(r.error).toBeUndefined();
+    expect(writes.map((w) => w[0])).toEqual(['big.bin.part0', 'big.bin.part1', 'big.bin.part2']);
+    expect(writes.every((w) => w[1].length <= 256 * 1024 && w[1].length % 4 === 0)).toBe(true);
+    expect(writes.map((w) => w[1]).join('')).toBe(content);
+    expect(runs).toEqual(["cat 'big.bin.part0' 'big.bin.part1' 'big.bin.part2' | base64 -d > 'big.bin' && rm 'big.bin.part0' 'big.bin.part1' 'big.bin.part2'"]);
+  });
+  test('a big text file is cut by characters so no multi-byte character is split, and a failed join is reported', async () => {
+    const writes = [];
+    const computer = { write: async (id, path, content) => (writes.push(content), { status: 200 }), run: async () => ({ data: { exitCode: 1, stderr: 'disk full' } }) };
+    const content = '😀'.repeat(100_000); // 400 KB of 4-byte characters
+    const r = await putFile(computer, 'p', { path: 'big.txt', content, b64: false });
+    expect(writes.length).toBeGreaterThan(1);
+    expect(writes.every((w) => new TextEncoder().encode(w).length <= 256 * 1024 && !/[\ud800-\udbff]$/.test(w))).toBe(true);
+    expect(writes.join('')).toBe(content);
+    expect(r.error).toContain('disk full');
   });
   test('files are written to the computer before the first step and the model is told', async () => {
     const writes = [];
@@ -626,6 +654,7 @@ test('the model box keeps the full OpenRouter list, never sends an empty model, 
   expect(page).toContain('fixModel(byoModel.value.trim()).model||byoModel.value.trim()');
   expect(page).not.toContain("Did you mean: '+f.near.join(', ')+'?';byWarn");
   expect(page).not.toContain("errMsg(f.name+' is over 150 KB.')");
+  expect(page).toContain("f.size>5*1024*1024");
 });
 
 test('a reopened chat rebuilds the website and video cards from the links in its answer', async () => {

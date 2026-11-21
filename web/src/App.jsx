@@ -37,7 +37,7 @@ const lang = (task) => (/[іїєґ]/i.test(task) ? 'uk' : /[ыэъё]/i.test(tas
 
 function readFile(f) {
   return new Promise((res) => {
-    if (f.size > 150 * 1024) {res({error: f.name + ' is bigger than 150 KB'}); return;}
+    if (f.size > 5 * 1024 * 1024) {res({error: f.name + ' is bigger than 5 MB'}); return;}
     const r = new FileReader();
     const text = TEXTY.test(f.name) || (f.type || '').startsWith('text/');
     r.onload = () => res({name: f.name, type: f.type, content: text ? String(r.result) : String(r.result).split(',')[1] || '', b64: !text});
@@ -221,7 +221,11 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   const attach = async (list) => {
     const room = 3 - files.length; const got = [];
-    for (const f of Array.from(list).slice(0, room)) { const r = await readFile(f); if (r.error) setNotice(r.error); else got.push(r); }
+    let used = files.reduce((n, x) => n + (x.size || 0), 0);
+    for (const f of Array.from(list).slice(0, room)) {
+      if (used + f.size > 5 * 1024 * 1024) { setNotice('Attached files can be 5 MB in all'); continue; }
+      const r = await readFile(f); if (r.error) setNotice(r.error); else { got.push({...r, size: f.size}); used += f.size; }
+    }
     if (got.length) setFiles((x) => [...x, ...got]);
   };
   const starters = (BOOT.cats || []).slice(0, 6);
@@ -275,7 +279,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                 <Tip text="Add: attach files, pick computers, make a website or video, weather, chart."><span><DropdownMenu
                   button={{label: 'Add', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
-                    {label: 'Attach files', description: 'Up to 3 files, 150 KB each', icon: PaperClipIcon, onClick: () => fileIn.current && fileIn.current.click()},
+                    {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, onClick: () => setPcOpen(true)},
                     {label: 'Make a website', description: 'One page with a public link, kept 7 days', icon: GlobeAltIcon, onClick: () => setMode('build')},
                     {label: 'Make a video', description: 'Narrated video from a short script', icon: FilmIcon, onClick: () => setMode('video')},
