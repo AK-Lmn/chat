@@ -586,7 +586,7 @@ ${saved ? '<form method="post" action="/reviews/delete"><button class="btn" type
   );
 
 // Starter ideas per kind, for people who never write code.
-const CATS = [
+export const CATS = [
   { id: 'website', label: 'Website', ideas: ['Make me a one-page website for a coffee shop called Moon Roast.', 'A wedding page with the date, the place and an RSVP form.', 'A menu page for my bakery, with prices and opening hours.'] },
   { id: 'app', label: 'Small app', ideas: ['Build a tip calculator web page with a dark theme.', 'A countdown timer page for my product launch on December 1.', 'A simple to-do list page that remembers my items.'] },
   { id: 'system', label: 'System', ideas: ['Build a back office with orders, stock, billing and customers as separate services, and check they all answer.', 'A booking platform: bookings, staff, payments and reminders as four services.', 'Start a support suite with tickets, users, notifications and reports, and show me which parts are healthy.'] },
