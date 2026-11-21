@@ -190,6 +190,36 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     persist(chatId); roll();
   }, [busy, mode, turns, picked, sel, chatId]);
 
+  const [dictating, setDictating] = useState(false);
+  const dict = useRef(null);
+  // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
+  const dictate = async () => {
+    if (dict.current) { dict.current.stop(); return; }
+    if (!BOOT.login) { setNotice('Sign in with GitHub to use your voice.'); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { setNotice('This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); } catch (e) { setNotice('The microphone is blocked. Allow it for this site and try again.'); return; }
+    const chunks = [];
+    const r = new MediaRecorder(stream);
+    const timer = setTimeout(() => { if (r.state !== 'inactive') r.stop(); }, 120000);
+    r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    r.onstop = async () => {
+      clearTimeout(timer); stream.getTracks().forEach((t) => t.stop()); dict.current = null; setDictating(false);
+      const blob = new Blob(chunks, {type: r.mimeType || 'audio/webm'});
+      if (blob.size < 800) return;
+      try {
+        const audio = await new Promise((ok, no) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(',')[1] || ''); f.onerror = () => no(f.error); f.readAsDataURL(blob); });
+        const res = await fetch('/api/transcribe', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({audio, type: blob.type, part: true})});
+        const b = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
+        const text = String(b.text || '').trim();
+        if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+      } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
+    };
+    dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
+    r.start(); setDictating(true);
+  };
+
   const submit = async (text) => {
     const task = (text || '').trim();
     if (!task && !files.length) return;
@@ -294,7 +324,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                     {label: 'Run on a computer', description: 'Commands on one of your computers', icon: ServerStackIcon, onClick: () => setMode('computer')},
                     {label: 'Choose AI model', description: 'Flisk Wolf is free; or use your own Claude, OpenAI or OpenRouter key', icon: KeyIcon, onClick: () => setMdlOpen(true)},
                   ]} /></span></Tip>
-                <Tip text="Hold your voice in: it turns your words into text, phrase by phrase."><Button label="Speak your task" variant="ghost" size="sm" isIconOnly icon={<Icon icon={MicrophoneIcon} size="sm" />} onClick={() => setNotice('Voice typing arrives with the next step of this redesign.')} /></Tip>
+                <Tip text="Hold your voice in: it turns your words into text, phrase by phrase."><Button label={dictating ? 'Stop and write what I said' : 'Speak your task'} variant={dictating ? 'primary' : 'ghost'} size="sm" isIconOnly icon={<Icon icon={MicrophoneIcon} size="sm" />} onClick={dictate} /></Tip>
                 <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setTalk(true)} /></Tip>
               </HStack>
             }
