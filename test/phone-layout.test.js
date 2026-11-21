@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'bun:test';
 import { KEYBOARD_FIT, appPage } from '../src/page.js';
 
@@ -123,4 +124,9 @@ test('starting or opening a chat closes the phone drawer', async () => {
   const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
   expect(app).toMatch(/const newChat = \(\) => \{ setNavOpen\(false\);/);
   expect(app).toMatch(/const openChat = \(c\) => \{ newChat\(\);/); // opening a chat starts from newChat, so it closes too
+});
+
+test('the message box has no background of its own, so phones show no dark strip behind the text', () => {
+  const css = readFileSync(new URL('../web/src/app.css', import.meta.url), 'utf8');
+  expect(css).toMatch(/\.astryx-chat-composer-input \[contenteditable\][^{]*\{background:transparent!important/);
 });
