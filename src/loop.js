@@ -1,6 +1,6 @@
 import { asksAnalysis } from './analysis-style.js';
 import { sayStreamer } from './say-stream.js';
-import { BAD_REPLIES, modelShown } from './model.js';
+import { BAD_REPLIES, modelShown, SUBREQUESTS_RE, SUBREQUESTS_USED } from './model.js';
 import { MAX_STEPS, asksToBuild, githubSourceIn, isBigApp, taskPrompt } from './prompt.js';
 import { parseWidget } from './widgets.js';
 import { cleanVideo, makeVideo } from './video.js';
@@ -395,6 +395,13 @@ export async function runTask({ grade = null, stream = false, decision = null, c
   let searches = prefetched ? 1 : 0;
   let askedNoComputer = false; // search mode: a computer action is sent back once
   const MAX_SEARCHES = 2; // each search asks several sources, and Workers Free stops at 50 subrequests per run
+  // Pages read with the web widget, for the same 50-call budget: a model that guesses addresses (a GitHub repo that 404s,
+  // then another) once read until the run ran out of calls and ended on "the free AI is busy".
+  const MAX_WEB_READS = 6;
+  let webReads = 0;
+  // Each reroute row once per run: the same "Flisk Wolf is resting" on every step filled the page with copies.
+  const rerouteSeen = new Set();
+  const reroute = (text) => { if (rerouteSeen.has(text)) return; rerouteSeen.add(text); emit({ type: 'reroute', text }); };
   // Draws the picture and keeps it at its own link (saveImage), so the chat history holds a short link, not the picture.
   const drawImage = async (spec) => {
     emit({ type: 'image_start', prompt: spec.prompt });
@@ -424,7 +431,7 @@ export async function runTask({ grade = null, stream = false, decision = null, c
       if (last) messages.push({ role: 'user', content: 'That was the last action. Reply with {"say": ...} now.' });
       // Words go out as the model writes them (Workers AI streams); the finished answer then replaces them on the page.
       const say = stream ? sayStreamer(emit) : null;
-      const reply = await model(messages, { ...(lang ? { lang } : {}), ...(say ? { onDelta: say } : {}), onReroute: (text) => emit({ type: 'reroute', text }) });
+      const reply = await model(messages, { ...(lang ? { lang } : {}), ...(say ? { onDelta: say } : {}), onReroute: reroute });
       // A backup model answered: the page names it once, so the person knows who wrote the answer.
       const byName = reply.error ? '' : modelShown(reply.by);
       if (byName && byName !== shownModel) { shownModel = byName; emit({ type: 'model', name: byName }); }
@@ -581,7 +588,16 @@ export async function runTask({ grade = null, stream = false, decision = null, c
         }
         widget = w;
         if (!w.widget.needsComputer) {
+          if (w.widget.id === 'web' && webReads >= MAX_WEB_READS) {
+            messages.push({ role: 'user', content: `That is ${MAX_WEB_READS} pages read, the most one request can read. Answer now with "say" from what you have read, and say what you could not open.` });
+            continue;
+          }
+          if (w.widget.id === 'web') webReads++;
           const r = await w.widget.run(w.input, { fetch: fetchImpl, citable });
+          if (r.error && SUBREQUESTS_RE.test(r.error)) {
+            emit({ type: 'error', error: SUBREQUESTS_USED, kind: 'subrequests' });
+            return await finish(null, SUBREQUESTS_USED);
+          }
           if (r.error) {
             emit({ type: 'output', error: r.error });
             messages.push({ role: 'user', content: `Error: ${r.error}\n\nNext action as JSON only.` });
