@@ -7,7 +7,8 @@ import {BOOT, runTask, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loa
 import {newTurn, applyEv, nextSteps, chatTitle, shownText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell} from '@astryxdesign/core/AppShell';
-import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
+import {MobileNav, MobileNavToggle} from '@astryxdesign/core/MobileNav';
+import {SideNav, SideNavItem, SideNavSection, SideNavRenderContext} from '@astryxdesign/core/SideNav';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
@@ -206,7 +207,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   };
   pick.free = sel.free;
 
-  const newChat = () => { ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); };
+  const [navOpen, setNavOpen] = useState(false); // the phone chat drawer
+  const newChat = () => { setNavOpen(false); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); };
   const openChat = (c) => { newChat(); hist.current = c.msgs.slice(); memo.current = {text: c.memo || '', n: c.memoN || 0, busy: false}; setChatId(c.id);
     const out = []; for (let i = 0; i < c.msgs.length; i++) if (c.msgs[i].role === 'user') out.push({task: c.msgs[i].content, files: [], t: {...newTurn(c.msgs[i].content), answer: (c.msgs[i + 1] && c.msgs[i + 1].role === 'assistant') ? c.msgs[i + 1].content : '', status: 'Done'}});
     setTurns(out); };
@@ -234,26 +236,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const pcLabel = picked.length ? picked.map((p) => (BOOT.providerNames || {})[p] || p).join(' + ') : 'Fleet auto';
   const shown = chats.filter((c) => !filter || c.title.toLowerCase().includes(filter.toLowerCase()));
 
-  return (
-    <ExplainContext.Provider value={ctx}>
-    <div className="vv-root">
-    {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
-    {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
-    <input ref={fileIn} type="file" multiple hidden onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
-    <AppShell height="fill"
-      topNav={
-      <HStack gap={2} align="center" justify="space-between" wrap="wrap" style={{padding: 'var(--spacing-2) var(--spacing-3)'}}>
-        <Tip text="Ask: just answers. Build: makes websites and apps on a computer. Search: looks things up on the web."><span style={{display: 'inline-flex', flexShrink: 0}}><SegmentedControl label="Mode" value={['ask', 'build', 'search'].includes(mode) ? mode : ''} onChange={setMode}><SegmentedControlItem value="ask" label="Ask" /><SegmentedControlItem value="build" label="Build" /><SegmentedControlItem value="search" label="Search" /></SegmentedControl></span></Tip>
-        <HStack gap={1}>
-          {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={BOOT.anon ? 'Guest' : '@' + BOOT.login} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
-          {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
-          <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={() => { setExplain((e) => !e); setCaption(''); }} /></Tip>
-          <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'earth' ? 'light' : scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'earth')} /></Tip>
-          <Tip text="Choose the AI and add your own keys."><Button label="AI model and keys" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
-        </HStack>
-      </HStack>
-      }
-      sideNav={
+  const side = (
         <SideNav collapsible
           header={<HStack gap={2} align="center"><Brand name="wolf" size={28} /><Text type="emphasized">Flisk Chat</Text></HStack>}
           topContent={<VStack gap={2}><Tip text="Start a fresh chat. Your old chats stay in the list."><Button label="New chat" variant="secondary" icon={<Icon icon={PlusIcon} size="sm" />} isFullWidth onClick={newChat} /></Tip>
@@ -265,7 +248,31 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             {!shown.length && <Text type="supporting" color="secondary" style={{padding: 8}}>Nothing here yet. Your chats stay in this browser.</Text>}
           </SideNavSection>
         </SideNav>
-      }>
+  );
+  // On phones the chats open in a drawer from the menu button in the top bar.
+  const drawer = <MobileNav header="Your chats"><SideNavRenderContext value="drawer-content">{side}</SideNavRenderContext></MobileNav>;
+
+  return (
+    <ExplainContext.Provider value={ctx}>
+    <div className="vv-root">
+    {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
+    {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
+    <input ref={fileIn} type="file" multiple hidden onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
+    {/* A custom top bar gets no automatic menu button, so it is placed here: without it phones cannot reach New chat or the chat list. */}
+    <AppShell height="fill" mobileNav={{hasToggle: false, isOpen: navOpen, onOpenChange: setNavOpen, content: drawer}}
+      topNav={
+      <HStack gap={2} align="center" justify="space-between" wrap="wrap" style={{padding: 'var(--spacing-2) var(--spacing-3)'}}>
+        <HStack gap={1} align="center"><MobileNavToggle /><Tip text="Ask: just answers. Build: makes websites and apps on a computer. Search: looks things up on the web."><span style={{display: 'inline-flex', flexShrink: 0}}><SegmentedControl label="Mode" value={['ask', 'build', 'search'].includes(mode) ? mode : ''} onChange={setMode}><SegmentedControlItem value="ask" label="Ask" /><SegmentedControlItem value="build" label="Build" /><SegmentedControlItem value="search" label="Search" /></SegmentedControl></span></Tip></HStack>
+        <HStack gap={1}>
+          {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={BOOT.anon ? 'Guest' : '@' + BOOT.login} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
+          {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
+          <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={() => { setExplain((e) => !e); setCaption(''); }} /></Tip>
+          <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'earth' ? 'light' : scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'earth')} /></Tip>
+          <Tip text="Choose the AI and add your own keys."><Button label="AI model and keys" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
+        </HStack>
+      </HStack>
+      }
+      sideNav={side}>
       <div className="earth-content" style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={
