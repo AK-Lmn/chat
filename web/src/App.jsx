@@ -331,7 +331,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           const pairs = [];
           for (let k = 0; k + 1 < ts.length; k += 2) pairs.push({task: ts[k].content, files: [], t: {...newTurn(ts[k].content), answer: ts[k + 1].content, status: 'Done'}});
           setTurns((all) => [...all, ...pairs]);
-          ts.forEach((m) => hist.current.push(m)); persist(chatId); roll();
+          ts.forEach((m) => hist.current.push(m)); persist(chatId); void roll();
         }} />
       <ComputerDialog open={pcOpen} onClose={() => setPcOpen(false)} connected={connected} onConnected={(id) => setConnected((c) => [...new Set([...c, id])])} picked={picked} setPicked={setPicked} />
     </ExplainContext.Provider>
