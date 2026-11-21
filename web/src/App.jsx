@@ -277,7 +277,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                     {label: 'Make a website', description: 'One page with a public link, kept 7 days', icon: GlobeAltIcon, onClick: () => setMode('build')},
                     {label: 'Make a video', description: 'Narrated video from a short script', icon: FilmIcon, onClick: () => setMode('video')},
                     {label: 'Run on a computer', description: 'Commands on one of your computers', icon: ServerStackIcon, onClick: () => setMode('computer')},
-                    {label: 'Use my own API key', description: 'Claude, OpenAI or OpenRouter; kept in this browser only', icon: KeyIcon, onClick: () => setMdlOpen(true)},
+                    {label: 'Choose AI model', description: 'Flisk Wolf is free; or use your own Claude, OpenAI or OpenRouter key', icon: KeyIcon, onClick: () => setMdlOpen(true)},
                   ]} /></span></Tip>
                 <Tip text="Hold your voice in: it turns your words into text, phrase by phrase."><Button label="Speak your task" variant="ghost" size="sm" isIconOnly icon={<Icon icon={MicrophoneIcon} size="sm" />} onClick={() => setNotice('Voice typing arrives with the next step of this redesign.')} /></Tip>
                 <Tip text="Talk out loud with the Flisk Oracle. It listens, answers, and listens again."><Button label="Voice talk" variant="ghost" size="sm" isIconOnly icon={<Icon icon={SpeakerWaveIcon} size="sm" />} onClick={() => setNotice('Voice talk arrives with the next step of this redesign.')} /></Tip>
@@ -285,7 +285,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             }
             footerActions={
               <HStack gap={1}>
-                <Tip brand={brandOf(sel.provider)} title="Which AI answers" text="Which AI answers. Flisk Wolf is free; your own key is sent per request and never stored." more="Tap to switch, paste your key, or pick a model. Claude and OpenAI use your own key, so you pay them directly."><span><Button label={sel.name} variant="ghost" size="sm" icon={<Brand name={brandOf(sel.provider)} />} onClick={() => setMdlOpen(true)} /></span></Tip>
+                {brandOf(sel.provider) !== 'wolf' && <Tip brand={brandOf(sel.provider)} title="Which AI answers" text="Which AI answers. Flisk Wolf is free; your own key is sent per request and never stored." more="Tap to switch, paste your key, or pick a model. Claude and OpenAI use your own key, so you pay them directly."><span><Button label={sel.name} variant="ghost" size="sm" icon={<Brand name={brandOf(sel.provider)} />} onClick={() => setMdlOpen(true)} /></span></Tip>}
                 {picked.length > 0 && <Tip brand="fleet" title="Where your app runs" text="Where your app runs. Fleet picks the cheapest of your connected computers." more="Tap to connect Daytona, Upstash, E2B or Isorun with a key."><span><Button label={pcLabel} variant="ghost" size="sm" icon={<Brand name={picked[0] || 'fleet'} />} onClick={() => setPcOpen(true)} /></span></Tip>}
               </HStack>
             }
