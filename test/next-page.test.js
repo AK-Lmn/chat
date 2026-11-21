@@ -52,3 +52,9 @@ test('voice talk is wired: the screen listens through /api/talk and speaks throu
   expect(src).toContain("'/voice?l='");
   expect(src).toContain('getUserMedia');
 });
+
+test('voice typing sends the recording to /api/transcribe', async () => {
+  const src = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+  expect(src).toContain("'/api/transcribe'");
+  expect(src).not.toContain('Voice typing arrives');
+});
