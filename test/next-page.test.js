@@ -16,7 +16,7 @@ test('the Astryx page carries the app inline and hands it the visitor facts', ()
 
 test('a hostile value cannot close the boot script', () => {
   const html = nextPage({ login: '</script><script>alert(1)</script>' });
-  expect(html.match(/<\/script>/g).length).toBe(2); // boot + app, nothing more
+  expect(html.match(/<\/script>/g).length).toBe(3); // boot + app + Earth, nothing more
 });
 
 test('the page policy allows inlined fonts and nothing else new', () => {
