@@ -22,7 +22,7 @@ const PROVIDER_CHIPS = [['', 'All'], ['flisk', 'Flisk Wolf'], ['anthropic', 'Cla
 // Re-render once the encrypted key vault has loaded (keys appear a moment after the page).
 export function useVault() {
   const [n, setN] = useState(0);
-  useEffect(() => { vaultReady.then(() => setN((x) => x + 1)); }, []);
+  useEffect(() => { vaultReady.then(() => setN((x) => x + 1), () => {}); }, []);
   return n;
 }
 

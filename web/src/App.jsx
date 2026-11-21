@@ -62,7 +62,7 @@ function Answer({t, onAgain, onPick}) {
           <Text weight="semibold" style={{wordBreak: 'break-all'}}>{u}</Text>
           <HStack gap={2}>
             <Tip text="Open the real thing in a new tab."><Button label="Open" variant="primary" href={u} target="_blank" icon={<Icon icon={ArrowTopRightOnSquareIcon} size="sm" />} /></Tip>
-            <Button label="Copy link" variant="secondary" onClick={() => navigator.clipboard && navigator.clipboard.writeText(u)} />
+            <Button label="Copy link" variant="secondary" onClick={() => navigator.clipboard && navigator.clipboard.writeText(u).catch(() => {})} />
           </HStack>
         </VStack></Card>
       ))}
@@ -92,9 +92,9 @@ function LimitCard({info, task, onPick}) {
       <Heading level={4}>Daily limit reached</Heading>
       <Text color="secondary">{info.error || 'You used all ' + (info.limit || '') + ' free tasks today.'} {info.resetsIn ? 'It resets in ' + info.resetsIn + '.' : ''} Use your own key for no limit, or wait.</Text>
       <HStack gap={2} wrap="wrap">
-        <Button label="Log in with OpenRouter, free" variant="primary" size="sm" onClick={() => orStartLogin(task)} />
+        <Button label="Log in with OpenRouter, free" variant="primary" size="sm" onClick={() => orStartLogin(task).catch(() => {})} />
         <Button label="Use my own key" variant="secondary" size="sm" onClick={() => onPick('setup-key')} />
-        <Button label="Copy my task" variant="ghost" size="sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(task)} />
+        <Button label="Copy my task" variant="ghost" size="sm" onClick={() => navigator.clipboard && navigator.clipboard.writeText(task).catch(() => {})} />
         <Button label="Ask on Discord" variant="ghost" size="sm" href="https://discord.gg/flisk" target="_blank" />
       </HStack>
     </VStack></Card>
@@ -191,16 +191,16 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     const fs = files; setValue(''); setFiles([]);
-    run(task, {files: fs});
+    run(task, {files: fs}).catch(() => {});
   };
 
   const pick = (what) => {
     if (what === 'setup-key' || what === 'choose-model' || what === 'change-provider' || what === 'change-model') setMdlOpen(true);
     else if (what === 'connect-computer') setPcOpen(true);
     else if (what === 'wolf') { setSel((BOOT.models || []).find((m) => m.free) || WOLF); }
-    else if (what === 'openrouter') orStartLogin(turns.length ? turns[turns.length - 1].task : '');
-    else if (what === 'discord') window.open('https://discord.gg/flisk', '_blank');
-    else if (what === 'retry' && turns.length) run(turns[turns.length - 1].task, {reuse: true});
+    else if (what === 'openrouter') orStartLogin(turns.length ? turns[turns.length - 1].task : '').catch(() => {});
+    else if (what === 'discord') window.open('https://discord.gg/flisk', '_blank', 'noopener,noreferrer');
+    else if (what === 'retry' && turns.length) run(turns[turns.length - 1].task, {reuse: true}).catch(() => {});
   };
   pick.free = sel.free;
 
@@ -211,7 +211,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   // Back from OpenRouter login: the key is saved, so run the task the visitor had typed.
   useEffect(() => {
-    orFinishLogin().then((r) => { if (!r) return; if (r.error) setNotice('OpenRouter login failed: ' + r.error); else { setNotice('OpenRouter connected. Your key is saved in this browser.'); if (r.task) setValue(r.task); } });
+    orFinishLogin().then((r) => { if (!r) return; if (r.error) setNotice('OpenRouter login failed: ' + r.error); else { setNotice('OpenRouter connected. Your key is saved in this browser.'); if (r.task) setValue(r.task); } }, () => {});
     let p = ''; try { p = sessionStorage.getItem('chat_pending') || ''; sessionStorage.removeItem('chat_pending'); } catch (e) { /* storage blocked */ }
     if (p && BOOT.login) setValue(p);
   }, []);
@@ -307,7 +307,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
               <ChatMessage sender="user"><ChatMessageBubble>{x.task}{x.files && x.files.length ? '\n📎 ' + x.files.join(', ') : ''}</ChatMessageBubble></ChatMessage>
               <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
                 {busy && i === turns.length - 1 && <Text type="supporting" color="secondary">{x.t.status}…</Text>}
-                <Answer t={x.t} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true})} onPick={pick} />
+                <Answer t={x.t} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true}).catch(() => {})} onPick={pick} />
               </ChatMessage>
             </div>
           ))}
