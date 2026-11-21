@@ -244,7 +244,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
           <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={() => { setExplain((e) => !e); setCaption(''); }} /></Tip>
           <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={() => setScheme(scheme === 'earth' ? 'light' : scheme === 'light' ? 'dark' : scheme === 'dark' ? 'system' : 'earth')} /></Tip>
-          <Tip text="Keys, voice language and your data."><Button label="Settings" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
+          <Tip text="Choose the AI and add your own keys."><Button label="AI model and keys" variant="ghost" size="sm" isIconOnly icon={<Icon icon={Cog6ToothIcon} size="sm" />} onClick={() => setMdlOpen(true)} /></Tip>
         </HStack>
       </HStack>
       }
@@ -265,7 +265,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={
           <ChatComposer value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
-            placeholder={mode === 'video' ? 'Describe the video…' : mode === 'computer' ? 'What should the computer do?' : 'Ask anything, or describe what to build…'}
+            placeholder={mode === 'video' ? 'Describe the video…' : mode === 'computer' ? 'What should the computer do?' : mode === 'build' ? 'Describe the website or app to build…' : mode === 'search' ? 'What should I look up on the web?' : 'Ask anything…'}
             input={<ChatComposerInput enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
               if (touch && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
             }} />}
@@ -299,7 +299,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
               <ChatMessageBubble variant="ghost"><Markdown density="compact">{BOOT.login ? 'What shall we make today? Ask a question, or describe a website or app.' : 'Flisk Chat makes real websites and apps from a sentence, on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown></ChatMessageBubble>
               {!BOOT.login && <ChatMessageBubble variant="ghost"><Button label="Sign in with GitHub" variant="primary" href="/auth/start" /></ChatMessageBubble>}
-              <ChatMessageBubble variant="ghost"><HStack gap={2} wrap="wrap">
+              <ChatMessageBubble variant="ghost"><HStack className="chips" gap={2} wrap="wrap">
                 {starters.map((c) => <Tip key={c.label || c.id} title={c.label} brand="flisk" text={'Tap to try: ' + (c.prompt || c.label)} more="Flisk does the work and shows you the result in this chat."><Button label={c.label} variant="secondary" size="sm" onClick={() => setValue(c.prompt || c.label)} /></Tip>)}
               </HStack></ChatMessageBubble>
             </ChatMessage>
