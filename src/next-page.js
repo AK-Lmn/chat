@@ -1,9 +1,9 @@
-// The new Astryx look of the chat, served at /next while the current page at / stays as it is.
+// The new Astryx look of the chat, served at / (the previous page stays at /classic).
 // The app itself is built from web/ (see scripts/embed-web.mjs) into next-app.generated.js; this only wraps it in a page
 // and hands it what the server knows about the visitor (the same facts the current page gets).
 import { NEXT_CSS, NEXT_JS } from './next-app.generated.js';
 import { EARTH_JS } from './earth.js';
-import { CATS, KEY_PAGES, PROVIDER_CARDS, PROVIDER_NAMES } from './page.js';
+import { CATS, ICON_HEAD, KEY_PAGES, PROVIDER_CARDS, PROVIDER_NAMES, SEO_HEAD } from './page.js';
 
 const LS = new RegExp('[\\u2028\\u2029]', 'g');
 const json = (v) => JSON.stringify(v).replace(/</g, '\\u003c').replace(LS, '');
@@ -16,8 +16,8 @@ export function nextPage({ login = null, anon = false, connected = [], models = 
   const boot = { login, anon, connected, models, names, theme, here, pod, inf, cats: CATS, cards: PROVIDER_CARDS, providerNames: PROVIDER_NAMES, keyPages: KEY_PAGES };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
-<title>Flisk Chat</title><meta name="robots" content="noindex">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Flisk Chat</title>${SEO_HEAD}
+${ICON_HEAD}
 <script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>
 <script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>
 <style>${NEXT_CSS}${BAR_CSS}</style></head><body><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div id="root"></div>

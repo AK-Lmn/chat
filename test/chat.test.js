@@ -825,6 +825,9 @@ describe('search visibility', () => {
     const home = await (await handle(new Request(`${ORIGIN}/classic`), e, {})).text();
     expect(home).toContain('content="index,follow"');
     expect(home).not.toContain('content="noindex"');
+    const next = await (await handle(new Request(`${ORIGIN}/`), e, {})).text();
+    expect(next).toContain('content="index,follow"');
+    expect(next).not.toContain('content="noindex"');
     const robots = await (await handle(new Request(`${ORIGIN}/robots.txt`), e, {})).text();
     expect(robots).toContain('Allow: /$');
     expect(robots).toContain('Disallow: /s/');

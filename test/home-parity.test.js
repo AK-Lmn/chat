@@ -51,3 +51,16 @@ test('a task stopped by sign-in is kept and runs once after it', () => {
 test('the Oracle wakes the voice model when it opens', () => {
   expect(read('web/src/Oracle.jsx')).toContain("fetch('/api/talk/warm', {method: 'POST'})");
 });
+
+test('the home page at / can be found by search engines and shows a link preview, as /classic does (#350)', async () => {
+  const {nextPage} = await import('../src/next-page.js');
+  const {appPage} = await import('../src/page.js');
+  const head = (html) => html.slice(0, html.indexOf('</head>'));
+  const tags = (html) => [...head(html).matchAll(/<(?:meta (?:name|property)="(?:robots|description|og:[a-z:]+|twitter:[a-z]+)"|link rel="(?:canonical|icon|apple-touch-icon)")[^>]*>/g)].map((m) => m[0]).sort();
+  const home = nextPage({login: null, anon: true});
+  expect(home).not.toContain('noindex');
+  expect(home).toContain('<meta name="robots" content="index,follow">');
+  expect(home).toContain('<link rel="canonical" href="https://chat.flisk.si/">');
+  expect(home).toContain('<meta name="twitter:card" content="summary_large_image">');
+  expect(tags(home)).toEqual(tags(appPage({login: '', anon: true, connected: []})));
+});
