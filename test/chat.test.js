@@ -347,8 +347,23 @@ describe('service binding to inference', () => {
   test('/health reports fleet and inference without sign-in', async () => {
     const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
     const w = world();
-    const r = await (await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) })).json();
-    expect(r).toEqual({ fleet: { status: 200 }, inference: { status: 401 } });
+    const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
+    expect(res.status).toBe(200);
+    const r = await res.json();
+    expect(r).toMatchObject({ ok: true, fleet: { status: 200 }, inference: { status: 401 } });
+    expect(Number.isNaN(Date.parse(r.checkedAt))).toBe(false);
+  });
+  test('/health answers 503 when fleet cannot be reached (#356)', async () => {
+    const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
+    const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => { throw new Error('down'); } });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 0 }, inference: { status: 401 } });
+  });
+  test('/health answers 503 when inference returns a 5xx (#356)', async () => {
+    const e = env({ INFERENCE: { fetch: async () => new Response('bad gateway', { status: 502 }) } });
+    const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 200 }, inference: { status: 502, body: 'bad gateway' } });
   });
 });
 

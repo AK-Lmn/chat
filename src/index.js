@@ -382,7 +382,12 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     };
     const fleet = (env.FLEET_URL || 'https://fleet.flisk.si').replace(/\/$/, '');
     const inference = new URL(env.INFERENCE_URL || 'https://inference.flisk.si/v1/chat/completions').origin;
-    return json(200, { fleet: await probe(`${fleet}/v1/prices`), inference: await probe(`${inference}/v1/models`, env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl) });
+    // Both probes at once (#165). A 4xx still proves the service answers (the probe sends no key); 0 or 5xx is down,
+    // and then the endpoint answers 503 so an uptime monitor alerts (#356).
+    const [f, i] = await Promise.all([probe(`${fleet}/v1/prices`), probe(`${inference}/v1/models`, env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl)]);
+    const up = (p) => p.status >= 200 && p.status < 500;
+    const ok = up(f) && up(i);
+    return json(ok ? 200 : 503, { ok, fleet: f, inference: i, checkedAt: new Date().toISOString() });
   }
 
   // GitHub App: "@flisk-chat review" on a pull request (signed webhook, no session).

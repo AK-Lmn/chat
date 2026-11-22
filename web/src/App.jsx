@@ -5,7 +5,7 @@ import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
 import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, deleteChat, vaultReady} from './api.js';
 import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
-import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText} from './events.js';
+import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
@@ -26,7 +26,7 @@ import {
   ChatMessageList, ChatToolCalls,
 } from '@astryxdesign/core/Chat';
 import {
-  PlusIcon, MicrophoneIcon, GlobeAltIcon, ChatBubbleLeftIcon, ComputerDesktopIcon, ArrowTopRightOnSquareIcon, PaperClipIcon, FilmIcon,
+  PlusIcon, MicrophoneIcon, ArrowDownTrayIcon, GlobeAltIcon, ChatBubbleLeftIcon, ComputerDesktopIcon, ArrowTopRightOnSquareIcon, PaperClipIcon, FilmIcon,
   CloudIcon, ChartBarIcon, ServerStackIcon, SpeakerWaveIcon, Cog6ToothIcon, MagnifyingGlassIcon, SunIcon, KeyIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 
@@ -50,9 +50,25 @@ function readFile(f) {
   });
 }
 
+// Save a picture the chat drew, as /classic does: a file named flisk-picture.<ext>. A drawn (SVG) picture is saved as a
+// PNG, which every app opens. If the picture cannot be fetched, it opens in a new tab instead (#354).
+async function savePicture(src) {
+  const give = (b, ext) => { const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'flisk-picture.' + ext; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1000); };
+  try {
+    const b = await (await fetch(src)).blob();
+    if (b.type.indexOf('svg') < 0) { give(b, (b.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg')); return; }
+    const u = URL.createObjectURL(b); const im = new Image();
+    im.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 1024; c.getContext('2d').drawImage(im, 0, 0, 1024, 1024); URL.revokeObjectURL(u); c.toBlob((p) => (p ? give(p, 'png') : give(b, 'svg')), 'image/png'); };
+    im.onerror = () => give(b, 'svg'); im.src = u;
+  } catch (e) { window.open(src, '_blank', 'noopener'); }
+}
+
+const copy = (u) => navigator.clipboard && navigator.clipboard.writeText(u).catch(() => {});
+
 function Answer({t, onAgain, onPick}) {
   const text = shownText(t);
   const links = t.link ? [t.link] : [];
+  const pics = pictures(text);
   return (
     <>
       {t.steps.length > 0 && (
@@ -60,20 +76,32 @@ function Answer({t, onAgain, onPick}) {
       )}
       {t.outs.length > 0 && <pre style={{margin: 0, padding: 12, borderRadius: 12, background: 'var(--color-background-secondary, #8881)', overflow: 'auto', maxHeight: 220, fontSize: 12}}>{t.outs.map((o) => o.text).join('\n')}</pre>}
       {text && <ChatMessageBubble variant="ghost"><Markdown density="compact">{text}</Markdown></ChatMessageBubble>}
-      {links.map((u) => (
-        <Card key={u}><VStack gap={2}>
-          <HStack gap={2} align="center"><Badge label="Live" variant="success" /><Text type="supporting" color="secondary">{t.kept && t.kept.days ? 'Kept ' + t.kept.days + ' days' : 'Real link'}</Text></HStack>
-          <Text weight="semibold" style={{wordBreak: 'break-all'}}>{u}</Text>
-          <HStack gap={2}>
-            <Tip text="Open the real thing in a new tab."><Button label="Open" variant="primary" href={u} target="_blank" icon={<Icon icon={ArrowTopRightOnSquareIcon} size="sm" />} /></Tip>
-            <Button label="Copy link" variant="secondary" onClick={() => navigator.clipboard && navigator.clipboard.writeText(u).catch(() => {})} />
-          </HStack>
-        </VStack></Card>
-      ))}
+      {pics.length > 0 && <HStack gap={2} wrap="wrap">{pics.map((src, i) => <Button key={src} label={pics.length > 1 ? 'Save picture ' + (i + 1) : 'Save picture'} variant="secondary" size="sm" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} onClick={() => savePicture(src)} />)}</HStack>}
+      {links.map((u) => {
+        // A page this chat published (/s/<id>) is kept 7 days, so it can be downloaded to keep it, as on /classic (#354).
+        const page = typeof location !== 'undefined' && u.startsWith(location.origin + '/s/');
+        return (
+          <Card key={u}><VStack gap={2}>
+            <HStack gap={2} align="center"><Badge label="Live" variant="success" /><Text type="supporting" color="secondary">{page ? 'Kept 7 days. Download the page to keep it.' : t.kept && t.kept.days ? 'Kept ' + t.kept.days + ' days' : 'Real link'}</Text></HStack>
+            <Text weight="semibold" style={{wordBreak: 'break-all'}}>{u}</Text>
+            <HStack gap={2} wrap="wrap">
+              <Tip text="Open the real thing in a new tab."><Button label="Open" variant="primary" href={u} target="_blank" icon={<Icon icon={ArrowTopRightOnSquareIcon} size="sm" />} /></Tip>
+              <Button label="Copy link" variant="secondary" onClick={() => copy(u)} />
+              {page && <Button label="Download" variant="secondary" href={u} download="index.html" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} />}
+            </HStack>
+          </VStack></Card>
+        );
+      })}
       {t.widgets.map((w, i) => <Widget key={'w' + i} w={w} />)}
       {t.workers.map((ev, i) => <WorkerCard key={'k' + i} ev={ev} />)}
       {t.browser && <BrowserAnswer info={t.browser} />}
-      {t.video && <video src={t.video} controls style={{maxWidth: '100%', borderRadius: 12}} />}
+      {t.video && <VStack gap={2}>
+        <video src={t.video} controls playsInline preload="metadata" style={{maxWidth: '100%', borderRadius: 12}} />
+        <HStack gap={2} wrap="wrap">
+          <Button label="Download mp4" variant="primary" href={t.video} download="flisk-video.mp4" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} />
+          <Button label="Copy link" variant="secondary" onClick={() => copy(t.video)} />
+        </HStack>
+      </VStack>}
       {t.sources.length > 0 && <HStack gap={2} wrap="wrap">{t.sources.slice(0, 8).map((s, i) => <Button key={s.url} label={'[' + (i + 1) + '] ' + s.title} size="sm" variant="secondary" href={s.url} target="_blank" />)}</HStack>}
       {t.error && <ErrorCard t={t} onPick={onPick} />}
       {t.needPod && <Card><VStack gap={2}><Text>This task needs a computer. Start one for it, or connect your own.</Text>
@@ -113,17 +141,33 @@ const nextLook = (s) => (s === 'earth' ? 'light' : s === 'light' ? 'dark' : s ==
 
 // The right end of the chat header. On a phone it is one row: Sign in stays in sight and Explain, the look and the AI model
 // move into Astryx's MoreMenu, which opens as a bottom sheet on touch screens. Wider screens keep every button in the row.
+// True while the screen is at most `px` wide. On a 320 px phone the menu, mode, Sign in and more buttons do not fit in one row.
+function useNarrow(px) {
+  const q = typeof matchMedia !== 'undefined' ? matchMedia('(max-width: ' + px + 'px)') : null;
+  const [on, setOn] = useState(() => !!(q && q.matches));
+  useEffect(() => {
+    if (!q) return undefined;
+    const ch = () => setOn(q.matches);
+    q.addEventListener('change', ch);
+    return () => q.removeEventListener('change', ch);
+  }, [px]);
+  return on;
+}
+
 function HeaderEnd({explain, onExplain, scheme, onLook, onModel}) {
   const {isMobile} = useAppShellMobile();
   const guest = BOOT.login && BOOT.anon;
   const signIn = !BOOT.login || BOOT.anon;
+  // Below 340 px Sign in moves into the more menu, so every button stays on screen (#358).
+  const tiny = useNarrow(340);
   if (isMobile) {
     return (
       <HStack gap={1} align="center" className="chat-head-end">
-        {signIn && <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
-        {BOOT.login && !BOOT.anon && <Badge label={'@' + BOOT.login} />}
+        {signIn && !tiny && <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
+        {BOOT.login && !BOOT.anon && !tiny && <Badge label={'@' + BOOT.login} />}
         <MoreMenu label="More: explain, look, AI model" size="sm" presentation="adaptive" alignment="end" items={[
           ...(guest ? [{label: 'You are a guest', description: 'Sign in with GitHub to keep your chats and get more free tasks', isDisabled: true}, {type: 'divider'}] : []),
+          ...(signIn && tiny ? [{label: 'Sign in with GitHub', description: 'Keep your chats and get more free tasks', icon: KeyIcon, onClick: () => { location.href = '/auth/start'; }}] : []),
           {label: explain ? 'Leave explain mode' : 'Explain', description: 'Tap anything to read what it does, without running it', icon: QuestionMarkCircleIcon, onClick: onExplain},
           {label: 'Look: ' + (LOOKS[scheme] || scheme), description: 'Tap to switch to ' + LOOKS[nextLook(scheme)], icon: SunIcon, onClick: onLook},
           {label: 'AI model and keys', description: 'Flisk Wolf is free, or add your own key', icon: Cog6ToothIcon, onClick: onModel},
@@ -155,6 +199,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [connected, setConnected] = useState(BOOT.connected || []);
   const [picked, setPicked] = useState([]);
   const [talk, setTalk] = useState(false);
+  // A ?voice=1 link (also true or talk) opens voice talk. A browser lets the page use the speaker and microphone only after a
+  // tap, so a note asks for one and the first tap anywhere opens it, as /classic does (#364). A tap on Voice talk opens it anyway.
+  const [voiceNote, setVoiceNote] = useState(() => { try { return wantsVoice(location.search); } catch (e) { return false; } });
+  useEffect(() => {
+    if (!voiceNote) return undefined;
+    const first = (e) => { setVoiceNote(false); if (e.target && e.target.closest && e.target.closest('[aria-label="Voice talk"], .earth-talk')) return; setTalk(true); };
+    document.addEventListener('pointerdown', first, {once: true});
+    return () => document.removeEventListener('pointerdown', first);
+  }, []);
   const [mdlOpen, setMdlOpen] = useState(false);
   const [pcOpen, setPcOpen] = useState(false);
   const [explain, setExplain] = useState(false);
@@ -330,6 +383,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   const attach = async (list) => {
     const room = 3 - files.length; const got = [];
+    if (list.length > room) setNotice('You can attach up to 3 files.'); // what fits is attached, the rest is said, not dropped silently (#365)
     let used = files.reduce((n, x) => n + (x.size || 0), 0);
     for (const f of Array.from(list).slice(0, room)) {
       if (used + f.size > 5 * 1024 * 1024) { setNotice('Attached files can be 5 MB in all'); continue; }
@@ -364,6 +418,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     <div className="vv-root">
     {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
     {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
+    {voiceNote && <div className="caption voice-note" role="status">Tap anywhere to start talking</div>}
     <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="turn-status">{liveText(turns, busy)}</div>
     {turns.length > 0 && <h1 className="sr-only">{'Flisk Chat: ' + String(turns[0].task || 'files').slice(0, 80)}</h1>  /* the greeting h1 is gone once a chat has turns (#357) */}
     <input ref={fileIn} type="file" multiple hidden onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />

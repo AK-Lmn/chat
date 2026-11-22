@@ -45,8 +45,8 @@ html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{backg
 /* Phone chat header: one row (menu, mode, Sign in, more). It never wraps onto a second line. */
 .chat-head:has(.chat-head-end){flex-wrap:nowrap!important;gap:var(--spacing-1)!important}
 .chat-head .chat-head-end{flex-shrink:0}
-/* 320-360px phones: tighter mode buttons and edges, so the more button stays on screen. */
-@media (max-width:360px){.chat-head:has(.chat-head-end){padding-left:var(--spacing-2)!important;padding-right:var(--spacing-2)!important}.chat-head .astryx-segmented-control-item{padding-left:7px!important;padding-right:7px!important}.chat-head .chat-head-end a{padding-left:10px!important;padding-right:10px!important}}
+/* Phones up to 400px (375px iPhone SE and mini included, #358): tighter mode buttons and edges, so the more button stays on screen. */
+@media (max-width:400px){.chat-head:has(.chat-head-end){padding-left:var(--spacing-2)!important;padding-right:var(--spacing-2)!important}.chat-head .astryx-segmented-control-item{padding-left:7px!important;padding-right:7px!important}.chat-head .chat-head-end a{padding-left:10px!important;padding-right:10px!important}}
 [role=dialog] .astryx-field,[role=dialog] input{min-width:0}
 
 /* Cards a turn shows beside its text (web/src/Cards.jsx), ported from /classic. */
@@ -108,3 +108,5 @@ html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{backg
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* The greeting is the page's h1 (#357) but keeps the size of the chat text around it. */
 .greet { font-size: 1.15rem; line-height: 1.35; margin: 0; }
+/* ?voice=1 note (#364): low on the page above the composer, and taps go through it to the page. */
+.caption.voice-note{top:auto;bottom:calc(100vh - var(--vv-top,0px) - var(--vv-h,100vh) + 132px);left:50%;right:auto;transform:translateX(-50%);white-space:nowrap;pointer-events:none;font-weight:600;background:#111}
