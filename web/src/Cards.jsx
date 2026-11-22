@@ -219,11 +219,11 @@ export function WorkerCard({ev}) {
     <div className="wcard">
       <div className="wctop"><i className="wdot ok" /><b>Live in this tab</b><span>no deploy · no key · free</span></div>
       <div className="wcbody">
-        <form className="wrow" onSubmit={(e) => { e.preventDefault(); send(req); }}>
+        <form className="wrow" onSubmit={(e) => { e.preventDefault(); void send(req); }}>
           <input value={req} onChange={(e) => setReq(e.target.value)} aria-label="Request: method and path" spellCheck={false} />
           <Button type="submit" label="Send" variant="primary" size="sm" isDisabled={busy} />
         </form>
-        {paths.length > 0 && <div className="wchips">{paths.map((x) => <button key={x} type="button" onClick={() => { setReq('GET ' + x); send('GET ' + x); }}>{x}</button>)}</div>}
+        {paths.length > 0 && <div className="wchips">{paths.map((x) => <button key={x} type="button" onClick={() => { setReq('GET ' + x); void send('GET ' + x); }}>{x}</button>)}</div>}
         {res && <div className="wrres"><div className="wrmeta"><span className={'wrst' + (res.ok ? '' : ' bad')}>{res.label}</span><span>{res.ms + ' ms'}</span>
           <button type="button" onClick={() => navigator.clipboard && navigator.clipboard.writeText(res.text).catch(() => {})}>Copy</button></div>
           <pre className="wrout">{res.text}</pre></div>}
@@ -279,7 +279,7 @@ export function BrowserAnswer({info}) {
   const [text, setText] = useState('');
   const go = () => {
     setBusy(true);
-    writeInBrowser(info, setLabel, setText).then((ok) => { if (ok) { lsSet('chat_browser_model', 'on'); setDone(true); } else setBusy(false); });
+    writeInBrowser(info, setLabel, setText).then((ok) => { if (ok) { lsSet('chat_browser_model', 'on'); setDone(true); } else setBusy(false); }, () => setBusy(false));
   };
   // A visitor who said yes once gets it every time, as on /classic.
   useEffect(() => { if (canWriteInBrowser(info) && lsGet('chat_browser_model') === 'on') go(); }, []);

@@ -42,7 +42,7 @@ test('a reroute is shown as a model step, not a computer', () => {
 
 test('a task stopped by sign-in is kept and runs once after it', () => {
   const at401 = app.slice(app.indexOf('res.status === 401'), app.indexOf('res.status === 429'));
-  expect(at401).toContain("sessionStorage.setItem('chat_pending', task)");
+  expect(at401).toContain("sessionStorage.setItem('chat_pending', String(task)");
   expect(at401).toContain("'chat_pending_files'");
   expect(app).toMatch(/if \(p && BOOT\.login\) run\(p, \{files:/);
   expect(app).toContain("sessionStorage.removeItem('chat_pending_files')");

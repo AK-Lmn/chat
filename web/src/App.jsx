@@ -221,7 +221,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setBusy(false); ctl.current = null;
     if (res.status === 401) {
       // Keep the task (and its files) so it runs on its own once the visitor is back from GitHub sign-in, as on /classic.
-      try { sessionStorage.setItem('chat_pending', task); if (sendFiles.length) sessionStorage.setItem('chat_pending_files', JSON.stringify(sendFiles)); } catch (e) { /* storage blocked or files too big */ }
+      try { sessionStorage.setItem('chat_pending', String(task).slice(0, 8000)); if (sendFiles.length) sessionStorage.setItem('chat_pending_files', JSON.stringify(sendFiles)); } catch (e) { /* storage blocked or files too big */ }
       setTurns((all) => all.slice(0, -1)); setNotice('Sign in with GitHub to run tasks.'); return; }
     if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
     // No cloud computer connected: run the task on the small Linux in this tab, as /classic does. If the tab cannot start it,
