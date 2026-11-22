@@ -136,6 +136,11 @@ function LimitCard({info, task, onPick}) {
   );
 }
 
+const GUEST_STARTERS = [
+  {label: 'A coffee shop website', prompt: 'A one-page website for my coffee shop'},
+  {label: 'A wedding invite page', prompt: 'A wedding page with the date, the place and an RSVP form'},
+  {label: 'A bakery menu page', prompt: 'A menu page for my bakery with prices and opening hours'},
+];
 const LOOKS = {earth: 'Earth', light: 'Light', dark: 'Dark', system: 'Same as your phone'};
 const nextLook = (s) => (s === 'earth' ? 'light' : s === 'light' ? 'dark' : s === 'dark' ? 'system' : 'earth');
 
@@ -391,7 +396,9 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     }
     if (got.length) setFiles((x) => [...x, ...got]);
   };
-  const starters = (BOOT.cats || []).slice(0, 6);
+  // A guest (most visitors) sees what they get and three things to ask for, not six category names (the 74% bounce of 2026-11-22).
+  const guestHome = !!BOOT.login && !!BOOT.anon;
+  const starters = guestHome ? GUEST_STARTERS : (BOOT.cats || []).slice(0, 6);
   const used = connected.length ? connected.join(', ') : '';
   const pcLabel = picked.length ? picked.map((p) => (BOOT.providerNames || {})[p] || p).join(' + ') : 'Fleet auto';
   const shown = chats.filter((c) => !filter || c.title.toLowerCase().includes(filter.toLowerCase()));
@@ -468,8 +475,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           {!turns.length && (
             <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
               <ChatMessageBubble variant="ghost"><VStack gap={1}>
-                <Heading level={1} className="greet">{BOOT.login ? 'What shall we make today?' : 'Make real websites and apps from a sentence'}</Heading>
-                <Markdown density="compact">{BOOT.login ? 'Ask a question, or describe a website or app.' : 'Flisk Chat makes them on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown>
+                <Heading level={1} className="greet">{!BOOT.login ? 'Make real websites and apps from a sentence' : guestHome ? 'Describe a website or app. Get a live link.' : 'What shall we make today?'}</Heading>
+                <Markdown density="compact">{BOOT.login ? (guestHome ? 'Free, no sign-up. Pick an example or type your own.' : 'Ask a question, or describe a website or app.') : 'Flisk Chat makes them on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown>
               </VStack></ChatMessageBubble>
               {!BOOT.login && <ChatMessageBubble variant="ghost"><Button label="Sign in with GitHub" variant="primary" href="/auth/start" /></ChatMessageBubble>}
               <ChatMessageBubble variant="ghost"><HStack className="chips" gap={2} wrap="wrap">
