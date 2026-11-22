@@ -22,6 +22,9 @@ export function bounceRate(stats) {
   return { value: Math.max(0.1, rate), baseline: BASELINE, unit: '% bounce', site: SITE, range: RANGE, visits, visitors: Number(cur.visitors) || null };
 }
 
+// A message can carry text from the network (a fetch error); keep it on one line so it cannot forge log lines.
+export const oneLine = (text) => String(text).replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 300);
+
 export async function measure(env = process.env, fetchImpl = fetch) {
   const key = env.MEASURE_SECRET;
   if (!key) return { error: 'MEASURE_SECRET is not set (the Flisk Analytics key)' };
@@ -40,7 +43,7 @@ export async function measure(env = process.env, fetchImpl = fetch) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const out = await measure();
   if (out.error) {
-    console.error(`measure-bounce: ${out.error}`);
+    console.error(`measure-bounce: ${oneLine(out.error)}`);
     process.exit(2);
   }
   console.log(JSON.stringify(out));

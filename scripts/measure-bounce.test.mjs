@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bounceRate, measure, BASELINE, MIN_VISITS } from './measure-bounce.mjs';
+import { bounceRate, measure, oneLine, BASELINE, MIN_VISITS } from './measure-bounce.mjs';
 
 const stats = (over = {}) => ({ current: { visitors: 85, visits: 256, bounceRate: 75, ...over } });
 const reply = (body, status = 200) => async () => ({ ok: status < 200 || status > 299 ? false : true, status, json: async () => body });
@@ -51,4 +51,9 @@ test('measure sends the key as a bearer token for chat.flisk.si over 7 days', as
   assert.equal(seen.auth, 'Bearer fa_secret');
   assert.equal(out.value, 75);
   assert.ok(!JSON.stringify(out).includes('fa_secret'));
+});
+
+test('an error message is one line, so a network error cannot forge log lines', () => {
+  assert.equal(oneLine('boom\n::error::fake\r\nmore'), 'boom ::error::fake more');
+  assert.equal(oneLine('x'.repeat(1000)).length, 300);
 });
