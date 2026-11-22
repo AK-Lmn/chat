@@ -91,6 +91,8 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
 
   useEffect(() => {
     if (!open) return undefined;
+    // Wake the voice model while the visitor reads the intro, as /classic does, so the first answer comes quicker.
+    if (BOOT.login) fetch('/api/talk/warm', {method: 'POST'}).catch(() => {});
     const L = live.current; L.turns = []; L.lang = ''; setYou(''); setSay('');
     if (!BOOT.login) { o('idle', 'Sign in with GitHub to talk with the Oracle.'); return undefined; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { o('idle', 'This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return undefined; }

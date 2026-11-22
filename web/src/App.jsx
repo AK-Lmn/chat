@@ -4,6 +4,7 @@ import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
 import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, vaultReady} from './api.js';
+import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -69,6 +70,9 @@ function Answer({t, onAgain, onPick}) {
           </HStack>
         </VStack></Card>
       ))}
+      {t.widgets.map((w, i) => <Widget key={'w' + i} w={w} />)}
+      {t.workers.map((ev, i) => <WorkerCard key={'k' + i} ev={ev} />)}
+      {t.browser && <BrowserAnswer info={t.browser} />}
       {t.video && <video src={t.video} controls style={{maxWidth: '100%', borderRadius: 12}} />}
       {t.sources.length > 0 && <HStack gap={2} wrap="wrap">{t.sources.slice(0, 8).map((s, i) => <Button key={s.url} label={'[' + (i + 1) + '] ' + s.title} size="sm" variant="secondary" href={s.url} target="_blank" />)}</HStack>}
       {t.error && <ErrorCard t={t} onPick={onPick} />}
@@ -215,7 +219,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
     catch (e) { res = {status: e.name === 'AbortError' ? 0 : -1}; if (res.status === -1) put({...t, error: {message: 'Could not reach Chat. Check your connection and try again.', kind: 'busy'}}); }
     setBusy(false); ctl.current = null;
-    if (res.status === 401) { setTurns((all) => all.slice(0, -1)); setNotice('Sign in with GitHub to run tasks.'); return; }
+    if (res.status === 401) {
+      // Keep the task (and its files) so it runs on its own once the visitor is back from GitHub sign-in, as on /classic.
+      try { sessionStorage.setItem('chat_pending', String(task).slice(0, 8000)); if (sendFiles.length) sessionStorage.setItem('chat_pending_files', JSON.stringify(sendFiles)); } catch (e) { /* storage blocked or files too big */ }
+      setTurns((all) => all.slice(0, -1)); setNotice('Sign in with GitHub to run tasks.'); return; }
     if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
     // No cloud computer connected: run the task on the small Linux in this tab, as /classic does. If the tab cannot start it,
     // the card to connect a computer is shown instead.
@@ -294,8 +301,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   // Back from OpenRouter login: the key is saved, so run the task the visitor had typed.
   useEffect(() => {
     orFinishLogin().then((r) => { if (!r) return; if (r.error) setNotice('OpenRouter login failed: ' + r.error); else { setNotice('OpenRouter connected. Your key is saved in this browser.'); if (r.task) setValue(r.task); } }, () => {});
-    let p = ''; try { p = sessionStorage.getItem('chat_pending') || ''; sessionStorage.removeItem('chat_pending'); } catch (e) { /* storage blocked */ }
-    if (p && BOOT.login) setValue(p);
+    let p = '', pf = [];
+    try {
+      p = sessionStorage.getItem('chat_pending') || '';
+      pf = JSON.parse(sessionStorage.getItem('chat_pending_files') || '[]');
+      sessionStorage.removeItem('chat_pending'); sessionStorage.removeItem('chat_pending_files');
+    } catch (e) { /* storage blocked */ }
+    // Signed in now: run the task that was stopped by the sign-in, once. Signed out: put it back in the box.
+    if (p && BOOT.login) run(p, {files: Array.isArray(pf) ? pf.slice(0, 3) : []}).catch(() => {});
+    else if (p) setValue(p);
   }, []);
   useEffect(() => { try { localStorage.setItem('chat_mode', mode); } catch (e) { /* storage blocked */ } }, [mode]);
   useEffect(() => { try { sessionStorage.setItem('chat_model', sel.id); } catch (e) { /* storage blocked */ } }, [sel]);
