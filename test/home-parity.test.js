@@ -102,10 +102,23 @@ test('a past chat can be deleted from the list, as on /classic (#355)', async ()
   globalThis.localStorage = had;
 });
 
+test('a guest sees what they get and three concrete examples, not category names', () => {
+  // 74% of chat.flisk.si visits bounced on 2026-11-22, and most visitors are guests (an anonymous session).
+  expect(app).toContain("const guestHome = !!BOOT.login && !!BOOT.anon;");
+  expect(app).toContain("'Describe a website or app. Get a live link.'");
+  expect(app).toContain("guestHome ? GUEST_STARTERS : (BOOT.cats || []).slice(0, 6)");
+  const examples = app.match(/const GUEST_STARTERS = \[([\s\S]*?)\];/)[1];
+  expect((examples.match(/label: '/g) || []).length).toBe(3);
+  // Plain words a first-time visitor knows: no jargon in the heading, the lead or the examples.
+  const copy = ["Describe a website or app. Get a live link.", 'Free, no sign-up. Pick an example or type your own.', examples].join(' ');
+  expect(copy).not.toMatch(/\b(agent|MCP|LLM|API|token|orchestrat|pod|fleet)\b/i);
+  expect("Describe a website or app. Get a live link.".split(/\s+/).length).toBeLessThanOrEqual(12);
+});
+
 test('the home page has one level-1 heading, as /classic does (#357)', () => {
   expect(page).toMatch(/<h1[ >]/);
   expect(app.match(/<Heading level=\{1\}/g) || []).toHaveLength(1);
-  expect(app).toContain("<Heading level={1} className=\"greet\">{BOOT.login ? 'What shall we make today?'");
+  expect(app).toContain("'What shall we make today?'}</Heading>");
   // Once a chat has turns the greeting goes, and a hidden h1 names the chat; the two never show together.
   expect(app).toContain('{!turns.length && (');
   expect(app).toContain('{turns.length > 0 && <h1 className="sr-only">');
