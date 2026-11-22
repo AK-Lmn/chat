@@ -85,3 +85,9 @@ export function liveText(turns, busy) {
   const a = shownText(x.t);
   return a ? 'Answer ready: ' + a.slice(0, 300) : (x.t.status === 'Done' ? 'Done.' : '');
 }
+
+// Pictures in an answer, as Markdown images (![alt](src)): each gets a Save picture button (#354).
+export const pictures = (text) => [...new Set([...String(text || '').matchAll(/!\[[^\]]*\]\(((?:https?:\/\/|\/)[^\s)]+)\)/g)].map((m) => m[1]))];
+
+// A ?voice= link opens voice talk: 1, true or talk; anything else is ignored (#364).
+export const wantsVoice = (search) => /^(1|true|talk)$/.test(new URLSearchParams(search || '').get('voice') || '');

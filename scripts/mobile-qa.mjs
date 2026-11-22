@@ -70,6 +70,26 @@ for (const t of targets) {
   await browser.close();
 }
 
+// New home page top bar (#358): at 320, 360 and 375 px every button sits inside the screen with an 8px gutter.
+// The row clips what overflows, so the page never scrolls sideways and only the button edges show it.
+{
+  const barBrowser = await chromium.launch();
+  for (const width of [320, 360, 375]) {
+    const ctx = await barBrowser.newContext({ ...devices["Pixel 7"], viewport: { width, height: 760 } });
+    const page = await ctx.newPage();
+    await page.goto(url, { waitUntil: "load" }).catch(() => {});
+    await page.waitForTimeout(1000);
+    const off = await page.evaluate(() => [...document.querySelectorAll(".chat-head button, .chat-head a")].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { label: (e.getAttribute("aria-label") || e.innerText).trim().slice(0, 30), left: Math.round(r.left), right: Math.round(r.right), w: r.width };
+    }).filter((b) => b.w && (b.right > innerWidth - 8 || b.left < 8)));
+    console.log(`${off.length ? "FAIL" : "ok  "} top bar ${width}px${off.length ? " - " + off.map((b) => `"${b.label}" ${b.left}-${b.right}`).join("; ") : ""}`);
+    if (off.length) bad++;
+    await ctx.close();
+  }
+  await barBrowser.close();
+}
+
 // Phone "+" sheet and model picker, every look at 320/360/390: no sideways scroll, Settings collapsed,
 // 44px rows, picker opens as one full-width column.
 const looks = ["classic", "ivory", "glow", "focus", "voice", "earth"];

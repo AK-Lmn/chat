@@ -1,12 +1,13 @@
 // The new home page (web/src) must show everything the server streams, as /classic (src/page.js) does (#343-#347).
 import {test, expect} from 'bun:test';
 import {readFileSync} from 'node:fs';
-import {newTurn, applyEv, liveText} from '../web/src/events.js';
+import {newTurn, applyEv, liveText, pictures, wantsVoice} from '../web/src/events.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const app = read('web/src/App.jsx');
 const cards = read('web/src/Cards.jsx');
 const page = read('src/page.js');
+const built = read('src/next-app.generated.js'); // what / really serves
 
 test('every field a turn collects is read by the page', () => {
   // A field events.js fills but nothing renders is a card the visitor never sees (widgets, workers and browser were).
@@ -108,4 +109,55 @@ test('the home page has one level-1 heading, as /classic does (#357)', () => {
   // Once a chat has turns the greeting goes, and a hidden h1 names the chat; the two never show together.
   expect(app).toContain('{!turns.length && (');
   expect(app).toContain('{turns.length > 0 && <h1 className="sr-only">');
+});
+
+test('a ?voice=1 link opens voice talk on the first tap, as on /classic (#364)', () => {
+  expect(page).toContain("/^(1|true|talk)$/.test(new URLSearchParams(location.search).get('voice')");
+  for (const q of ['?voice=1', '?voice=true', '?voice=talk', '?flisk_theme=ivory&voice=1']) expect({q, on: wantsVoice(q)}).toEqual({q, on: true});
+  for (const q of ['', '?voice=0', '?voice=yes', '?voice=', '?voices=1']) expect({q, on: wantsVoice(q)}).toEqual({q, on: false});
+  expect(app).toContain('wantsVoice(location.search)');
+  expect(app).toContain('<div className="caption voice-note" role="status">Tap anywhere to start talking</div>');
+  // One tap, anywhere but the Voice talk button itself, opens the talk screen.
+  expect(app).toMatch(/document\.addEventListener\('pointerdown', first, \{once: true\}\)/);
+  expect(app).toMatch(/closest\('\[aria-label="Voice talk"\], \.earth-talk'\)\) return; setTalk\(true\);/);
+  expect(built).toContain('Tap anywhere to start talking');
+});
+
+test('picking more files than there is room for says so, as on /classic (#365)', () => {
+  expect(page).toContain("'You can attach up to 3 files.'");
+  // Checked before anything is read, so it covers 5 files at once and a 4th when 3 are attached (room 0).
+  expect(app).toMatch(/const room = 3 - files\.length;[^\n]*\n\s*if \(list\.length > room\) setNotice\('You can attach up to 3 files\.'\);/);
+  expect(app).toContain("setNotice('Attached files can be 5 MB in all')");
+  expect(built).toContain('You can attach up to 3 files.');
+});
+
+test('videos, pictures and published pages can be downloaded, as on /classic (#354)', () => {
+  expect(page).toContain("dl.download='flisk-video.mp4'");
+  expect(page).toContain("dl.download='index.html'");
+  expect(page).toContain("x.download='flisk-picture.'+ext");
+  expect(app).toContain('<Button label="Download mp4" variant="primary" href={t.video} download="flisk-video.mp4"');
+  expect(app).toContain('<Button label="Copy link" variant="secondary" onClick={() => copy(t.video)} />');
+  expect(app).toContain('{page && <Button label="Download" variant="secondary" href={u} download="index.html"');
+  expect(app).toContain("'Kept 7 days. Download the page to keep it.'");
+  expect(app).toContain("a.download = 'flisk-picture.' + ext;");
+  for (const s of ['flisk-video.mp4', 'index.html', 'flisk-picture.', 'Download the page to keep it.', 'Save picture']) expect({s, in: built.includes(s)}).toEqual({s, in: true});
+});
+
+test('pictures in an answer are found for their Save picture buttons (#354)', () => {
+  expect(pictures('')).toEqual([]);
+  expect(pictures('Here: ![a cat](https://chat.flisk.si/i/abc.png) and ![b](/i/def.svg)')).toEqual(['https://chat.flisk.si/i/abc.png', '/i/def.svg']);
+  expect(pictures('![a](/i/x.png) again ![a](/i/x.png)')).toEqual(['/i/x.png']);
+  // A plain link is not a picture, and a javascript: URL is never one.
+  expect(pictures('[site](https://x.dev) ![x](javascript:alert(1))')).toEqual([]);
+});
+
+test('the phone top bar keeps every button on screen at 320, 360 and 375 px (#358)', () => {
+  const css = read('web/src/app.css');
+  expect(css).toContain('@media (max-width:400px){.chat-head:has(.chat-head-end)');
+  expect(app).toContain('const tiny = useNarrow(340);');
+  expect(app).toContain('{signIn && !tiny && <Button label="Sign in"');
+  expect(app).toContain("...(signIn && tiny ? [{label: 'Sign in with GitHub'");
+  const qa = read('scripts/mobile-qa.mjs');
+  expect(qa).toContain('for (const width of [320, 360, 375])');
+  expect(qa).toContain('top bar');
 });
