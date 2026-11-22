@@ -75,3 +75,13 @@ export const chatTitle = (msgs) => String((msgs[0] && msgs[0].content) || '').sp
 
 // The part of a task's streamed text and answer the user reads: the final answer wins over the live text.
 export const shownText = (t) => (t.answer !== null ? t.answer : t.text);
+
+// The words a screen reader hears in the polite live region (#353): the running status, then the end of the last turn.
+export function liveText(turns, busy) {
+  const x = turns[turns.length - 1];
+  if (!x || x.old) return '';  // a chat opened from the list is not news
+  if (busy) return (x.t.status || 'Working') + '…';
+  if (x.t.error) return '';  // the error card is a role="alert" of its own
+  const a = shownText(x.t);
+  return a ? 'Answer ready: ' + a.slice(0, 300) : (x.t.status === 'Done' ? 'Done.' : '');
+}
