@@ -91,3 +91,22 @@ export const pictures = (text) => [...new Set([...String(text || '').matchAll(/!
 
 // A ?voice= link opens voice talk: 1, true or talk; anything else is ignored (#364).
 export const wantsVoice = (search) => /^(1|true|talk)$/.test(new URLSearchParams(search || '').get('voice') || '');
+
+// Formats limit reset time (in milliseconds) into words for LimitCard (#360).
+export function resetText(ms) {
+  const n = Number(ms) || 0;
+  if (n <= 0) return '';
+  if (n < 45000) return 'less than a minute';
+  const h = Math.floor(n / 3600000);
+  const m = Math.round((n % 3600000) / 60000);
+  if (h && m) {
+    if (m === 60) return `about ${h + 1} hours`;
+    return `about ${h} hour${h > 1 ? 's' : ''} ${m} minute${m > 1 ? 's' : ''}`;
+  }
+  if (h) return `about ${h} hour${h > 1 ? 's' : ''}`;
+  if (m) {
+    if (m === 60) return 'about 1 hour';
+    return `about ${m} minute${m > 1 ? 's' : ''}`;
+  }
+  return 'less than a minute';
+}

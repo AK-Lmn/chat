@@ -11,11 +11,12 @@ const get = (p) => worker.fetch(new Request(`${ORIGIN}${p}`), env());
 // Chat's own pages already send stricter values (DENY, same-origin, frame-ancestors 'none'); those stay.
 const baseline = (res) => {
   expect(res.headers.get('x-content-type-options')).toBe('nosniff');
-  expect(res.headers.get('x-frame-options')).toMatch(/^(DENY|SAMEORIGIN)$/);
+  // Safari honours X-Frame-Options next to frame-ancestors, so only frame-ancestors may decide who frames us (the analytics heatmap).
+  expect(res.headers.get('x-frame-options')).toBeNull();
   expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000; includeSubDomains');
   expect(res.headers.get('referrer-policy')).toMatch(/^(same-origin|strict-origin-when-cross-origin|no-referrer)$/);
   expect(res.headers.get('permissions-policy')).toBe('camera=(), microphone=(self), geolocation=()');
-  expect(res.headers.get('content-security-policy')).toMatch(/frame-ancestors '(self|none)'/);
+  expect(res.headers.get('content-security-policy')).toMatch(/frame-ancestors ('self'|'none'|https:\/\/analytics\.flisk\.si)/);
 };
 
 describe('security headers', () => {
@@ -37,7 +38,7 @@ describe('security headers', () => {
     const res = withSecurityHeaders(new Response('x', { headers: { 'x-frame-options': 'DENY', 'strict-transport-security': 'max-age=31536000', 'content-security-policy': "default-src 'none'" } }));
     expect(res.headers.get('x-frame-options')).toBe('DENY');
     expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000; includeSubDomains');
-    expect(res.headers.get('content-security-policy')).toBe("default-src 'none'; frame-ancestors 'self'");
+    expect(res.headers.get('content-security-policy')).toBe("default-src 'none'; frame-ancestors 'self' https://analytics.flisk.si");
     expect(res.headers.get('permissions-policy')).toBe('camera=(), microphone=(), geolocation=()');
   });
   test('a CSP that already has frame-ancestors is left alone', () => {

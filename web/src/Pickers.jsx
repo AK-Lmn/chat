@@ -159,7 +159,7 @@ export function ModelDialog({open, onClose, models, value, onUse}) {
         </div>
         <div style={{flexShrink: 0, paddingTop: 8, borderTop: '1px solid var(--color-border-subtle, #8883)'}}>
           <HStack gap={2} justify="end">
-            <Button label="Cancel" variant="ghost" onClick={onClose} />
+            <Tip title="Cancel" text="Closes this window and keeps what you had before."><span><Button label="Cancel" variant="ghost" onClick={onClose} /></span></Tip>
             <Button label={draft.free ? 'Use ' + draft.name : 'Save and use'} variant="primary" onClick={useIt} />
           </HStack>
         </div>
@@ -188,9 +188,9 @@ export function ComputerDialog({open, onClose, connected, onConnected, picked, s
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={560} purpose="info">
       <VStack gap={4}>
         <Heading level={3}>Where your app runs</Heading>
-        <HStack gap={3} align="center">
+        <HStack gap={3} align="center" wrap="wrap" className="computers-fleet-row">
           <Brand name="fleet" size={32} />
-          <VStack gap={0}><Text weight="semibold">Fleet auto</Text><Text type="supporting" color="secondary">Uses your cheapest connected computer first</Text></VStack>
+          <VStack gap={0} className="computers-fleet-text"><Text weight="semibold">Fleet auto</Text><Text type="supporting" color="secondary">Uses your cheapest connected computer first</Text></VStack>
           <Button label={picked.length ? 'Use Fleet auto' : 'Fleet auto is on'} size="sm" variant={picked.length ? 'secondary' : 'primary'} onClick={() => setPicked([])} />
         </HStack>
         <Text color="secondary">Connect a computer once with its key. Free ones have free credit. Without any, small tasks run on a Linux inside this tab.</Text>
@@ -202,16 +202,18 @@ export function ComputerDialog({open, onClose, connected, onConnected, picked, s
               {connected.includes(c.id) && <Badge label="Connected" variant="success" />}
             </HStack>
             {!connected.includes(c.id) && (
-              <HStack gap={2} align="end" wrap="wrap">
+              <VStack gap={2}>
                 <KeyField label={c.label + ' key'} hideLabel value={keys[c.id] || ''} onChange={(v) => setKeys({...keys, [c.id]: v})} placeholder="Paste key" error={errs[c.id]} />
-                <Button label="Get key" variant="secondary" size="sm" href={c.url} target="_blank" />
-                <Button label={busy === c.id ? 'Connecting…' : 'Connect'} variant="primary" size="sm" isDisabled={!!busy} onClick={() => connect(c)} />
-              </HStack>
+                <HStack gap={2} align="center" wrap="wrap">
+                  <Button label={busy === c.id ? 'Connecting…' : 'Connect'} variant="primary" size="sm" isDisabled={!!busy} onClick={() => connect(c)} />
+                  <Button label="Get key" variant="secondary" size="sm" href={c.url} target="_blank" />
+                </HStack>
+              </VStack>
             )}
             {connected.includes(c.id) && <Button label={picked.includes(c.id) ? 'Only on ' + c.label + ' (tap to undo)' : 'Run only on ' + c.label} size="sm" variant={picked.includes(c.id) ? 'primary' : 'secondary'} onClick={() => toggle(c.id)} />}
           </VStack>
         ))}
-        <HStack justify="end"><Button label="Done" variant="primary" onClick={onClose} /></HStack>
+        <HStack justify="end"><Tip title="Done" text="Closes this window. Your choices are already saved."><span><Button label="Done" variant="primary" onClick={onClose} /></span></Tip></HStack>
       </VStack>
     </Dialog>
   );
