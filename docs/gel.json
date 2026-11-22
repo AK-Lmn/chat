@@ -16,15 +16,16 @@
     "workflow-permissions": "block"
   },
   "north_star": {
-    "metric": "bounce rate of chat.flisk.si visits",
-    "baseline": "66% bounce before the clear first screen",
+    "metric": "bounce rate of chat.flisk.si visits (last 7 days, Flisk Analytics)",
+    "baseline": "66% bounce before the clear first screen (7 days to 2026-11-17, 49 visitors)",
     "target": {
       "ratio": 1.5,
       "better": "lower"
     },
     "evidence": "docs/north-star/README.md",
     "result": "docs/north-star/result.json",
-    "max_age_days": 30
+    "max_age_days": 30,
+    "measure": "node scripts/measure-bounce.mjs"
   },
   "input_in_viewport": {
     "result": "docs/north-star/input-viewport.json",
