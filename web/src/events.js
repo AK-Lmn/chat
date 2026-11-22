@@ -48,7 +48,7 @@ export function applyEv(t, ev) {
     case 'widget': return { ...t, widgets: [...t.widgets, ev] };
     case 'delta': return { ...t, text: t.text + ev.text };
     case 'retry': return { ...t, text: '' };
-    case 'reroute': return { ...step(t, { name: 'computer', target: ev.text }), status: ev.text };
+    case 'reroute': return { ...step(t, { name: 'model', target: ev.text }), status: ev.text };
     case 'model': return { ...step(t, { name: 'model', target: 'Answered by ' + ev.name }), model: ev.name };
     case 'answer': return { ...t, answer: ev.text };
     case 'needcomputer': return { ...t, needPod: true };
