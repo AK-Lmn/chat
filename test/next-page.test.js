@@ -58,3 +58,9 @@ test('voice typing sends the recording to /api/transcribe', async () => {
   expect(src).toContain("'/api/transcribe'");
   expect(src).not.toContain('Voice typing arrives');
 });
+
+test('touch screens get 44px tap targets', async () => {
+  const css = await Bun.file(new URL('../web/src/app.css', import.meta.url)).text();
+  expect(css).toContain('pointer:coarse');
+  expect(css).toContain('min-height:44px');
+});
