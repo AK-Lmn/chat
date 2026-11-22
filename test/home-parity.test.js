@@ -1,7 +1,7 @@
 // The new home page (web/src) must show everything the server streams, as /classic (src/page.js) does (#343-#347).
 import {test, expect} from 'bun:test';
 import {readFileSync} from 'node:fs';
-import {newTurn, applyEv} from '../web/src/events.js';
+import {newTurn, applyEv, liveText} from '../web/src/events.js';
 
 const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const app = read('web/src/App.jsx');
@@ -63,4 +63,49 @@ test('the home page at / can be found by search engines and shows a link preview
   expect(home).toContain('<link rel="canonical" href="https://chat.flisk.si/">');
   expect(home).toContain('<meta name="twitter:card" content="summary_large_image">');
   expect(tags(home)).toEqual(tags(appPage({login: '', anon: true, connected: []})));
+});
+
+test('closing the tab while a task runs asks first, as /classic does (#352)', () => {
+  expect(page).toContain("addEventListener('beforeunload'");
+  // The guard is on only while a task runs and is taken off when it ends.
+  expect(app).toMatch(/if \(!busy\) return undefined;[\s\S]{0,200}addEventListener\('beforeunload', stay\)[\s\S]{0,80}removeEventListener\('beforeunload', stay\)[\s\S]{0,20}\}, \[busy\]\)/);
+  expect(app).toContain("e.preventDefault(); e.returnValue = '';");
+});
+
+test('screen readers hear the status and the answer; errors and limits are alerts (#353)', () => {
+  expect(page).toContain('aria-live="polite"');
+  expect(app).toContain('aria-live="polite" aria-atomic="true" data-testid="turn-status">{liveText(turns, busy)}');
+  expect(app).toContain('<Card role="alert"><VStack gap={2}>\n      <Text weight="semibold">{t.error.message}');
+  expect(app).toContain('<Card role="alert"><VStack gap={2}>\n      <Heading level={4}>Daily limit reached');
+  const turn = (t, extra) => ({task: 'x', files: [], t: {...newTurn('x'), ...t}, ...extra});
+  expect(liveText([], false)).toBe('');
+  expect(liveText([turn({status: 'Searching the web'})], true)).toBe('Searching the web…');
+  expect(liveText([turn({status: 'Done', answer: 'Here it is.'})], false)).toBe('Answer ready: Here it is.');
+  expect(liveText([turn({status: 'Done', answer: 'y'.repeat(900)})], false).length).toBe('Answer ready: '.length + 300);
+  expect(liveText([turn({error: {message: 'No', kind: 'busy'}})], false)).toBe('');
+  // Opening an old chat from the list is not read out.
+  expect(liveText([turn({status: 'Done', answer: 'old'}, {old: true})], false)).toBe('');
+});
+
+test('a past chat can be deleted from the list, as on /classic (#355)', async () => {
+  expect(page).toContain('Delete chat: ');
+  expect(app).toContain("actions={<Button label={'Delete chat: ' + (c.title || 'Untitled')}");
+  expect(app).toMatch(/setChats\(deleteChat\(c\.id\)\);\s*if \(c\.id === chatId\) newChat\(\);/);
+  const store = {chat_history_v1: JSON.stringify([{id: 'a', title: 'A'}, {id: 'b', title: 'B'}, {id: 'c', title: 'C'}])};
+  const had = globalThis.localStorage;
+  globalThis.localStorage = {getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; }};
+  const {deleteChat, loadChats} = await import('../web/src/api.js?delete-chat'); // its own copy: other tests load api.js with a window set
+  expect(deleteChat('b').map((c) => c.id)).toEqual(['a', 'c']);
+  expect(loadChats().map((c) => c.id)).toEqual(['a', 'c']);
+  expect(deleteChat('nope').map((c) => c.id)).toEqual(['a', 'c']);
+  globalThis.localStorage = had;
+});
+
+test('the home page has one level-1 heading, as /classic does (#357)', () => {
+  expect(page).toMatch(/<h1[ >]/);
+  expect(app.match(/<Heading level=\{1\}/g) || []).toHaveLength(1);
+  expect(app).toContain("<Heading level={1} className=\"greet\">{BOOT.login ? 'What shall we make today?'");
+  // Once a chat has turns the greeting goes, and a hidden h1 names the chat; the two never show together.
+  expect(app).toContain('{!turns.length && (');
+  expect(app).toContain('{turns.length > 0 && <h1 className="sr-only">');
 });

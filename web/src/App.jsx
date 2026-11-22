@@ -3,9 +3,9 @@ import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
-import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, vaultReady} from './api.js';
+import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, deleteChat, vaultReady} from './api.js';
 import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
-import {newTurn, applyEv, nextSteps, chatTitle, shownText} from './events.js';
+import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
@@ -27,7 +27,7 @@ import {
 } from '@astryxdesign/core/Chat';
 import {
   PlusIcon, MicrophoneIcon, GlobeAltIcon, ChatBubbleLeftIcon, ComputerDesktopIcon, ArrowTopRightOnSquareIcon, PaperClipIcon, FilmIcon,
-  CloudIcon, ChartBarIcon, ServerStackIcon, SpeakerWaveIcon, Cog6ToothIcon, MagnifyingGlassIcon, SunIcon, KeyIcon,
+  CloudIcon, ChartBarIcon, ServerStackIcon, SpeakerWaveIcon, Cog6ToothIcon, MagnifyingGlassIcon, SunIcon, KeyIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
 
 const touch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
@@ -86,7 +86,7 @@ function ErrorCard({t, onPick}) {
   const choices = nextSteps(t.error.kind, onPick.free);
   const label = {'setup-key': 'Add my API key', 'choose-model': 'Choose another model', wolf: 'Use Flisk Wolf (free)', 'change-provider': 'Change the AI', 'connect-computer': 'Connect a computer', retry: 'Try again', openrouter: 'Log in with OpenRouter, free', discord: 'Ask on Discord', 'change-model': 'Change the AI'};
   return (
-    <Card><VStack gap={2}>
+    <Card role="alert"><VStack gap={2}>
       <Text weight="semibold">{t.error.message}</Text>
       <HStack gap={2} wrap="wrap">{choices.map((c, i) => <Button key={c} label={label[c]} variant={i === 0 ? 'primary' : 'secondary'} size="sm" onClick={() => onPick(c)} />)}</HStack>
     </VStack></Card>
@@ -95,7 +95,7 @@ function ErrorCard({t, onPick}) {
 
 function LimitCard({info, task, onPick}) {
   return (
-    <Card><VStack gap={2}>
+    <Card role="alert"><VStack gap={2}>
       <Heading level={4}>Daily limit reached</Heading>
       <Text color="secondary">{info.error || 'You used all ' + (info.limit || '') + ' free tasks today.'} {info.resetsIn ? 'It resets in ' + info.resetsIn + '.' : ''} Use your own key for no limit, or wait.</Text>
       <HStack gap={2} wrap="wrap">
@@ -176,6 +176,13 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const fileIn = useRef(null);
   const ctx = {on: explain, show: setCaption};
   useKeyboardViewport();
+  // A task is running: ask before the tab is closed or reloaded, as /classic does (#352).
+  useEffect(() => {
+    if (!busy) return undefined;
+    const stay = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', stay);
+    return () => window.removeEventListener('beforeunload', stay);
+  }, [busy]);
 
   const persist = useCallback((id, tr) => {
     if (!hist.current.length) return;
@@ -294,8 +301,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   const [navOpen, setNavOpen] = useState(false); // the phone chat drawer
   const newChat = () => { setNavOpen(false); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); };
+  // Delete one past chat from this browser (#355). Deleting the open chat starts a new one.
+  const dropChat = (c) => {
+    if (!confirm('Delete the chat "' + (c.title || 'Untitled') + '"? This cannot be undone.')) return;
+    setChats(deleteChat(c.id));
+    if (c.id === chatId) newChat();
+    setNotice('Chat deleted.');
+  };
   const openChat = (c) => { newChat(); hist.current = c.msgs.slice(); memo.current = {text: c.memo || '', n: c.memoN || 0, busy: false}; setChatId(c.id);
-    const out = []; for (let i = 0; i < c.msgs.length; i++) if (c.msgs[i].role === 'user') out.push({task: c.msgs[i].content, files: [], t: {...newTurn(c.msgs[i].content), answer: (c.msgs[i + 1] && c.msgs[i + 1].role === 'assistant') ? c.msgs[i + 1].content : '', status: 'Done'}});
+    const out = []; for (let i = 0; i < c.msgs.length; i++) if (c.msgs[i].role === 'user') out.push({old: true, task: c.msgs[i].content, files: [], t: {...newTurn(c.msgs[i].content), answer: (c.msgs[i + 1] && c.msgs[i + 1].role === 'assistant') ? c.msgs[i + 1].content : '', status: 'Done'}});
     setTurns(out); };
 
   // Back from OpenRouter login: the key is saved, so run the task the visitor had typed.
@@ -335,7 +349,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             <Tip text="Find an older chat by a word you remember."><Button label={filter ? 'Clear search' : 'Search your chats'} variant="ghost" icon={<Icon icon={MagnifyingGlassIcon} size="sm" />} isFullWidth onClick={() => setFilter(filter ? '' : (prompt('Search your chats for:') || ''))} /></Tip></VStack>}
           footer={<HStack gap={2} align="center"><Avatar name={BOOT.login || 'Guest'} size="sm" /><Text type="supporting">{BOOT.login ? '@' + BOOT.login : 'Not signed in'}</Text></HStack>}>
           <SideNavSection title="Your chats">
-            {shown.map((c) => <SideNavItem key={c.id} label={c.title || 'Untitled'} icon={ChatBubbleLeftIcon} isSelected={c.id === chatId} onClick={() => openChat(c)} />)}
+            {shown.map((c) => <SideNavItem key={c.id} label={c.title || 'Untitled'} icon={ChatBubbleLeftIcon} isSelected={c.id === chatId} onClick={() => openChat(c)}
+              actions={<Button label={'Delete chat: ' + (c.title || 'Untitled')} variant="ghost" isIconOnly icon={<Icon icon={TrashIcon} size="sm" />} onClick={() => dropChat(c)} />} />)}
             {!!BOOT.login && !BOOT.anon && <SideNavItem label="Reviews of your pull requests" href="/reviews" />}
             {!shown.length && <Text type="supporting" color="secondary" style={{padding: 8}}>Nothing here yet. Your chats stay in this browser.</Text>}
           </SideNavSection>
@@ -349,6 +364,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     <div className="vv-root">
     {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
     {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
+    <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="turn-status">{liveText(turns, busy)}</div>
+    {turns.length > 0 && <h1 className="sr-only">{'Flisk Chat: ' + String(turns[0].task || 'files').slice(0, 80)}</h1>  /* the greeting h1 is gone once a chat has turns (#357) */}
     <input ref={fileIn} type="file" multiple hidden onChange={(e) => { attach(e.target.files); e.target.value = ''; }} />
     {/* A custom top bar gets no automatic menu button, so it is placed here: without it phones cannot reach New chat or the chat list. */}
     <AppShell height="fill" mobileNav={{hasToggle: false, isOpen: navOpen, onOpenChange: setNavOpen, content: drawer}}
@@ -395,7 +412,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         <ChatMessageList>
           {!turns.length && (
             <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
-              <ChatMessageBubble variant="ghost"><Markdown density="compact">{BOOT.login ? 'What shall we make today? Ask a question, or describe a website or app.' : 'Flisk Chat makes real websites and apps from a sentence, on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown></ChatMessageBubble>
+              <ChatMessageBubble variant="ghost"><VStack gap={1}>
+                <Heading level={1} className="greet">{BOOT.login ? 'What shall we make today?' : 'Make real websites and apps from a sentence'}</Heading>
+                <Markdown density="compact">{BOOT.login ? 'Ask a question, or describe a website or app.' : 'Flisk Chat makes them on a computer that is yours. Sign in with GitHub to start. You can look around first.'}</Markdown>
+              </VStack></ChatMessageBubble>
               {!BOOT.login && <ChatMessageBubble variant="ghost"><Button label="Sign in with GitHub" variant="primary" href="/auth/start" /></ChatMessageBubble>}
               <ChatMessageBubble variant="ghost"><HStack className="chips" gap={2} wrap="wrap">
                 {starters.map((c) => <Tip key={c.label || c.id} title={c.label} brand="flisk" text={'Tap to try: ' + (c.prompt || c.label)} more="Flisk does the work and shows you the result in this chat."><Button label={c.label} variant="secondary" size="sm" onClick={() => setValue(c.prompt || c.label)} /></Tip>)}
@@ -422,7 +442,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         onBuild={(t) => { run(t).catch(() => {}); }}
         onKeep={(ts) => {
           const pairs = [];
-          for (let k = 0; k + 1 < ts.length; k += 2) pairs.push({task: ts[k].content, files: [], t: {...newTurn(ts[k].content), answer: ts[k + 1].content, status: 'Done'}});
+          for (let k = 0; k + 1 < ts.length; k += 2) pairs.push({old: true, task: ts[k].content, files: [], t: {...newTurn(ts[k].content), answer: ts[k + 1].content, status: 'Done'}});
           setTurns((all) => [...all, ...pairs]);
           ts.forEach((m) => hist.current.push(m)); persist(chatId); void roll();
         }} />

@@ -164,4 +164,6 @@ export async function orCatalogue() {
 // ---- past chats: this browser only, same storage and shape as the current page -------------------------------------------
 const HKEY = 'chat_history_v1';
 export const loadChats = () => { try { return JSON.parse(localStorage.getItem(HKEY) || '[]'); } catch (e) { return []; } };
+// Remove one chat from this browser and return the list that is left (#355).
+export const deleteChat = (id) => { const left = loadChats().filter((c) => c.id !== id); saveChats(left); return left.slice(0, 30); };
 export const saveChats = (all) => { try { localStorage.setItem(HKEY, JSON.stringify(all.slice(0, 30))); } catch (e) { /* storage full or blocked */ } };
