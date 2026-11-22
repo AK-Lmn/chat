@@ -1,0 +1,26 @@
+# Measures this repo's north star (north_star.measure in docs/gel.json) every Monday and publishes the number, with this
+# run's link, to the north-star branch. The GEL north-star guard and Cilytics read it there. A missed target turns the run red.
+name: North star
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: north-star
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    permissions:
+      contents: write
+    uses: flisk-sh/gel/.github/workflows/north-star.yml@6a25d9698e613ae0c6b101bf5d01c2bf03bda123 # main, north-star passes measure_secret (gel#69)
+    with:
+      gel_ref: 6a25d9698e613ae0c6b101bf5d01c2bf03bda123
+      timeout: 10
+    secrets:
+      measure_secret: ${{ secrets.FLISK_ANALYTICS_KEY }}
