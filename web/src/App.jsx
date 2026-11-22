@@ -3,7 +3,7 @@ import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
-import {BOOT, runTask, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, vaultReady} from './api.js';
+import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, vaultReady} from './api.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -217,6 +217,19 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setBusy(false); ctl.current = null;
     if (res.status === 401) { setTurns((all) => all.slice(0, -1)); setNotice('Sign in with GitHub to run tasks.'); return; }
     if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
+    // No cloud computer connected: run the task on the small Linux in this tab, as /classic does. If the tab cannot start it,
+    // the card to connect a computer is shown instead.
+    if (res.status === 409 && podOk()) {
+      setBusy(true); ctl.current = ac;
+      put({...t, status: 'Starting a computer in this tab'});
+      if (await getPod().then(() => true, () => false)) {
+        try { res = await runInBrowser(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
+        catch (e) { res = {status: e.name === 'AbortError' ? 0 : -1}; }
+      }
+      setBusy(false); ctl.current = null;
+      if (res.status === -1) { put({...t, error: {message: 'The computer in this tab stopped before the task finished. Try again.', kind: 'busy'}}); return; }
+      if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
+    }
     if (res.status === 409) { put({...t, needPod: true}); return; }
     if (res.status && res.status !== 200) { put({...t, error: {message: (res.body && res.body.error) || 'Something went wrong.', kind: 'other'}}); return; }
     if (!opts.reuse || !hist.current.length || hist.current[hist.current.length - 2]?.content !== task) hist.current.push({role: 'user', content: task});

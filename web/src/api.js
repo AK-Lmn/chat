@@ -71,6 +71,51 @@ export async function runTask(payload, onEv, signal) {
   return { status: 200 };
 }
 
+// ---- the computer in this tab ----------------------------------------------------------------------------------------
+// With no cloud computer connected, /api/run answers 409. The task then runs on a small Linux inside this tab (fleet's browser pod,
+// a pinned release of github.com/flisk-sh/linux2wasm) over a WebSocket to chat: chat thinks, the tab is the computer. Same as /classic.
+export const podOk = () => !!BOOT.pod && typeof WebAssembly === 'object' && typeof WebSocket === 'function';
+let podP = null;
+export function getPod() {
+  if (!podP) podP = import(/* @vite-ignore */ BOOT.pod + 'pod.js').then((m) => m.startBrowserPod({ base: BOOT.pod + 'vendor/' })).catch((e) => { podP = null; throw e; });
+  return podP;
+}
+async function podCall(ev) {
+  if (ev.op === 'stop') { const was = podP; podP = null; if (was) { const p = await was.catch(() => null); if (p) await p.stop(); } return {}; }
+  const pod = await getPod();
+  if (ev.op === 'start') return { id: 'browser', provider: 'your browser' };
+  if (ev.op === 'run') return pod.run(String(ev.command), { timeout: 60 });
+  if (ev.op === 'write') { await pod.write(String(ev.path), String(ev.content)); return {}; }
+  if (ev.op === 'read') return pod.read(String(ev.path));
+  throw new Error('unknown computer call');
+}
+// One task on the computer in this tab. Returns {status:200} when it is done, or chat's refusal as {status, body}
+// (429 daily limit, anything else); throws when the line breaks or the user presses Stop (an AbortError).
+export function runInBrowser(payload, onEv, signal) {
+  return new Promise((resolve, reject) => {
+    let over = false;
+    const ws = new WebSocket(location.origin.replace(/^http/, 'ws') + '/api/run');
+    const fin = (v, e) => { if (over) return; over = true; try { ws.close(); } catch (x) { /* already closed */ } if (e) reject(e); else resolve(v); };
+    signal.addEventListener('abort', () => { const e = new Error('stopped'); e.name = 'AbortError'; fin(null, e); podCall({ op: 'stop' }).catch(() => {}); });
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'task', ...payload }));
+    ws.onmessage = async (m) => {
+      let ev;
+      try { ev = JSON.parse(m.data); } catch (e) { return; }
+      if (ev.type === 'pod_call') {
+        let out;
+        try { out = { data: await podCall(ev) }; } catch (e) { out = { error: String((e && e.message) || e) }; }
+        try { ws.send(JSON.stringify({ type: 'pod_reply', id: ev.id, ...out })); } catch (e) { /* line closed */ }
+        return;
+      }
+      if (ev.type === 'refused') return fin({ status: ev.status || 400, body: ev });
+      if (ev.type === 'done') return fin({ status: 200 });
+      onEv(ev);
+    };
+    ws.onerror = () => fin(null, new Error('Chat could not open the line to the computer in your browser. Try again.'));
+    ws.onclose = () => fin(null, new Error('The line to chat closed before the task finished. Try again.'));
+  });
+}
+
 // Connect a computer (Daytona, Upstash, E2B, Isorun) with the visitor's own key. The server keeps it encrypted, per login.
 export async function connectComputer(provider, key) {
   const res = await fetch('/api/connect', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider, key }) }).catch(() => null);
