@@ -11,7 +11,7 @@ import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, runTask } fro
 import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
 import { lookup } from './lookup.js';
 import { cleanMode, searchWeb } from './search.js';
-import { nextPage, nextCsp } from './next-page.js';
+import { appAsset, nextPage, nextCsp } from './next-page.js';
 import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
@@ -363,6 +363,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
     return new Response(null, { status: 404, headers: { 'cache-control': 'public, max-age=3600' } });
   }
+  if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/_app/')) return appAsset(path) || new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/.well-known/security.txt') return new Response(SECURITY_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });

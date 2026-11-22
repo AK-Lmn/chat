@@ -1,7 +1,7 @@
 // The new Astryx look of the chat, served at / (the previous page stays at /classic).
 // The app itself is built from web/ (see scripts/embed-web.mjs) into next-app.generated.js; this only wraps it in a page
 // and hands it what the server knows about the visitor (the same facts the current page gets).
-import { NEXT_CSS, NEXT_JS } from './next-app.generated.js';
+import { NEXT_CSS, NEXT_CSS_PATH, NEXT_FONTS, NEXT_JS, NEXT_JS_PATH } from './next-app.generated.js';
 import { EARTH_JS } from './earth.js';
 import { CATS, ICON_HEAD, KEY_PAGES, PROVIDER_CARDS, PROVIDER_NAMES, SEO_HEAD } from './page.js';
 
@@ -20,12 +20,30 @@ export function nextPage({ login = null, anon = false, connected = [], models = 
 ${ICON_HEAD}
 <script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>
 <script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>
-<style>${NEXT_CSS}${BAR_CSS}</style></head><body><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div id="root"></div>
+<link rel="modulepreload" href="${NEXT_JS_PATH}"><link rel="stylesheet" href="${NEXT_CSS_PATH}">
+<style>${BAR_CSS}</style></head><body><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div id="root"></div>
 <script>window.__BOOT__=${json(boot)}</script>
-<script type="module">${NEXT_JS}</script>
+<script type="module" src="${NEXT_JS_PATH}"></script>
 <script>${EARTH_JS}</script>
 <script>${BAR_JS}</script></body></html>`;
 }
 
-// The Astryx fonts are inlined in the CSS as data: URLs, which the shared policy does not allow for fonts.
-export const nextCsp = (csp) => csp.replace('font-src ', 'font-src data: ');
+// The app's own files (JS, CSS, fonts) come from this origin, so the page policy allows 'self' for them.
+export const nextCsp = (csp) => csp.replace('script-src ', "script-src 'self' ").replace('style-src ', "style-src 'self' ").replace('font-src ', "font-src 'self' ");
+
+// /_app/<name>.<hash>.<ext>: the app's files, kept by browsers for a year because the name changes with the content (#351).
+// A page from the version before a deploy can still ask for an old name for a moment; it gets today's file, not kept.
+const TYPES = { js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', woff2: 'font/woff2' };
+const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+export function appAsset(path) {
+  const m = /^\/_app\/(app|font)\.[0-9a-f]{12}\.(js|css|woff2)$/.exec(path);
+  if (!m) return null;
+  const [, name, ext] = m;
+  const now = path === NEXT_JS_PATH || path === NEXT_CSS_PATH || path in NEXT_FONTS;
+  let body;
+  if (path in NEXT_FONTS) body = b64(NEXT_FONTS[path]);
+  else if (name === 'app' && ext === 'js') body = NEXT_JS;
+  else if (name === 'app' && ext === 'css') body = NEXT_CSS;
+  else return null;
+  return new Response(body, { headers: { 'content-type': TYPES[ext], 'cache-control': now ? 'public, max-age=31536000, immutable' : 'no-store', 'x-content-type-options': 'nosniff' } });
+}
