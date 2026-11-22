@@ -7,7 +7,7 @@ import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
 import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, deleteChat, vaultReady} from './api.js';
 import {markEngaged} from './engaged.js';
 import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
-import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice} from './events.js';
+import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
@@ -123,10 +123,12 @@ function ErrorCard({t, onPick}) {
 }
 
 function LimitCard({info, task, onPick}) {
+  const err = info.error ? (info.error.endsWith('.') ? info.error : info.error + '.') : 'You used all ' + (info.limit || '') + ' free tasks today.';
+  const reset = resetText(info.resetsIn);
   return (
     <Card role="alert"><VStack gap={2}>
       <Heading level={4}>Daily limit reached</Heading>
-      <Text color="secondary">{info.error || 'You used all ' + (info.limit || '') + ' free tasks today.'} {info.resetsIn ? 'It resets in ' + info.resetsIn + '.' : ''} Use your own key for no limit, or wait.</Text>
+      <Text color="secondary">{err} {reset ? 'It resets in ' + reset + '.' : ''} Use your own key for no limit, or wait.</Text>
       <HStack gap={2} wrap="wrap">
         <Button label="Log in with OpenRouter, free" variant="primary" size="sm" onClick={() => orStartLogin(task).catch(() => {})} />
         <Button label="Use my own key" variant="secondary" size="sm" onClick={() => onPick('setup-key')} />
