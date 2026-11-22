@@ -47,3 +47,4 @@ html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{backg
 .chat-head .chat-head-end{flex-shrink:0}
 /* 320-360px phones: tighter mode buttons and edges, so the more button stays on screen. */
 @media (max-width:360px){.chat-head:has(.chat-head-end){padding-left:var(--spacing-2)!important;padding-right:var(--spacing-2)!important}.chat-head .astryx-segmented-control-item{padding-left:7px!important;padding-right:7px!important}.chat-head .chat-head-end a{padding-left:10px!important;padding-right:10px!important}}
+[role=dialog] .astryx-field,[role=dialog] input{min-width:0}
