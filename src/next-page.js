@@ -17,6 +17,7 @@ export function nextPage({ login = null, anon = false, connected = [], models = 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
 <title>Flisk Chat</title><meta name="robots" content="noindex">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>
 <script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>
 <style>${NEXT_CSS}${BAR_CSS}</style></head><body><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div id="root"></div>
