@@ -4,6 +4,7 @@ import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
 import {ModelDialog, ComputerDialog, brandOf} from './Pickers.jsx';
 import {BOOT, runTask, podOk, getPod, runInBrowser, keyFor, modelFor, lsGet, orStartLogin, orFinishLogin, loadChats, saveChats, deleteChat, vaultReady} from './api.js';
+import {markEngaged} from './engaged.js';
 import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
@@ -270,6 +271,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
 
   const run = useCallback(async (task, opts = {}) => {
     if (busy) return;
+    markEngaged();
     await vaultReady;
     const [m, cat] = MODES[opts.mode || mode] || MODES.build;
     const sendFiles = opts.files || [];

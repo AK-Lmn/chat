@@ -23,3 +23,7 @@ as `MEASURE_SECRET`).
 
 **Also enforced in code:** `test/first-screen.test.js` holds the home page to the GEL five-second rules
 (headline up to 12 words, lead up to 32, no jargon, a button right under the headline).
+
+## What counts as engaged
+
+The analytics beacon counts one pageview per page load, and chat never navigates. From 2026-11-22 the first task of a visit sends one more pageview, `/ask`, with the same visit id (`web/src/engaged.js`, `markEngaged`). A visit that asks for something is two pageviews, so it no longer reads as a bounce. Readings before that date counted every engaged visitor as a bounce, so they are not comparable: the 66% baseline and the first 74% reading both overstate the bounce.
