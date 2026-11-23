@@ -38,6 +38,19 @@ Preferred-Languages: en
 Canonical: https://chat.flisk.si/.well-known/security.txt
 `;
 
+const LLMS_TXT = `# Flisk Chat
+
+> AI chat assistant, fast, minimal, built for developers.
+
+Ask for a task or a website. Flisk Chat gets a real computer and does it.
+
+## Key Links
+
+- [Home](https://chat.flisk.si/): Web interface for Flisk Chat
+- [GitHub](https://github.com/flisk-sh/chat): Open-source repository, issues, and discussions
+- [Flisk](https://flisk.sh/): Flisk CLI and local developer runtime
+`;
+
 export const MAX_SITE_BYTES = 200 * 1024;
 export const SITES_PER_LOGIN = 5;
 export const VIDEOS_PER_LOGIN = 5;
@@ -366,6 +379,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/_app/')) return appAsset(path) || new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path === '/llms.txt') return new Response(LLMS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/.well-known/security.txt') return new Response(SECURITY_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
 
