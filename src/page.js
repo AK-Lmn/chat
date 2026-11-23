@@ -546,6 +546,20 @@ export const homePage = () =>
 export const messagePage = (title, text) =>
   shell(`${title} · chat`, `<main id="main" class="col" style="padding-top:14vh;overflow:auto;flex:1;min-height:0;width:100%">${LOGO}<h1 style="font:600 32px/1.2 var(--sans);letter-spacing:-.02em;margin:28px 0 8px">${esc(title)}</h1><p style="color:var(--dim)">${esc(text)}</p><a class="btn" href="/">Back to chat</a></main>`);
 
+const NOT_FOUND_CSS = `
+:root{--bg:#F7F6F2;--ink:#1B1B18;--dim:#6B6960;--line2:#D3D0C5;--green:#2F7D4A;--sans:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,Arial,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);min-height:100vh;display:flex;flex-direction:column}
+.col{max-width:780px;margin:0 auto;padding:14vh 24px 24px;width:100%}
+h1{font:600 32px/1.2 var(--sans);letter-spacing:-.02em;margin:28px 0 8px}p{color:var(--dim);margin:8px 0 20px}
+.logo{display:inline-flex;align-items:center;gap:9px;font:600 17px/1 ui-monospace,Menlo,monospace;color:var(--ink);text-decoration:none}
+.logo span{color:var(--green)}
+.btn{display:inline-block;padding:8px 16px;background:var(--green);color:#fff;text-decoration:none;border-radius:4px;font-weight:500}
+`;
+
+export const notFoundPage = (title = 'Page not found', text = 'Nothing lives at this address.') =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)} · chat</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.ico"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><style>${NOT_FOUND_CSS}</style></head><body><main id="main" class="col"><a class="logo" href="/"><b>chat<span>.</span>flisk</b></a><h1>${esc(title)}</h1><p>${esc(text)}</p><a class="btn" href="/">Back to chat</a></main></body></html>`;
+
+
 // Where a person manages the AI behind their pull request reviews (@flisk-chat review). The key is never shown again.
 // The looks a person can pick under the box. A new visitor gets Earth (see index.js), kept in the chat_theme cookie.
 export const THEMES = [['classic', 'Classic'], ['ivory', 'Ivory'], ['glow', 'Soft glow'], ['focus', 'Focus'], ['voice', 'Voice first'], ['earth', 'Earth']];
