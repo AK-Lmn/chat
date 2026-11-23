@@ -4,6 +4,12 @@ main = "src/worker.js"
 compatibility_date = "2026-10-01"
 routes = [{ pattern = "chat.flisk.si", custom_domain = true }]
 
+# Production Worker logs and error persistence.
+# head_sampling_rate = 1 keeps 100% of logs to assist debugging runtime errors and 500s.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # Hourly: delete computers past their time (shared apps after 7 days, leftovers of crashed tasks). src/index.js cleanPods.
 [triggers]
 crons = ["17 * * * *"]

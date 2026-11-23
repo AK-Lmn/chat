@@ -1260,3 +1260,14 @@ test('the pitch is shown in every theme, including voice and focus', () => {
   expect(page).not.toMatch(/data-theme=voice\] \.pitch[^{]*\{display:none/);
   expect(page).not.toMatch(/data-theme=focus\] \.pitch[^{]*\{display:none/);
 });
+
+describe('worker configuration', () => {
+  test('wrangler.toml parses and has observability enabled', () => {
+    const raw = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+    const parsed = Bun.TOML.parse(raw);
+    expect(parsed.observability).toBeDefined();
+    expect(parsed.observability.enabled).toBe(true);
+    expect(parsed.observability.head_sampling_rate).toBe(1);
+  });
+});
+
