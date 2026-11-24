@@ -11,8 +11,8 @@ import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, runTask } fro
 import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
 import { lookup } from './lookup.js';
 import { cleanMode, searchWeb } from './search.js';
-import { appAsset, nextPage, nextCsp } from './next-page.js';
-import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, THEME_IDS } from './page.js';
+import { appAsset, nextPage, nextCsp, embedCsp } from './next-page.js';
+import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
@@ -22,6 +22,8 @@ import { sitePhoto } from './photo.js';
 import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession, sameOrigin } from './session.js';
 import { speakStream, MAX_SPEAK } from './tts.js';
 import { sentenceSplitter, splitReply } from './talk-stream.js';
+import { COGITO_TYPE, cogitoStream, wantsCogito } from './cogito.js';
+const EARLY_EVENTS = new Set(['delta', 'thinking', 'sources']);
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
 import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alexa.js';
 import { withSecurityHeaders } from './security-headers.js';
@@ -61,6 +63,10 @@ let catalog = { at: 0, models: null };
 // The sandbox providers fleet routes to, by id and name, from fleet's public price list (cached 5 minutes), so a provider
 // added to fleet shows in the computer menu without a chat release. Falls back to the built-in list.
 let fleetNames = { at: 0, names: null };
+// In-memory cache for /health probes (10 seconds per isolate, #165).
+let healthCache = { at: 0, result: null };
+export const HEALTH_CACHE_MS = 10_000;
+export function resetHealthCache() { healthCache = { at: 0, result: null }; }
 export async function loadFleetNames(env, fetchImpl = fetch, now = Date.now()) {
   if (fleetNames.names && now - fleetNames.at < 300_000) return fleetNames.names;
   try {
@@ -93,11 +99,10 @@ export async function loadCatalog(env, now = Date.now()) {
 
 const SECURITY = {
   'x-content-type-options': 'nosniff',
-  'x-frame-options': 'DENY',
   'referrer-policy': 'same-origin',
   'strict-transport-security': 'max-age=31536000',
   // The Earth look loads three.js and its globe textures from these exact folders only (see earth.js).
-  'content-security-policy': `default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline' https://flisk.si https://flisk.sh ${THREE_SRC}; img-src 'self' data: blob: https://flisk.si ${TEXTURES.join(' ')}; media-src 'self' data: blob:; connect-src 'self' https://analytics.flisk.si https://openrouter.ai/api/v1/models https://openrouter.ai/api/v1/auth/keys; form-action 'self' https://github.com; frame-ancestors 'none'; base-uri 'none'`,
+  'content-security-policy': `default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline' https://flisk.si https://flisk.sh ${THREE_SRC}; img-src 'self' data: blob: https://flisk.si ${TEXTURES.join(' ')}; media-src 'self' data: blob:; connect-src 'self' https://analytics.flisk.si https://openrouter.ai/api/v1/models https://openrouter.ai/api/v1/auth/keys; form-action 'self' https://github.com; frame-ancestors https://analytics.flisk.si; base-uri 'none'`,
 };
 // A visitor who has no look yet gets Earth and keeps it in a cookie; the switch under the box changes it.
 export const DEFAULT_THEME = 'earth';
@@ -127,7 +132,8 @@ export const podBase = (env) => (env.BROWSER_POD_URL === '' ? '' : (env.BROWSER_
 // The browser model runs on inference's own origin, in a hidden iframe (inference's /browser-model page): chat frames that one
 // origin and loads no script from anywhere new, so the engine and the weights never run in the page that holds the session.
 export const inferenceOrigin = (env) => { try { return new URL(env.INFERENCE_URL || 'https://inference.flisk.si/v1/chat/completions').origin; } catch { return 'https://inference.flisk.si'; } };
-export const withFrame = (csp, inf) => (inf ? csp.replace("default-src 'none';", `default-src 'none'; frame-src ${inf};`) : csp);
+// The page itself may be framed (the side panel previews a published /s/<id> page); inference's origin is added when it is set.
+export const withFrame = (csp, inf) => csp.replace("default-src 'none';", `default-src 'none'; frame-src 'self'${inf ? ' ' + inf : ''};`);
 export function cspWithPod(pod, origin) {
   if (!pod) return SECURITY['content-security-policy'];
   const from = new URL(pod).href;
@@ -350,7 +356,7 @@ export async function handle(request, env = {}, opts = {}) {
   return handleRequest(request, env, opts);
 }
 
-async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil = null, socketPair = null } = {}) {
+async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil = null, socketPair = null, now = Date.now() } = {}) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const origin = env.PUBLIC_ORIGIN || url.origin;
@@ -376,7 +382,11 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
 
   // Is chat able to reach what it depends on? No sign-in, no secrets, only status codes.
+  // Cached for 10 seconds per isolate (#165) so repeated checks make no extra outgoing requests.
   if (request.method === 'GET' && path === '/health') {
+    if (healthCache.result && now - healthCache.at < HEALTH_CACHE_MS) {
+      return json(healthCache.result.status, healthCache.result.body);
+    }
     const probe = async (u, call = fetchImpl) => {
       try {
         const r = await call(u, { method: 'GET', headers: { 'user-agent': 'flisk-chat-health' } });
@@ -394,7 +404,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const [f, i] = await Promise.all([probe(`${fleet}/v1/prices`), probe(`${inference}/v1/models`, env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl)]);
     const up = (p) => p.status >= 200 && p.status < 500;
     const ok = up(f) && up(i);
-    return json(ok ? 200 : 503, { ok, fleet: f, inference: i, checkedAt: new Date().toISOString() });
+    const code = ok ? 200 : 503;
+    const body = { ok, fleet: f, inference: i, checkedAt: new Date(now).toISOString() };
+    healthCache = { at: now, result: { status: code, body } };
+    return json(code, body);
   }
 
   // GitHub App: "@flisk-chat review" on a pull request (signed webhook, no session).
@@ -523,9 +536,11 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const refund = async (force = false) => chosen.free && (force || !m.answered()) && refundQuota(env, 'chat', { anon, id: await who(login) });
     return { m, refund };
   };
-  if (request.method === 'GET' && (path === '/' || path === '/next' || path === '/classic')) {
+  if (request.method === 'GET' && (path === '/' || path === '/next' || path === '/classic' || path === '/embed' || path === '/settings' || path === '/reviews')) {
     // The new Astryx page is the home page; the previous page stays at /classic.
-    const isNext = path !== '/classic';
+    const isNext = path !== '/classic';  // /settings and /reviews are the chat with the settings dialog open over it (the page script opens it)
+    // /embed is the chat as a window inside grow.flisk.si: same app, no side bar, no Earth, and only Grow may frame it.
+    const embed = path === '/embed';
     const [models, names] = await Promise.all([loadCatalog(env), loadFleetNames(env, fetchImpl)]);
     const { theme, cookie } = pickTheme(request);
     // The session cookie goes first and the look cookie last.
@@ -542,7 +557,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const page = (opts) => {
       const inf = inferenceOrigin(env);
       const csp = withFrame(cspWithPod(pod, origin), inf);
-      if (isNext) return html(nextPage({ ...opts, models, theme, here, pod, inf, names }), 200, { 'content-security-policy': nextCsp(csp) });
+      if (isNext) return html(nextPage({ ...opts, models, theme: embed ? 'system' : theme, here, pod, inf, names, embed }), 200, { 'content-security-policy': embed ? embedCsp(nextCsp(csp)) : nextCsp(csp) });
       let body = appPage({ ...opts, models, theme, here, pod, inf, names });
       if (geo === 'UA') body = body.replace('<head>', `<head><script>window.__GEO="UA"</script>`);
       return html(body, 200, { 'content-security-policy': csp });
@@ -558,22 +573,36 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     return withLook(page({ login: session.login, anon, connected: Object.keys(connections) }));
   }
 
-  if (request.method === 'GET' && path === '/reviews') {
-    if (!session || anon) return redirect('/auth/start');
-    return html(reviewsPage({ login: session.login, saved: await loadSettings(env, session.login).catch(() => null), stored: !!env.KEY_SECRET, limit: REVIEWS_PER_DAY, flash: url.searchParams.get('ok') || '' }));
+  // The inside of the settings dialog for this visitor. Anyone can open it: a guest sees the account and help sections, a signed-in
+  // visitor also their AI for reviews. Only the AI's name and model come back, never its key.
+  if (request.method === 'GET' && path === '/settings/panel') {
+    const site = request.headers.get('sec-fetch-site');
+    if (site && site !== 'same-origin') return json(403, { error: 'this only works from chat itself' });
+    const ok = url.searchParams.get('ok');
+    const named = session && !anon;
+    return html(settingsPanelHtml({
+      login: session?.login || '', anon: !named, stored: !!env.KEY_SECRET, limit: REVIEWS_PER_DAY,
+      saved: named ? await loadSettings(env, session.login).catch(() => null) : null,
+      section: url.searchParams.get('section') || '', lang: url.searchParams.get('lang') === 'uk' ? 'uk' : '',
+      flash: ok === 'saved' || ok === 'deleted' ? ok : '',
+    }));
   }
   if (request.method === 'POST' && (path === '/reviews/save' || path === '/reviews/delete')) {
-    if (!session || anon) return redirect('/auth/start');
-    if (!sameOrigin(request, origin)) return html(messagePage('Not allowed', 'This only works from the chat page.'), 403);
+    // The dialog posts with fetch and wants JSON; a plain form post (no script) is redirected back to the chat as before.
+    const wantsJson = (request.headers.get('accept') || '').includes('application/json');
+    const fail = (status, error) => (wantsJson ? json(status, { error }) : html(messagePage('Not saved', error), status));
+    if (!session || anon) return wantsJson ? json(403, { error: 'PR reviews need GitHub sign-in' }) : redirect('/auth/start');
+    if (!sameOrigin(request, origin)) return wantsJson ? json(403, { error: 'this only works from chat itself' }) : html(messagePage('Not allowed', 'This only works from the chat page.'), 403);
     if (path === '/reviews/delete') {
       await deleteSettings(env, session.login);
-      return redirect('/reviews?ok=deleted');
+      return wantsJson ? json(200, { ok: true, flash: 'deleted' }) : redirect('/settings?ok=deleted');
     }
     const f = await request.formData().catch(() => null);
     const chosen = resolveModel({ ai: String(f?.get('ai') || ''), key: String(f?.get('key') || ''), model: String(f?.get('model') || '') });
-    if (chosen.error || chosen.free) return html(reviewsPage({ login: session.login, saved: await loadSettings(env, session.login).catch(() => null), stored: true, limit: REVIEWS_PER_DAY, error: chosen.error || 'pick an AI', form: { ai: String(f?.get('ai') || ''), model: String(f?.get('model') || '') } }), 400);
+    if (chosen.error || chosen.free) return fail(400, chosen.error || 'pick an AI');
     const r = await saveSettings(env, session.login, { ai: chosen.ai, model: chosen.model, key: chosen.key });
-    return r.error ? html(messagePage('Not saved', r.error), 503) : redirect('/reviews?ok=saved');
+    if (r.error) return fail(503, r.error);
+    return wantsJson ? json(200, { ok: true, flash: 'saved' }) : redirect('/settings?ok=saved');
   }
 
   // The video repo's voice (Ava Multilingual) reading text aloud, streamed as mp3 so the page's audio player starts on
@@ -768,9 +797,14 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const w = writable.getWriter();
       const enc = new TextEncoder();
       let needPod = false, buffered = [];
-      const send = (e) => w.write(enc.encode(JSON.stringify(e) + '\n')).catch(() => {});
+      // Opt-in: a client that asks for cogito frames gets them (src/cogito.js); everyone else gets chat's own events as before.
+      const tr = wantsCogito(request) ? cogitoStream() : null;
+      if (tr) w.write(enc.encode(tr.hello())).catch(() => {});
+      const send = (e) => w.write(enc.encode(tr ? tr.encode(e) : JSON.stringify(e) + '\n')).catch(() => {});
       // Without a computer the steps are held until we know the task needs none; plain answers are then sent all at once.
-      const emit = (e) => { if (!noPod || e.type === 'delta') return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
+      // Status-only events (they set the label and add no step) go out at once even with no computer, so the visitor sees "Thinking"
+      // while the model works. Steps stay held: they are dropped if the task turns out to need a computer.
+      const emit = (e) => { if (!noPod || EARLY_EVENTS.has(e.type)) return send(e); if (needPod) return; if (e.type === 'pod_starting') { needPod = true; buffered = []; return; } buffered.push(e); };
       const computer = noPod ? { ...fleet, start: async () => ({ error: ['needs', 'a computer'].join(' ') }) } : fleet;
       const github = anon ? null : { login, ...((await loadGithubToken(env, login).catch(() => null)) || {}) };
       const heuristicLang = resolveLang({ text: task, sticky: String(body?.lang || '').slice(0, 8), ui: body?.ui });
@@ -794,7 +828,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
           await w.close().catch(() => {});
         });
       if (waitUntil) waitUntil(job);
-      return new Response(readable, { headers: { 'content-type': 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no' } });
+      return new Response(readable, { headers: { 'content-type': tr ? COGITO_TYPE : 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no', ...(tr ? { vary: 'Accept' } : {}) } });
     }
   }
   return html(messagePage('Page not found', 'Nothing lives at this address.'), 404);

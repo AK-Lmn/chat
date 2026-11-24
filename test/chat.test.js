@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
+import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, resetHealthCache, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
 import { parseAction, runTask } from '../src/loop.js';
 import { SYSTEM } from '../src/prompt.js';
 import { modelLabel, resolveModel } from '../src/model.js';
 import { EARTH_JS, shortCount, THREE_SRC, USERS, USERS_DATE } from '../src/earth.js';
 import { makeSession } from '../src/session.js';
 import { fakeD1 } from './d1.js';
+import { COGITO_TYPE, cogitoStream, fromFrame } from '../src/cogito.js';
 
 const SCHEMA = readFileSync(new URL('../schema.sql', import.meta.url), 'utf8');
 const ORIGIN = 'https://chat.test';
@@ -345,6 +346,7 @@ describe('service binding to inference', () => {
     expect(w.log.some((l) => l.modelCall)).toBe(false);
   });
   test('/health reports fleet and inference without sign-in', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
     const w = world();
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
@@ -354,16 +356,83 @@ describe('service binding to inference', () => {
     expect(Number.isNaN(Date.parse(r.checkedAt))).toBe(false);
   });
   test('/health answers 503 when fleet cannot be reached (#356)', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => { throw new Error('down'); } });
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 0 }, inference: { status: 401 } });
   });
   test('/health answers 503 when inference returns a 5xx (#356)', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('bad gateway', { status: 502 }) } });
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 200 }, inference: { status: 502, body: 'bad gateway' } });
+  });
+  test('/health runs fleet and inference probes concurrently and caches results for 10 seconds (#165)', async () => {
+    resetHealthCache();
+    const calls = [];
+    let fleetStarted = false;
+    let inferenceStarted = false;
+    let overlapped = false;
+
+    const fetchImpl = async (url) => {
+      calls.push({ url, at: Date.now() });
+      if (url.includes('fleet.test')) {
+        fleetStarted = true;
+        if (inferenceStarted) overlapped = true;
+        await new Promise((r) => setTimeout(r, 20));
+        fleetStarted = false;
+        return new Response('{}', { status: 200 });
+      }
+      return new Response('{}', { status: 401 });
+    };
+
+    const inferenceFetch = async (url) => {
+      calls.push({ url, at: Date.now() });
+      inferenceStarted = true;
+      if (fleetStarted) overlapped = true;
+      await new Promise((r) => setTimeout(r, 20));
+      inferenceStarted = false;
+      return new Response('{}', { status: 401 });
+    };
+
+    const e = env({ INFERENCE: { fetch: inferenceFetch } });
+
+    // Request 1: hits outgoing services concurrently at t0
+    const t0 = 1_000_000;
+    const res1 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 });
+    expect(res1.status).toBe(200);
+    const body1 = await res1.json();
+    expect(body1).toMatchObject({ ok: true, fleet: { status: 200 }, inference: { status: 401 } });
+    expect(body1.checkedAt).toBe(new Date(t0).toISOString());
+    expect(overlapped).toBe(true);
+    expect(calls.length).toBe(2);
+
+    // Request 2: within 10 seconds (e.g. t0 + 5000ms), served from cache with zero additional fetch calls
+    const res2 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 + 5000 });
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json();
+    expect(body2).toEqual(body1);
+    expect(calls.length).toBe(2);
+
+    // Request 3: after 10 seconds (e.g. t0 + 10001ms), cache expires and new probes run
+    const res3 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 + 10_001 });
+    expect(res3.status).toBe(200);
+    const body3 = await res3.json();
+    expect(body3.checkedAt).toBe(new Date(t0 + 10_001).toISOString());
+    expect(calls.length).toBe(4);
+  });
+  test('/health fault tolerance: failing probe returns status 0 and error, endpoint returns 200 if up or 503 if critical down (#165, #356)', async () => {
+    resetHealthCache();
+    // When fleet probe rejects with an exception
+    const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 200 }) } });
+    const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => { throw new Error('network down'); } });
+    expect(res.status).toBe(503);
+    const r = await res.json();
+    expect(r.ok).toBe(false);
+    expect(r.fleet).toEqual({ status: 0, error: 'request failed' });
+    expect(r.inference).toMatchObject({ status: 200 });
   });
 });
 
@@ -417,7 +486,7 @@ test('the page reads its models from inference /v1/catalog through the binding',
   expect(models.map((m) => m.id)).toEqual(['flisk-wolf-chat', 'new-one']);
   const page = appPageUi({ login: 'ann', connected: [], models });
   expect(page).toContain('"id":"new-one"');
-  expect(page.replace('<script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>', '').replace('<script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>', '').split('</script>').length).toBe(2);
+  expect(page.replace('<script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-free-key data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>', '').replace('<script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script>', '').split('</script>').length).toBe(2);
   expect(await loadCatalog({}, 2e13)).toBe(DEFAULT_MODELS);
 });
 
@@ -869,7 +938,7 @@ describe('search visibility', () => {
 test('pages load the shared Flisk bar and the CSP allows it', async () => {
   const res = await handle(new Request(`${ORIGIN}/classic`), env());
   const html = await res.text();
-  expect(html).toContain('<script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>');
+  expect(html).toContain('<script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-free-key data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script>');
   const csp = res.headers.get('content-security-policy');
   expect(csp).toMatch(/script-src [^;]*https:\/\/flisk\.si/);
   expect(csp).toMatch(/img-src [^;]*https:\/\/flisk\.si/);
@@ -1169,6 +1238,14 @@ describe('looks', () => {
     // Every look uses the system font stack: no Inter or Geist download for text.
     expect(html).toContain("--sans:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol'");
     expect(html).not.toContain('family=Inter');
+    // Google Fonts stylesheet requests at most 3 font families (Instrument Serif and Geist Mono) (#195)
+    const fontLink = html.match(/https:\/\/fonts\.googleapis\.com\/css2\?[^"']+/)?.[0] ?? '';
+    const families = [...fontLink.matchAll(/family=([^&]+)/g)].map((m) => decodeURIComponent(m[1].split(':')[0].replace(/\+/g, ' ')));
+    expect(families.length).toBeGreaterThan(0);
+    expect(families.length).toBeLessThanOrEqual(3);
+    expect(families).not.toContain('Inter');
+    expect(families).not.toContain('Inter Tight');
+    expect(families).not.toContain('Geist');
     // The left sidebar (chats) is monospace.
     expect(html).toContain('.side{--sans:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-family:var(--sans)}');
     const csp = res.headers.get('content-security-policy');
@@ -1284,3 +1361,70 @@ describe('http to https redirect (#177)', () => {
   });
 });
 
+
+describe('cogito frames on /api/run (server opt-in by Accept; the page asks by default)', () => {
+  const task = { task: 'make a site' };
+  const script = () => ['{"write":{"path":"/tmp/site/index.html","content":"<html>x</html>"}}', '{"publish":"/tmp/site/index.html"}', '{"say":"Done"}'];
+
+  test('without the Accept header nothing changes', async () => {
+    const e = env();
+    const res = await post(e, world({ replies: script() }), '/api/run', task, await authed(e));
+    expect(res.headers.get('content-type')).toBe('application/x-ndjson');
+    expect((await events(res)).every((x) => typeof x.type === 'string')).toBe(true);
+  });
+
+  test('with it: hello first, state frames, every event kept, same events come back', async () => {
+    const e = env();
+    const legacy = await events(await post(e, world({ replies: script() }), '/api/run', task, await authed(e)));
+    const res = await post(env(), world({ replies: script() }), '/api/run', task, await authed(env()), { accept: COGITO_TYPE });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe(COGITO_TYPE);
+    expect(res.headers.get('vary')).toBe('Accept');
+    const frames = await events(res);
+    expect(frames[0].h).toMatchObject({ v: 1, lvl: 1, ret: 'logged', fmt: 'ndjson' });
+    expect(frames.filter((f) => f.s).map((f) => f.s)).toContain('working');
+    expect(frames.at(-1).d).toBe(1);
+    // Decoding the frames gives chat's own events back: same order, same types, nothing lost.
+    const back = frames.map(fromFrame).filter(Boolean);
+    expect(back.map((x) => x.type)).toEqual(legacy.map((x) => x.type));
+    expect(back.find((x) => x.published).published).toMatch(/^https:\/\/chat\.test\/s\/[a-f0-9]{16}$/);
+  });
+
+  test('the built page asks for cogito by default, ?cogito=0 turns it off, and it decodes by the answer (guards a stale next-app.generated.js)', async () => {
+    const { NEXT_JS } = await import('../src/next-app.generated.js');
+    expect(NEXT_JS).toContain(COGITO_TYPE);
+    expect(NEXT_JS).toContain('cogito');
+    expect(NEXT_JS).toMatch(/get\([`"]cogito[`"]\)!==[`"]0[`"]/);
+    expect(NEXT_JS).toMatch(/get\([`"]content-type[`"]\)\|\|[`"][`"]\)\.includes\(\w+\)/);
+  });
+
+  test('cogitoStream: state frames only on change, deltas become t, done keeps ms and error', () => {
+    const t = cogitoStream({ id: 'r_test' });
+    const out = [{ type: 'thinking', step: 1 }, { type: 'thinking', step: 2 }, { type: 'delta', text: 'Hi' }, { type: 'delta', text: '!' }, { type: 'done', ms: 12, error: 'x' }]
+      .flatMap((ev) => t.encode(ev).trim().split('\n').map((l) => JSON.parse(l)));
+    expect(out.filter((f) => f.s).map((f) => f.s)).toEqual(['thinking', 'writing']);
+    expect(out.filter((f) => 't' in f).map((f) => f.t).join('')).toBe('Hi!');
+    expect(out.at(-1)).toEqual({ d: 1, ms: 12, err: 'x' });
+    expect(JSON.parse(t.hello()).h.id).toBe('r_test');
+    expect(fromFrame({ s: 'thinking' })).toBeNull();
+  });
+});
+
+describe('no computer: status reaches the visitor while the model works', () => {
+  test('"thinking" is sent before the model answers, steps and the answer still wait', async () => {
+    const e = env();
+    const w = world({ connected: false, replies: ['{"say":"391."}'] });
+    let release; const gate = new Promise((r) => (release = r));
+    let modelAnswered = false;
+    const fetchImpl = async (url, init) => { if (new URL(url).host === 'inf.test') { await gate; modelAnswered = true; } return w.fetchImpl(url, init); };
+    const res = await handle(new Request(`${ORIGIN}/api/run`, { method: 'POST', headers: { cookie: await authed(e), origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ task: 'what is 17 times 23?' }) }), e, { fetchImpl });
+    const reader = res.body.getReader(), dec = new TextDecoder(); let text = '';
+    while (!text.includes('"thinking"')) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value); }
+    expect(text).toContain('"type":"thinking"');
+    expect(modelAnswered).toBe(false);          // the visitor already saw "thinking" with the model still running
+    expect(text).not.toContain('"type":"answer"');
+    release();
+    for (;;) { const { value, done } = await reader.read(); if (done) break; text += dec.decode(value); }
+    expect(text).toContain('"type":"answer"');
+  });
+});
