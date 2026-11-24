@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { applyEv, newTurn, nextSteps, shownText } from '../web/src/events.js';
+import { applyEv, newTurn, nextSteps, shownText, resetText } from '../web/src/events.js';
 
 const feed = (...evs) => evs.reduce(applyEv, newTurn('make a shop'));
 
@@ -43,4 +43,25 @@ test('needcomputer and browser answers are remembered for the caller', () => {
   const t = feed({ type: 'needcomputer' }, { type: 'browseranswer', text: 'x' });
   expect(t.needPod).toBe(true);
   expect(t.browser.text).toBe('x');
+});
+
+test('resetText turns milliseconds into human-readable duration (#360)', () => {
+  expect(resetText(79200000)).toBe('about 22 hours');
+  expect(resetText(79959898)).toBe('about 22 hours 13 minutes');
+  expect(resetText(3600000)).toBe('about 1 hour');
+  expect(resetText(5400000)).toBe('about 1 hour 30 minutes');
+  expect(resetText(7200000)).toBe('about 2 hours');
+  expect(resetText(90000)).toBe('about 2 minutes');
+  expect(resetText(60000)).toBe('about 1 minute');
+  expect(resetText(30000)).toBe('less than a minute');
+  expect(resetText(0)).toBe('');
+  expect(resetText(null)).toBe('');
+  expect(resetText(undefined)).toBe('');
+  expect(resetText(-500)).toBe('');
+});
+
+test('LimitCard formats resetsIn and ensures full stop after error (#360)', async () => {
+  const src = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+  expect(src).not.toContain("'It resets in ' + info.resetsIn");
+  expect(src).toContain('resetText(info.resetsIn)');
 });
