@@ -61,6 +61,10 @@ let catalog = { at: 0, models: null };
 // The sandbox providers fleet routes to, by id and name, from fleet's public price list (cached 5 minutes), so a provider
 // added to fleet shows in the computer menu without a chat release. Falls back to the built-in list.
 let fleetNames = { at: 0, names: null };
+// In-memory cache for /health probes (10 seconds per isolate, #165).
+let healthCache = { at: 0, result: null };
+export const HEALTH_CACHE_MS = 10_000;
+export function resetHealthCache() { healthCache = { at: 0, result: null }; }
 export async function loadFleetNames(env, fetchImpl = fetch, now = Date.now()) {
   if (fleetNames.names && now - fleetNames.at < 300_000) return fleetNames.names;
   try {
@@ -344,7 +348,7 @@ export async function handle(request, env = {}, opts = {}) {
   return handleRequest(request, env, opts);
 }
 
-async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil = null, socketPair = null } = {}) {
+async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil = null, socketPair = null, now = Date.now() } = {}) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const origin = env.PUBLIC_ORIGIN || url.origin;
@@ -370,7 +374,11 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
 
   // Is chat able to reach what it depends on? No sign-in, no secrets, only status codes.
+  // Cached for 10 seconds per isolate (#165) so repeated checks make no extra outgoing requests.
   if (request.method === 'GET' && path === '/health') {
+    if (healthCache.result && now - healthCache.at < HEALTH_CACHE_MS) {
+      return json(healthCache.result.status, healthCache.result.body);
+    }
     const probe = async (u, call = fetchImpl) => {
       try {
         const r = await call(u, { method: 'GET', headers: { 'user-agent': 'flisk-chat-health' } });
@@ -388,7 +396,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const [f, i] = await Promise.all([probe(`${fleet}/v1/prices`), probe(`${inference}/v1/models`, env.INFERENCE ? (u, init) => env.INFERENCE.fetch(u, init) : fetchImpl)]);
     const up = (p) => p.status >= 200 && p.status < 500;
     const ok = up(f) && up(i);
-    return json(ok ? 200 : 503, { ok, fleet: f, inference: i, checkedAt: new Date().toISOString() });
+    const code = ok ? 200 : 503;
+    const body = { ok, fleet: f, inference: i, checkedAt: new Date(now).toISOString() };
+    healthCache = { at: now, result: { status: code, body } };
+    return json(code, body);
   }
 
   // GitHub App: "@flisk-chat review" on a pull request (signed webhook, no session).
