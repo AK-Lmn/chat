@@ -579,7 +579,7 @@ const NOT_FOUND_CSS = `
 h1{font:600 32px/1.2 var(--sans);letter-spacing:-.02em;margin:28px 0 8px}p{color:var(--dim);margin:8px 0 20px}
 .logo{display:inline-flex;align-items:center;gap:9px;font:600 17px/1 ui-monospace,Menlo,monospace;color:var(--ink);text-decoration:none}
 .logo span{color:var(--green)}
-.btn{display:inline-block;padding:8px 16px;background:var(--green);color:#fff;text-decoration:none;border-radius:4px;font-weight:500}
+.btn{display:inline-block;padding:8px 16px;background:var(--green);color:#fff;text-decoration:none;border-radius:var(--radius);font-weight:500}
 `;
 
 export const notFoundPage = (title = 'Page not found', text = 'Nothing lives at this address.') =>

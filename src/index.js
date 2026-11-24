@@ -12,7 +12,7 @@ import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } 
 import { lookup } from './lookup.js';
 import { cleanMode, searchWeb } from './search.js';
 import { appAsset, nextPage, nextCsp, embedCsp } from './next-page.js';
-import { appPage, cleanModels, DEFAULT_MODELS, messagePage, notFoundPage, PROVIDER_CARDS, PROVIDER_NAMES, reviewsPage, settingsPanelHtml, THEME_IDS } from './page.js';
+import { appPage, cleanModels, DEFAULT_MODELS, messagePage, notFoundPage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
