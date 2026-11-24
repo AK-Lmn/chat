@@ -12,7 +12,7 @@ import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } 
 import { lookup } from './lookup.js';
 import { cleanMode, searchWeb } from './search.js';
 import { appAsset, nextPage, nextCsp, embedCsp } from './next-page.js';
-import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
+import { appPage, cleanModels, DEFAULT_MODELS, messagePage, notFoundPage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
@@ -38,6 +38,19 @@ const SECURITY_TXT = `Contact: https://github.com/flisk-sh/chat/security/advisor
 Expires: 2027-06-01T00:00:00Z
 Preferred-Languages: en
 Canonical: https://chat.flisk.si/.well-known/security.txt
+`;
+
+const LLMS_TXT = `# Flisk Chat
+
+> AI chat assistant, fast, minimal, built for developers.
+
+Ask for a task or a website. Flisk Chat gets a real computer and does it.
+
+## Key Links
+
+- [Home](https://chat.flisk.si/): Web interface for Flisk Chat
+- [GitHub](https://github.com/flisk-sh/chat): Open-source repository, issues, and discussions
+- [Flisk](https://flisk.sh/): Flisk CLI and local developer runtime
 `;
 
 export const MAX_SITE_BYTES = 200 * 1024;
@@ -335,7 +348,7 @@ function siteResponse(row) {
   return new Response(body, {
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'content-security-policy': "sandbox allow-scripts allow-forms; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
+      'content-security-policy': "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
       'x-content-type-options': 'nosniff',
       'x-robots-tag': 'noindex, nofollow',
       'referrer-policy': 'no-referrer',
@@ -375,6 +388,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/_app/')) return appAsset(path) || new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path === '/llms.txt') return new Response(LLMS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/.well-known/security.txt') return new Response(SECURITY_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
 
@@ -453,21 +467,21 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   const sm = /^\/s\/([a-f0-9]{16})$/.exec(path);
   if (sm && request.method === 'GET') {
     const row = await env.DB.prepare('SELECT * FROM sites WHERE id = ?').bind(sm[1]).first();
-    if (!row || Date.now() - Date.parse(row.created) > SITE_DAYS * 86400_000) return html(messagePage('Page not found', 'This page expired or never existed.'), 404);
+    if (!row || Date.now() - Date.parse(row.created) > SITE_DAYS * 86400_000) return html(notFoundPage('Page not found', 'This page expired or never existed.'), 404);
     return siteResponse(row);
   }
 
   const im = /^\/i\/([a-f0-9]{16})\.(jpg|png|webp|svg)$/.exec(path);
   if (im && (request.method === 'GET' || request.method === 'HEAD')) {
     const row = await env.DB.prepare('SELECT type, data, created FROM images WHERE id = ?').bind(im[1]).first().catch(() => null);
-    if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(messagePage('Picture not found', 'This picture expired or never existed.'), 404);
+    if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(notFoundPage('Picture not found', 'This picture expired or never existed.'), 404);
     return new Response(request.method === 'HEAD' ? null : unb64(row.data), { headers: { 'content-type': `image/${row.type}`, ...(row.type === 'svg+xml' ? { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}), 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' } });
   }
 
   const vm = /^\/v\/([a-f0-9]{16})\.mp4$/.exec(path);
   if (vm && (request.method === 'GET' || request.method === 'HEAD')) {
     const res = await videoResponse(env, vm[1], request);
-    return res || html(messagePage('Video not found', 'This video expired or never existed.'), 404);
+    return res || html(notFoundPage('Video not found', 'This video expired or never existed.'), 404);
   }
 
   if (request.method === 'GET' && path === '/auth/start') {
@@ -828,7 +842,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       return new Response(readable, { headers: { 'content-type': tr ? COGITO_TYPE : 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no', ...(tr ? { vary: 'Accept' } : {}) } });
     }
   }
-  return html(messagePage('Page not found', 'Nothing lives at this address.'), 404);
+  return html(notFoundPage('Page not found', 'Nothing lives at this address.'), 404);
 }
 
 export default {
