@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
+import { answeredModel, handle, overDailyLimit, publishSite, refundDailyLimit, resetHealthCache, MAX_SITE_BYTES, withStorageShim } from '../src/index.js';
 import { parseAction, runTask } from '../src/loop.js';
 import { SYSTEM } from '../src/prompt.js';
 import { modelLabel, resolveModel } from '../src/model.js';
@@ -346,6 +346,7 @@ describe('service binding to inference', () => {
     expect(w.log.some((l) => l.modelCall)).toBe(false);
   });
   test('/health reports fleet and inference without sign-in', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
     const w = world();
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
@@ -355,16 +356,83 @@ describe('service binding to inference', () => {
     expect(Number.isNaN(Date.parse(r.checkedAt))).toBe(false);
   });
   test('/health answers 503 when fleet cannot be reached (#356)', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 401 }) } });
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => { throw new Error('down'); } });
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 0 }, inference: { status: 401 } });
   });
   test('/health answers 503 when inference returns a 5xx (#356)', async () => {
+    resetHealthCache();
     const e = env({ INFERENCE: { fetch: async () => new Response('bad gateway', { status: 502 }) } });
     const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => new Response('{}', { status: 200 }) });
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ ok: false, fleet: { status: 200 }, inference: { status: 502, body: 'bad gateway' } });
+  });
+  test('/health runs fleet and inference probes concurrently and caches results for 10 seconds (#165)', async () => {
+    resetHealthCache();
+    const calls = [];
+    let fleetStarted = false;
+    let inferenceStarted = false;
+    let overlapped = false;
+
+    const fetchImpl = async (url) => {
+      calls.push({ url, at: Date.now() });
+      if (url.includes('fleet.test')) {
+        fleetStarted = true;
+        if (inferenceStarted) overlapped = true;
+        await new Promise((r) => setTimeout(r, 20));
+        fleetStarted = false;
+        return new Response('{}', { status: 200 });
+      }
+      return new Response('{}', { status: 401 });
+    };
+
+    const inferenceFetch = async (url) => {
+      calls.push({ url, at: Date.now() });
+      inferenceStarted = true;
+      if (fleetStarted) overlapped = true;
+      await new Promise((r) => setTimeout(r, 20));
+      inferenceStarted = false;
+      return new Response('{}', { status: 401 });
+    };
+
+    const e = env({ INFERENCE: { fetch: inferenceFetch } });
+
+    // Request 1: hits outgoing services concurrently at t0
+    const t0 = 1_000_000;
+    const res1 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 });
+    expect(res1.status).toBe(200);
+    const body1 = await res1.json();
+    expect(body1).toMatchObject({ ok: true, fleet: { status: 200 }, inference: { status: 401 } });
+    expect(body1.checkedAt).toBe(new Date(t0).toISOString());
+    expect(overlapped).toBe(true);
+    expect(calls.length).toBe(2);
+
+    // Request 2: within 10 seconds (e.g. t0 + 5000ms), served from cache with zero additional fetch calls
+    const res2 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 + 5000 });
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json();
+    expect(body2).toEqual(body1);
+    expect(calls.length).toBe(2);
+
+    // Request 3: after 10 seconds (e.g. t0 + 10001ms), cache expires and new probes run
+    const res3 = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl, now: t0 + 10_001 });
+    expect(res3.status).toBe(200);
+    const body3 = await res3.json();
+    expect(body3.checkedAt).toBe(new Date(t0 + 10_001).toISOString());
+    expect(calls.length).toBe(4);
+  });
+  test('/health fault tolerance: failing probe returns status 0 and error, endpoint returns 200 if up or 503 if critical down (#165, #356)', async () => {
+    resetHealthCache();
+    // When fleet probe rejects with an exception
+    const e = env({ INFERENCE: { fetch: async () => new Response('{}', { status: 200 }) } });
+    const res = await handle(new Request(`${ORIGIN}/health`), e, { fetchImpl: async () => { throw new Error('network down'); } });
+    expect(res.status).toBe(503);
+    const r = await res.json();
+    expect(r.ok).toBe(false);
+    expect(r.fleet).toEqual({ status: 0, error: 'request failed' });
+    expect(r.inference).toMatchObject({ status: 200 });
   });
 });
 
