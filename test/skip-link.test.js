@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
-import { homePage, messagePage } from '../src/page';
+import { appPage, homePage, messagePage } from '../src/page';
 import { indexHtml } from '../src/system';
 
 const skip = '<a class="skip-link" href="#main">Skip to content</a>';
 
 test('the shared shell puts the skip link first in the body', () => {
-  for (const html of [homePage(), messagePage('Error', 'Text')]) {
+  for (const html of [homePage(), appPage({ login: 'ann', connected: [] }), messagePage('Error', 'Text')]) {
     expect(html).toContain(`<body>${skip}`);
     expect(html.indexOf(skip)).toBeLessThan(html.indexOf('<main id="main"'));
   }

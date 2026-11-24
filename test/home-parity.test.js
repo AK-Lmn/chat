@@ -36,6 +36,16 @@ test('widget, worker and browseranswer events reach the turn', () => {
   expect(t.browser.question).toBe('q');
 });
 
+test('failed github sign-in event produces an error output', () => {
+  let t = newTurn('fix bug');
+  t = applyEv(t, {type: 'github', ok: false, error: 'bad credentials'});
+  expect(t.outs).toEqual([{text: 'GitHub sign-in on the computer failed: bad credentials', bad: true}]);
+  // ok: true event produces no error output
+  let tOk = newTurn('fix bug');
+  tOk = applyEv(tOk, {type: 'github', ok: true, error: null});
+  expect(tOk.outs).toEqual([]);
+});
+
 test('a reroute is shown as a model step, not a computer', () => {
   const t = applyEv(newTurn('x'), {type: 'reroute', text: 'Trying another model'});
   expect(t.steps.at(-1).name).toBe('model');
@@ -168,15 +178,17 @@ test('the phone top bar keeps every button on screen at 320, 360 and 375 px (#35
   const css = read('web/src/app.css');
   expect(css).toContain('@media (max-width:400px){.chat-head:has(.chat-head-end)');
   expect(app).toContain('const tiny = useNarrow(340);');
-  expect(app).toContain('{signIn && !tiny && <Button label="Sign in"');
-  expect(app).toContain("...(signIn && tiny ? [{label: 'Sign in with GitHub'");
+  expect(app).toContain('{signIn && !tiny && <Button label="Start free with GitHub"');
+  expect(app).toContain("...(signIn && tiny ? [{label: 'Start free with GitHub'");
   const qa = read('scripts/mobile-qa.mjs');
   expect(qa).toContain('for (const width of [320, 360, 375])');
   expect(qa).toContain('top bar');
 });
 
 test('guest does not expose internal anon id in user footer or badge (#363)', () => {
-  const {userLabel} = require('../web/src/App.jsx');
+  // Evaluate the helper from source: importing App.jsx would load web/src/api.js with this file's globals and break other tests.
+  const src = app.match(/export const userLabel = (.*);/)[1];
+  const userLabel = new Function('return ' + src.replace('boot = BOOT', 'boot'))();
   expect(userLabel({login: 'anon-c8a5d77f7bbb99e5', anon: true})).toBe('Guest');
   expect(userLabel({login: '', anon: false})).toBe('Guest');
   expect(userLabel({login: null, anon: false})).toBe('Guest');
