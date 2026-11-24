@@ -95,7 +95,7 @@ describe('website task end to end', () => {
     const text = await page.text();
     expect(text).toContain('Moon Roast');
     expect(text).toContain('Made with Flisk Chat by @octo');
-    expect(page.headers.get('content-security-policy')).toStartWith('sandbox allow-scripts');
+    expect(page.headers.get('content-security-policy')).toStartWith('sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox');
     expect(page.headers.get('x-robots-tag')).toContain('noindex');
   });
 
@@ -1033,7 +1033,10 @@ describe('a published page can save to localStorage inside the sandbox', () => {
   test('the served page carries the shim and a one-line bar that lets taps through', async () => {
     const e = env();
     const made = await publishSite(e, 'octo', '<html><head></head><body><script>localStorage.setItem("k","v")</script></body></html>', ORIGIN);
-    const text = await (await handle(new Request(made.url), e, {})).text();
+    const pageRes = await handle(new Request(made.url), e, {});
+    const text = await pageRes.text();
+    expect(pageRes.headers.get('content-security-policy')).toContain('sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox');
+    expect(pageRes.headers.get('content-security-policy')).not.toContain('allow-same-origin');
     expect(text.indexOf('flisk-site-storage')).toBeLessThan(text.indexOf('localStorage.setItem("k"'));
     const bar = text.slice(text.indexOf('Made with Flisk Chat') - 400);
     expect(bar).toContain('pointer-events:none');
@@ -1337,6 +1340,30 @@ test('the pitch is shown in every theme, including voice and focus', () => {
   expect(page).not.toMatch(/data-theme=voice\] \.pitch[^{]*\{display:none/);
   expect(page).not.toMatch(/data-theme=focus\] \.pitch[^{]*\{display:none/);
 });
+
+describe('http to https redirect (#177)', () => {
+  test('http request returns 301 to https', async () => {
+    const res = await handle(new Request('http://chat.flisk.si/'), env());
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://chat.flisk.si/');
+  });
+
+  test('query string and pathname are preserved in redirect', async () => {
+    const res = await handle(new Request('http://chat.flisk.si/s/1234567890abcdef?theme=earth&test=1'), env());
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://chat.flisk.si/s/1234567890abcdef?theme=earth&test=1');
+
+    const resProto = await handle(new Request('https://chat.flisk.si/path?a=b', { headers: { 'x-forwarded-proto': 'http' } }), env());
+    expect(resProto.status).toBe(301);
+    expect(resProto.headers.get('location')).toBe('https://chat.flisk.si/path?a=b');
+  });
+
+  test('https requests return 200 normal response', async () => {
+    const res = await handle(new Request('https://chat.flisk.si/'), env());
+    expect(res.status).toBe(200);
+  });
+});
+
 
 describe('cogito frames on /api/run (server opt-in by Accept; the page asks by default)', () => {
   const task = { task: 'make a site' };

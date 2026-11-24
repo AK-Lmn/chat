@@ -12,7 +12,7 @@ import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } 
 import { lookup } from './lookup.js';
 import { cleanMode, searchWeb } from './search.js';
 import { appAsset, nextPage, nextCsp, embedCsp } from './next-page.js';
-import { appPage, cleanModels, DEFAULT_MODELS, messagePage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
+import { appPage, cleanModels, DEFAULT_MODELS, messagePage, notFoundPage, PROVIDER_CARDS, PROVIDER_NAMES, settingsPanelHtml, THEME_IDS } from './page.js';
 import { deleteSettings, loadSettings, saveSettings } from './keys.js';
 import { githubWebhook, reportLostReviews, REVIEWS_PER_DAY } from './review.js';
 import { runResult } from './run.js';
@@ -38,6 +38,19 @@ const SECURITY_TXT = `Contact: https://github.com/flisk-sh/chat/security/advisor
 Expires: 2027-06-01T00:00:00Z
 Preferred-Languages: en
 Canonical: https://chat.flisk.si/.well-known/security.txt
+`;
+
+const LLMS_TXT = `# Flisk Chat
+
+> AI chat assistant, fast, minimal, built for developers.
+
+Ask for a task or a website. Flisk Chat gets a real computer and does it.
+
+## Key Links
+
+- [Home](https://chat.flisk.si/): Web interface for Flisk Chat
+- [GitHub](https://github.com/flisk-sh/chat): Open-source repository, issues, and discussions
+- [Flisk](https://flisk.sh/): Flisk CLI and local developer runtime
 `;
 
 export const MAX_SITE_BYTES = 200 * 1024;
@@ -161,12 +174,15 @@ const readJson = async (request) => {
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 // Build analytics: one row per finished task (no login, no key), so a weak result can be traced to its cause.
-export async function recordRun(env, { task, ai, free, anon, result }) {
+export async function recordRun(env, { task, ai, free, anon, result, login = null }) {
   if (!env.DB) return;
   const st = result.stats || {};
   await env.DB.prepare('INSERT INTO task_runs (created, who, task, ai, free, provider, steps, errors, bad_json, empty, provider_retries, big, system, first_action, shared, copy, links, ms, error, answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(new Date().toISOString(), anon ? 'anon' : 'user', String(task).slice(0, 300), String(ai || '').slice(0, 80), free ? 1 : 0, result.provider || null, result.steps.length, st.errors || 0, st.bad || 0, st.empty || 0, st.provider || 0, st.big ? 1 : 0, st.system ? 1 : 0, st.firstAction || null, st.shared ? 1 : 0, st.copy ? 1 : 0, result.links.length, result.ms || 0, result.error ? String(result.error).slice(0, 200) : null, result.answer ? String(result.answer).slice(0, 400) : null)
     .run();
+  // A signed-in person's day, once: lets us count different people and returns. Its own catch, so a database where
+  // user_days is not created yet still records the task.
+  if (!anon && login) await env.DB.prepare('INSERT OR IGNORE INTO user_days (login, day) VALUES (?, ?)').bind(String(login), new Date().toISOString().slice(0, 10)).run().catch(() => {});
 }
 
 // Why a finished task is worth a look: it failed, a bigger app skipped the "system" builder, most of its steps failed,
@@ -332,7 +348,7 @@ function siteResponse(row) {
   return new Response(body, {
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'content-security-policy': "sandbox allow-scripts allow-forms; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
+      'content-security-policy': "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
       'x-content-type-options': 'nosniff',
       'x-robots-tag': 'noindex, nofollow',
       'referrer-policy': 'no-referrer',
@@ -343,6 +359,12 @@ function siteResponse(row) {
 
 // A HEAD request (link checkers, uptime monitors) gets the same status and headers as GET, with no body.
 export async function handle(request, env = {}, opts = {}) {
+  const url = new URL(request.url);
+  const proto = request.headers.get('x-forwarded-proto') || url.protocol.replace(/:$/, '');
+  if (proto === 'http') {
+    url.protocol = 'https:';
+    return Response.redirect(url.toString(), 301);
+  }
   if (request.method === 'HEAD' && !/^\/v\//.test(new URL(request.url).pathname)) {
     const res = await handleRequest(new Request(request.url, { method: 'GET', headers: request.headers }), env, opts);
     return new Response(null, { status: res.status, headers: res.headers });
@@ -371,9 +393,10 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   }
   if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/_app/')) return appAsset(path) || new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } });
   if (request.method === 'GET' && path === '/favicon.ico') return new Response(null, { status: 204, headers: { 'cache-control': 'public, max-age=86400' } });
-  if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path === '/robots.txt') return new Response('User-agent: *\nAllow: /$\nAllow: /ja/$\nDisallow: /s/\nDisallow: /v/\nDisallow: /i/\nDisallow: /api/\nSitemap: https://chat.flisk.si/sitemap.xml\n', { headers: { 'content-type': 'text/plain', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path === '/llms.txt') return new Response(LLMS_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/.well-known/security.txt') return new Response(SECURITY_TXT, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=86400' } });
-  if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://chat.flisk.si/</loc></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
+  if (request.method === 'GET' && path === '/sitemap.xml') return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml"><url><loc>https://chat.flisk.si/</loc><xhtml:link rel="alternate" hreflang="en" href="https://chat.flisk.si/"/><xhtml:link rel="alternate" hreflang="ja" href="https://chat.flisk.si/ja/"/><xhtml:link rel="alternate" hreflang="x-default" href="https://chat.flisk.si/"/></url><url><loc>https://chat.flisk.si/ja/</loc><xhtml:link rel="alternate" hreflang="en" href="https://chat.flisk.si/"/><xhtml:link rel="alternate" hreflang="ja" href="https://chat.flisk.si/ja/"/><xhtml:link rel="alternate" hreflang="x-default" href="https://chat.flisk.si/"/></url></urlset>', { headers: { 'content-type': 'application/xml', 'cache-control': 'public, max-age=86400' } });
 
   // Is chat able to reach what it depends on? No sign-in, no secrets, only status codes.
   // Cached for 10 seconds per isolate (#165) so repeated checks make no extra outgoing requests.
@@ -450,21 +473,21 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   const sm = /^\/s\/([a-f0-9]{16})$/.exec(path);
   if (sm && request.method === 'GET') {
     const row = await env.DB.prepare('SELECT * FROM sites WHERE id = ?').bind(sm[1]).first();
-    if (!row || Date.now() - Date.parse(row.created) > SITE_DAYS * 86400_000) return html(messagePage('Page not found', 'This page expired or never existed.'), 404);
+    if (!row || Date.now() - Date.parse(row.created) > SITE_DAYS * 86400_000) return html(notFoundPage('Page not found', 'This page expired or never existed.'), 404);
     return siteResponse(row);
   }
 
   const im = /^\/i\/([a-f0-9]{16})\.(jpg|png|webp|svg)$/.exec(path);
   if (im && (request.method === 'GET' || request.method === 'HEAD')) {
     const row = await env.DB.prepare('SELECT type, data, created FROM images WHERE id = ?').bind(im[1]).first().catch(() => null);
-    if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(messagePage('Picture not found', 'This picture expired or never existed.'), 404);
+    if (!row || Date.now() - Date.parse(row.created) > IMAGE_DAYS * 86400_000) return html(notFoundPage('Picture not found', 'This picture expired or never existed.'), 404);
     return new Response(request.method === 'HEAD' ? null : unb64(row.data), { headers: { 'content-type': `image/${row.type}`, ...(row.type === 'svg+xml' ? { 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" } : {}), 'cache-control': 'public, max-age=604800, immutable', 'x-content-type-options': 'nosniff', 'x-robots-tag': 'noindex, nofollow' } });
   }
 
   const vm = /^\/v\/([a-f0-9]{16})\.mp4$/.exec(path);
   if (vm && (request.method === 'GET' || request.method === 'HEAD')) {
     const res = await videoResponse(env, vm[1], request);
-    return res || html(messagePage('Video not found', 'This video expired or never existed.'), 404);
+    return res || html(notFoundPage('Video not found', 'This video expired or never existed.'), 404);
   }
 
   if (request.method === 'GET' && path === '/auth/start') {
@@ -530,7 +553,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const refund = async (force = false) => chosen.free && (force || !m.answered()) && refundQuota(env, 'chat', { anon, id: await who(login) });
     return { m, refund };
   };
-  if (request.method === 'GET' && (path === '/' || path === '/next' || path === '/classic' || path === '/embed' || path === '/settings' || path === '/reviews')) {
+  if (request.method === 'GET' && (path === '/' || path === '/ja' || path === '/next' || path === '/classic' || path === '/embed' || path === '/settings' || path === '/reviews')) {
     // The new Astryx page is the home page; the previous page stays at /classic.
     const isNext = path !== '/classic';  // /settings and /reviews are the chat with the settings dialog open over it (the page script opens it)
     // /embed is the chat as a window inside grow.flisk.si: same app, no side bar, no Earth, and only Grow may frame it.
@@ -551,7 +574,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const page = (opts) => {
       const inf = inferenceOrigin(env);
       const csp = withFrame(cspWithPod(pod, origin), inf);
-      if (isNext) return html(nextPage({ ...opts, models, theme: embed ? 'system' : theme, here, pod, inf, names, embed }), 200, { 'content-security-policy': embed ? embedCsp(nextCsp(csp)) : nextCsp(csp) });
+      if (isNext) return html(nextPage({ ...opts, models, theme: embed ? 'system' : theme, here, pod, inf, names, embed, lang: path === '/ja' ? 'ja' : 'en' }), 200, { 'content-security-policy': embed ? embedCsp(nextCsp(csp)) : nextCsp(csp) });
       let body = appPage({ ...opts, models, theme, here, pod, inf, names });
       if (geo === 'UA') body = body.replace('<head>', `<head><script>window.__GEO="UA"</script>`);
       return html(body, 200, { 'content-security-policy': csp });
@@ -810,7 +833,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         .then(async (r) => {
           if (needPod) return;
           for (const e of buffered) send(e);
-          await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r }).catch(() => {});
+          await recordRun(env, { task, ai: modelLabel(chosen), free: !!chosen.free, anon, result: r, login }).catch(() => {});
           await alertRun(env, { task, ai: modelLabel(chosen), anon, result: r }, fetchImpl).catch(() => {});
           for (const t of runEvents(r, runProblem(r), '/api/run', turnLang)) await sendTrace(env, t, fetchImpl);
           if (!needPod) send({ type: 'done', ms: r.ms, error: r.error });
@@ -825,7 +848,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       return new Response(readable, { headers: { 'content-type': tr ? COGITO_TYPE : 'application/x-ndjson', 'cache-control': 'no-store', 'x-accel-buffering': 'no', ...(tr ? { vary: 'Accept' } : {}) } });
     }
   }
-  return html(messagePage('Page not found', 'Nothing lives at this address.'), 404);
+  return html(notFoundPage('Page not found', 'Nothing lives at this address.'), 404);
 }
 
 export default {

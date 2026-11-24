@@ -131,6 +131,11 @@ test('the message box has no background of its own, so phones show no dark strip
   expect(css).toMatch(/\.astryx-chat-composer-input \[contenteditable\][^{]*\{background:transparent!important/);
 });
 
+test('touch screens get 44px tap targets on header buttons and links (including Sign in)', () => {
+  const css = readFileSync(new URL('../web/src/app.css', import.meta.url), 'utf8');
+  expect(css).toMatch(/@media \(pointer:coarse\)\{[^}]*\.astryx-app-shell-header (?:button,.*a|a,.*button)[^}]*min-height:44px/);
+});
+
 test('on a phone the chat header is one row: Sign in stays in sight (in the more menu below 340px, #358), the rest goes in the Astryx more menu', () => {
   const app = readFileSync(new URL('../web/src/App.jsx', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../web/src/app.css', import.meta.url), 'utf8');
