@@ -55,6 +55,7 @@ export function applyEv(t, ev) {
     case 'browseranswer': return { ...t, browser: ev };
     case 'error': return { ...t, error: { message: ev.error, kind: ev.kind || 'other' } };
     case 'file': return ev.error ? { ...t, outs: [...t.outs, { text: 'Could not put ' + ev.path + ' on the computer: ' + ev.error, bad: true }] } : t;
+    case 'github': return !ev.ok ? { ...t, outs: [...t.outs, { text: 'GitHub sign-in on the computer failed: ' + ev.error, bad: true }] } : t;
     default: return t;
   }
 }
@@ -91,3 +92,22 @@ export const pictures = (text) => [...new Set([...String(text || '').matchAll(/!
 
 // A ?voice= link opens voice talk: 1, true or talk; anything else is ignored (#364).
 export const wantsVoice = (search) => /^(1|true|talk)$/.test(new URLSearchParams(search || '').get('voice') || '');
+
+// Formats limit reset time (in milliseconds) into words for LimitCard (#360).
+export function resetText(ms) {
+  const n = Number(ms) || 0;
+  if (n <= 0) return '';
+  if (n < 45000) return 'less than a minute';
+  const h = Math.floor(n / 3600000);
+  const m = Math.round((n % 3600000) / 60000);
+  if (h && m) {
+    if (m === 60) return `about ${h + 1} hours`;
+    return `about ${h} hour${h > 1 ? 's' : ''} ${m} minute${m > 1 ? 's' : ''}`;
+  }
+  if (h) return `about ${h} hour${h > 1 ? 's' : ''}`;
+  if (m) {
+    if (m === 60) return 'about 1 hour';
+    return `about ${m} minute${m > 1 ? 's' : ''}`;
+  }
+  return 'less than a minute';
+}
