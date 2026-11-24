@@ -55,6 +55,7 @@ export function applyEv(t, ev) {
     case 'browseranswer': return { ...t, browser: ev };
     case 'error': return { ...t, error: { message: ev.error, kind: ev.kind || 'other' } };
     case 'file': return ev.error ? { ...t, outs: [...t.outs, { text: 'Could not put ' + ev.path + ' on the computer: ' + ev.error, bad: true }] } : t;
+    case 'github': return !ev.ok ? { ...t, outs: [...t.outs, { text: 'GitHub sign-in on the computer failed: ' + ev.error, bad: true }] } : t;
     default: return t;
   }
 }

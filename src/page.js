@@ -1312,6 +1312,7 @@ async function run(task){
     else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;else if(ev.type==='browseranswer')browserInfo=ev;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
+    else if(ev.type==='github'&&!ev.ok)out('GitHub sign-in on the computer failed: '+ev.error,true);
   };
   try{
     if(task.length>3)chatLang=langOf(task);const payload={mode:window.__mode||'chat',pod:podNow,cat:window.__cat||'',task,history,lang:chatLang,memo,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
