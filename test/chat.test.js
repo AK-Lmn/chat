@@ -1260,3 +1260,27 @@ test('the pitch is shown in every theme, including voice and focus', () => {
   expect(page).not.toMatch(/data-theme=voice\] \.pitch[^{]*\{display:none/);
   expect(page).not.toMatch(/data-theme=focus\] \.pitch[^{]*\{display:none/);
 });
+
+describe('http to https redirect (#177)', () => {
+  test('http request returns 301 to https', async () => {
+    const res = await handle(new Request('http://chat.flisk.si/'), env());
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://chat.flisk.si/');
+  });
+
+  test('query string and pathname are preserved in redirect', async () => {
+    const res = await handle(new Request('http://chat.flisk.si/s/1234567890abcdef?theme=earth&test=1'), env());
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://chat.flisk.si/s/1234567890abcdef?theme=earth&test=1');
+
+    const resProto = await handle(new Request('https://chat.flisk.si/path?a=b', { headers: { 'x-forwarded-proto': 'http' } }), env());
+    expect(resProto.status).toBe(301);
+    expect(resProto.headers.get('location')).toBe('https://chat.flisk.si/path?a=b');
+  });
+
+  test('https requests return 200 normal response', async () => {
+    const res = await handle(new Request('https://chat.flisk.si/'), env());
+    expect(res.status).toBe(200);
+  });
+});
+

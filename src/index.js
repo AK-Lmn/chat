@@ -337,6 +337,12 @@ function siteResponse(row) {
 
 // A HEAD request (link checkers, uptime monitors) gets the same status and headers as GET, with no body.
 export async function handle(request, env = {}, opts = {}) {
+  const url = new URL(request.url);
+  const proto = request.headers.get('x-forwarded-proto') || url.protocol.replace(/:$/, '');
+  if (proto === 'http') {
+    url.protocol = 'https:';
+    return Response.redirect(url.toString(), 301);
+  }
   if (request.method === 'HEAD' && !/^\/v\//.test(new URL(request.url).pathname)) {
     const res = await handleRequest(new Request(request.url, { method: 'GET', headers: request.headers }), env, opts);
     return new Response(null, { status: res.status, headers: res.headers });
