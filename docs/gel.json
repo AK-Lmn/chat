@@ -7,6 +7,7 @@
     "done-without-green": "block",
     "five-second-test": "block",
     "north-star": "report",
+    "next-cta": "block",
     "input-in-viewport": "report",
     "adr-required": "block",
     "api-contract": "block",
@@ -36,6 +37,9 @@
   "input_in_viewport": {
     "result": "docs/north-star/input-viewport.json",
     "max_age_days": 30
+  },
+  "next_cta": {
+    "rendered": { "result": "bench/five-second.json" }
   },
   "status": "active",
   "owner": "@odykyi",
