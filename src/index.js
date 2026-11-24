@@ -335,7 +335,7 @@ function siteResponse(row) {
   return new Response(body, {
     headers: {
       'content-type': 'text/html; charset=utf-8',
-      'content-security-policy': "sandbox allow-scripts allow-forms; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
+      'content-security-policy': "sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox; default-src 'unsafe-inline' data: blob:; connect-src 'none'",
       'x-content-type-options': 'nosniff',
       'x-robots-tag': 'noindex, nofollow',
       'referrer-policy': 'no-referrer',

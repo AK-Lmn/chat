@@ -95,7 +95,7 @@ describe('website task end to end', () => {
     const text = await page.text();
     expect(text).toContain('Moon Roast');
     expect(text).toContain('Made with Flisk Chat by @octo');
-    expect(page.headers.get('content-security-policy')).toStartWith('sandbox allow-scripts');
+    expect(page.headers.get('content-security-policy')).toStartWith('sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox');
     expect(page.headers.get('x-robots-tag')).toContain('noindex');
   });
 
@@ -1033,7 +1033,10 @@ describe('a published page can save to localStorage inside the sandbox', () => {
   test('the served page carries the shim and a one-line bar that lets taps through', async () => {
     const e = env();
     const made = await publishSite(e, 'octo', '<html><head></head><body><script>localStorage.setItem("k","v")</script></body></html>', ORIGIN);
-    const text = await (await handle(new Request(made.url), e, {})).text();
+    const pageRes = await handle(new Request(made.url), e, {});
+    const text = await pageRes.text();
+    expect(pageRes.headers.get('content-security-policy')).toContain('sandbox allow-scripts allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox');
+    expect(pageRes.headers.get('content-security-policy')).not.toContain('allow-same-origin');
     expect(text.indexOf('flisk-site-storage')).toBeLessThan(text.indexOf('localStorage.setItem("k"'));
     const bar = text.slice(text.indexOf('Made with Flisk Chat') - 400);
     expect(bar).toContain('pointer-events:none');
