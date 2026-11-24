@@ -36,6 +36,16 @@ test('widget, worker and browseranswer events reach the turn', () => {
   expect(t.browser.question).toBe('q');
 });
 
+test('failed github sign-in event produces an error output', () => {
+  let t = newTurn('fix bug');
+  t = applyEv(t, {type: 'github', ok: false, error: 'bad credentials'});
+  expect(t.outs).toEqual([{text: 'GitHub sign-in on the computer failed: bad credentials', bad: true}]);
+  // ok: true event produces no error output
+  let tOk = newTurn('fix bug');
+  tOk = applyEv(tOk, {type: 'github', ok: true, error: null});
+  expect(tOk.outs).toEqual([]);
+});
+
 test('a reroute is shown as a model step, not a computer', () => {
   const t = applyEv(newTurn('x'), {type: 'reroute', text: 'Trying another model'});
   expect(t.steps.at(-1).name).toBe('model');
