@@ -1169,6 +1169,14 @@ describe('looks', () => {
     // Every look uses the system font stack: no Inter or Geist download for text.
     expect(html).toContain("--sans:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol'");
     expect(html).not.toContain('family=Inter');
+    // Google Fonts stylesheet requests at most 3 font families (Instrument Serif and Geist Mono) (#195)
+    const fontLink = html.match(/https:\/\/fonts\.googleapis\.com\/css2\?[^"']+/)?.[0] ?? '';
+    const families = [...fontLink.matchAll(/family=([^&]+)/g)].map((m) => decodeURIComponent(m[1].split(':')[0].replace(/\+/g, ' ')));
+    expect(families.length).toBeGreaterThan(0);
+    expect(families.length).toBeLessThanOrEqual(3);
+    expect(families).not.toContain('Inter');
+    expect(families).not.toContain('Inter Tight');
+    expect(families).not.toContain('Geist');
     // The left sidebar (chats) is monospace.
     expect(html).toContain('.side{--sans:ui-monospace,"SFMono-Regular","SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-family:var(--sans)}');
     const csp = res.headers.get('content-security-policy');
