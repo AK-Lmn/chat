@@ -53,6 +53,15 @@ test('the Oracle wakes the voice model when it opens', () => {
   expect(read('web/src/Oracle.jsx')).toContain("fetch('/api/talk/warm', {method: 'POST'})");
 });
 
+test('the Oracle re-requests microphone permissions on tap after refusal (#359)', () => {
+  const oracle = read('web/src/Oracle.jsx');
+  expect(oracle).toContain("else requestMic();");
+  expect(oracle).toContain("NotFoundError");
+  expect(oracle).toContain("NotAllowedError");
+  expect(oracle).toContain("No microphone found on this device.");
+  expect(oracle).toContain("The microphone is blocked. Allow it for this site, then tap the circle.");
+});
+
 test('the home page at / can be found by search engines and shows a link preview, as /classic does (#350)', async () => {
   const {nextPage} = await import('../src/next-page.js');
   const {appPage} = await import('../src/page.js');

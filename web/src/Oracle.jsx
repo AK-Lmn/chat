@@ -89,24 +89,42 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
     onClose();
   };
 
+  const micHelp = (e) => {
+    const n = e && e.name;
+    if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'No microphone found on this device.';
+    if (n === 'NotReadableError' || n === 'AbortError') return 'Another app is using the microphone. Close it, then tap the circle.';
+    if (n === 'NotAllowedError' || n === 'SecurityError') return 'The microphone is blocked. Allow it for this site, then tap the circle.';
+    return 'Could not open the microphone: ' + (e && e.message || e);
+  };
+
+  const requestMic = () => {
+    const L = live.current;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      o('idle', 'This browser cannot record. Try Chrome, Safari, Edge or Firefox.');
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!L.ctx && AC) {
+      try { L.ctx = new AC(); L.ctx.resume().catch(() => {}); } catch (e) { L.ctx = null; }
+    }
+    if (!L.aud) {
+      L.aud = new Audio(); L.aud.src = SILENT; const p = L.aud.play(); if (p) p.catch(() => {});
+    }
+    o('thinking', 'Opening the microphone…');
+    navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}).then((s) => {
+      if (!live.current.open) { s.getTracks().forEach((t) => t.stop()); return; }
+      L.stream = s; L.on = true; loop().catch(() => o('idle', 'Something went wrong. Tap the circle to try again.'));
+    }).catch((e) => o('idle', micHelp(e)));
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     // Wake the voice model while the visitor reads the intro, as /classic does, so the first answer comes quicker.
     if (BOOT.login) fetch('/api/talk/warm', {method: 'POST'}).catch(() => {});
-    const L = live.current; L.turns = []; L.lang = ''; setYou(''); setSay('');
+    const L = live.current; L.open = true; L.turns = []; L.lang = ''; setYou(''); setSay('');
     if (!BOOT.login) { o('idle', 'Sign in with GitHub to talk with the Oracle.'); return undefined; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { o('idle', 'This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return undefined; }
-    // Made inside the tap that opened this screen: an iPhone keeps audio made later silent.
-    const AC = window.AudioContext || window.webkitAudioContext;
-    try { L.ctx = new AC(); L.ctx.resume().catch(() => {}); } catch (e) { L.ctx = null; }
-    L.aud = new Audio(); L.aud.src = SILENT; const p = L.aud.play(); if (p) p.catch(() => {});
-    o('thinking', 'Opening the microphone…');
-    let gone = false;
-    navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}).then((s) => {
-      if (gone) { s.getTracks().forEach((t) => t.stop()); return; }
-      L.stream = s; L.on = true; loop().catch(() => o('idle', 'Something went wrong. Tap the circle to try again.'));
-    }).catch(() => o('idle', 'The microphone is blocked. Allow it for this site, then tap the circle.'));
-    return () => { gone = true; if (L.on) { L.on = false; if (L.stopListen) L.stopListen(); if (L.stopSpeak) L.stopSpeak(); if (L.stream) L.stream.getTracks().forEach((t) => t.stop()); if (L.ctx) { try { L.ctx.close(); } catch (e) { /* closed */ } } } };
+    requestMic();
+    return () => { L.open = false; if (L.on) { L.on = false; if (L.stopListen) L.stopListen(); if (L.stopSpeak) L.stopSpeak(); if (L.stream) L.stream.getTracks().forEach((t) => t.stop()); if (L.ctx) { try { L.ctx.close(); } catch (e) { /* closed */ } } } };
   }, [open]);
 
   useEffect(() => {
@@ -120,7 +138,10 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
     const L = live.current;
     if (state === 'speaking' && L.stopSpeak) { L.stopSpeak(); return; }
     if (state === 'listening' && L.stopListen) { L.stopListen(); return; }
-    if (state === 'idle' && L.stream) { L.on = true; loop().catch(() => {}); }
+    if (state === 'idle') {
+      if (L.stream) { L.on = true; loop().catch(() => {}); }
+      else requestMic();
+    }
   };
   return (
     <div className={'earth-talk ' + state} role="dialog" aria-modal="true" aria-label="Voice talk with the Flisk Oracle">
