@@ -37,6 +37,9 @@ const TEXTY = /\.(txt|md|json|csv|js|mjs|ts|tsx|jsx|py|html|css|yml|yaml|toml|xm
 const ICON = {Globe: GlobeAltIcon, Cloud: CloudIcon, Chart: ChartBarIcon, Film: FilmIcon, Server: ServerStackIcon};
 const WOLF = {id: 'flisk-wolf-chat', name: 'Flisk Wolf', provider: 'flisk', providerName: 'Flisk', description: '', free: true, key: '', model: 'flisk-wolf-chat'};
 
+// The visible user name: a guest or visitor without a login is called Guest, never an anon- id (#363).
+export const userLabel = (boot = BOOT) => (!boot.login || boot.anon ? 'Guest' : '@' + boot.login);
+
 // A past chat's messages are kept as {role, content}; a few of the last ones go back to the server with each task.
 const lang = (task) => (/[іїєґ]/i.test(task) ? 'uk' : /[ыэъё]/i.test(task) ? 'ru' : '');
 
@@ -170,7 +173,7 @@ function HeaderEnd({explain, onExplain, scheme, onLook, onModel}) {
     return (
       <HStack gap={1} align="center" className="chat-head-end">
         {signIn && !tiny && <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
-        {BOOT.login && !BOOT.anon && !tiny && <Badge label={'@' + BOOT.login} />}
+        {BOOT.login && !BOOT.anon && !tiny && <Badge label={userLabel()} />}
         <MoreMenu label="More: explain, look, AI model" size="sm" presentation="adaptive" alignment="end" items={[
           ...(guest ? [{label: 'You are a guest', description: 'Sign in with GitHub to keep your chats and get more free tasks', isDisabled: true}, {type: 'divider'}] : []),
           ...(signIn && tiny ? [{label: 'Sign in with GitHub', description: 'Keep your chats and get more free tasks', icon: KeyIcon, onClick: () => { location.href = '/auth/start'; }}] : []),
@@ -183,7 +186,7 @@ function HeaderEnd({explain, onExplain, scheme, onLook, onModel}) {
   }
   return (
     <HStack gap={1}>
-      {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={BOOT.anon ? 'Guest' : '@' + BOOT.login} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
+      {BOOT.login ? <Tip text="Free tasks run on Flisk Wolf. The count resets every day."><span><Badge label={userLabel()} /></span></Tip> : <Button label="Sign in" size="sm" variant="primary" href="/auth/start" />}
       {BOOT.anon && <Tip text="Sign in with GitHub to keep your chats and get more free tasks."><Button label="Sign in" size="sm" variant="secondary" href="/auth/start" /></Tip>}
       <Tip text="Explain mode: tap anything to read what it does, without running it. Needed on phones, which have no hover."><Button label={explain ? 'Leave explain mode' : 'Explain'} variant={explain ? 'primary' : 'ghost'} size="sm" icon={<Icon icon={QuestionMarkCircleIcon} size="sm" />} onClick={onExplain} /></Tip>
       <Tip text="Look: tap to switch between Earth, light, dark and the same as your phone."><Button label={'Look of the page: ' + scheme} variant="ghost" size="sm" isIconOnly icon={<Icon icon={SunIcon} size="sm" />} onClick={onLook} /></Tip>
@@ -410,7 +413,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           header={<HStack gap={2} align="center"><Brand name="wolf" size={28} /><Text type="emphasized">Flisk Chat</Text></HStack>}
           topContent={<VStack gap={2}><Tip text="Start a fresh chat. Your old chats stay in the list."><Button label="New chat" variant="secondary" icon={<Icon icon={PlusIcon} size="sm" />} isFullWidth onClick={newChat} /></Tip>
             <Tip text="Find an older chat by a word you remember."><Button label={filter ? 'Clear search' : 'Search your chats'} variant="ghost" icon={<Icon icon={MagnifyingGlassIcon} size="sm" />} isFullWidth onClick={() => setFilter(filter ? '' : (prompt('Search your chats for:') || ''))} /></Tip></VStack>}
-          footer={<HStack gap={2} align="center"><Avatar name={BOOT.login || 'Guest'} size="sm" /><Text type="supporting">{BOOT.login ? '@' + BOOT.login : 'Not signed in'}</Text></HStack>}>
+          footer={
+            <HStack gap={2} align="center" justify="space-between" style={{width: '100%'}}>
+              <HStack gap={2} align="center">
+                <Avatar name={userLabel()} size="sm" />
+                <Text type="supporting">{userLabel()}</Text>
+              </HStack>
+              {(!BOOT.login || BOOT.anon) && <Button label="Sign in with GitHub" variant="ghost" size="sm" href="/auth/start" />}
+            </HStack>
+          }>
           <SideNavSection title="Your chats">
             {shown.map((c) => <SideNavItem key={c.id} label={c.title || 'Untitled'} icon={ChatBubbleLeftIcon} isSelected={c.id === chatId} onClick={() => openChat(c)}
               actions={<Button label={'Delete chat: ' + (c.title || 'Untitled')} variant="ghost" isIconOnly icon={<Icon icon={TrashIcon} size="sm" />} onClick={() => dropChat(c)} />} />)}
