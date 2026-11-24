@@ -3,6 +3,7 @@ import { EARTH_JS, TEXTURES, earthUsers, orbJs } from './earth.js';
 import { LOGOS } from './logos.js';
 import { UK_WORDS, RU_WORDS } from './lang.js';
 import { REASONING_CSS, REASONING_JS } from './reasoning.js';
+import { SETTINGS_CSS, SETTINGS_JS, settingsPanel } from './settings-dialog.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 // JSON inside a <script>: no "</script>" or "<!--" can close it early.
@@ -44,22 +45,6 @@ const CSS = `
 :root{--bg:#F7F6F2;--panel:#fff;--side:#F0EEE7;--line:#E3E0D6;--line2:#D3D0C5;--ink:#1B1B18;--dim:#6B6960;--soft:#9A988E;--green:#2F7D4A;--green-d:#246139;--tint:#EAF3DE;--warn:#B54708;--red:#B42318;
 --t0:#F6D2C2;--t0i:#712B13;--t1:#F7E3B0;--t1i:#633806;--t2:#C9EDE4;--t2i:#085041;--t3:#F4D3E1;--t3i:#72243E;
 --sans:-apple-system-body,ui-sans-serif,-apple-system,system-ui,'Segoe UI',Helvetica,'Apple Color Emoji',Arial,sans-serif,'Segoe UI Emoji','Segoe UI Symbol';--mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,monospace;--radius:4px}
-.set{display:grid;grid-template-columns:240px minmax(0,1fr);flex:1;min-height:0}
-.setnav{background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:14px 12px;overflow:auto}
-.setnav>a{display:flex;align-items:center;gap:8px;padding:8px;border-radius:var(--radius);color:var(--ink);text-decoration:none;font-size:14px}.setnav>a:hover,.setnav>a.cur{background:rgba(27,27,24,.06)}
-.setnav .brand{margin-bottom:10px}.setnav .who{margin-top:auto}
-.setmain{overflow:auto;padding:6vh 28px 60px;max-width:760px;width:100%}
-.setmain h1{font:600 32px/1.2 var(--sans);letter-spacing:-.02em;margin:0 0 18px}
-.setcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin-bottom:18px}
-.setcard h2{font:600 18px/1.3 var(--sans);margin:0 0 8px}.setcard p{margin:8px 0}
-.howto{list-style:decimal;padding-left:22px;margin:8px 0;color:var(--dim)}
-.steps{padding-left:0;margin:12px 0;display:flex;flex-direction:column;gap:14px;list-style:none}.steps li::marker{font-weight:600}.steps .row{margin-top:8px}
-.cmds{display:grid;gap:8px;margin-top:10px}.cmd{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);padding:10px 12px}.cmd code{font:14px var(--mono);color:var(--ink)}.cmd span{grid-column:1/-1;color:var(--dim);font-size:13px}.cmd .cp{padding:3px 10px;font-size:12px}
-.row{display:flex;flex-wrap:wrap;gap:8px}
-.setform{display:grid;gap:12px;max-width:440px}.setform label{display:grid;gap:4px;font-size:14px}
-.setform select,.setform input{width:100%;padding:8px;border:1px solid var(--line2);border-radius:var(--radius);background:var(--bg);font:inherit}
-.keylinks,.hint{color:var(--dim);font-size:13px;margin:0}.flash{background:var(--tint);color:var(--green-d);border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px}
-@media(max-width:760px){.set{grid-template-columns:1fr;flex:none}.setnav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line)}.setnav .who,.setnav .brand{width:100%;margin:0}body{overflow:auto}}
 *{box-sizing:border-box}html,body{height:100%}body{display:flex;flex-direction:column}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);overflow:hidden}
 .skip-link{position:absolute;left:-9999px;top:0;z-index:100;padding:10px 14px;background:var(--panel);color:var(--ink);border:1px solid var(--line2);font:600 13px var(--sans)}.skip-link:focus{left:12px;top:12px;outline:2px solid var(--green);outline-offset:2px}
@@ -140,6 +125,12 @@ a{color:var(--green)}button{font:inherit;color:inherit}
 .byor{display:block;width:100%;margin:0 0 10px;padding:10px 14px;border:1px solid var(--ink);border-radius:var(--radius);background:var(--ink);color:var(--bg);font-weight:600;font-size:14px;cursor:pointer}.byor:hover{background:var(--green-d);border-color:var(--green-d)}.byorsep{margin:0 0 10px}
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--panel);color:var(--ink);border-radius:var(--radius);padding:7px 14px;font-size:14px;text-decoration:none;cursor:pointer;white-space:nowrap}
 .btn:hover{border-color:var(--ink)}.btn.go{background:var(--green);border-color:var(--green);color:var(--flisk-on-accent,#fff)}.btn.go:hover{background:var(--green-d)}
+/* next-cta (GEL guard): the most likely next action gets a spinning rainbow border; the fill stays the button green. */
+@property --next-cta-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
+.btn.go.next-cta{border:2px solid transparent;padding:6px 13px;background:linear-gradient(var(--green),var(--green)) padding-box,conic-gradient(from var(--next-cta-angle),#ef4444,#f59e0b,#eab308,#22c55e,#3b82f6,#8b5cf6,#ef4444) border-box;animation:next-cta-spin 3s linear infinite}
+.btn.go.next-cta:hover{background:linear-gradient(var(--green-d),var(--green-d)) padding-box,conic-gradient(from var(--next-cta-angle),#ef4444,#f59e0b,#eab308,#22c55e,#3b82f6,#8b5cf6,#ef4444) border-box}
+@keyframes next-cta-spin{to{--next-cta-angle:360deg}}
+@media (prefers-reduced-motion:reduce){.btn.go.next-cta{animation:none}}
 .btn[disabled]{opacity:.55;cursor:wait}
 .err{color:var(--red);background:#FEF3F2;border:1px solid #FECDCA;border-radius:var(--radius);padding:10px 14px;white-space:pre-wrap;font-size:14px}
 .note{font-size:13px;color:var(--dim);margin:6px 0 0}
@@ -411,6 +402,7 @@ html.plus .plusmenu .cats .cat svg{flex:none}html.plus .fam{display:block;flex:n
 html .plusmenu #mpbtn::after{transform:rotate(-45deg)}
 .plusmenu .phl{display:flex;flex-direction:column;gap:1px;min-width:0;text-align:left;line-height:1.25}.plusmenu .phl b{font-weight:600;font-size:15px;color:var(--ink)}.plusmenu .phl small,.pophd .phl small{font-size:13px;color:var(--dim)}.plusmenu .phl small>.pv2{color:var(--soft)}
 .plusmenu .morebody{display:flex;flex-direction:column;gap:2px}
+.plusmenu .morerow{display:flex;align-items:center;width:100%;min-height:56px;padding:8px 10px;border:1px solid transparent;background:transparent;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
 html.plus .plusmenu #mpbtn .mpname,html.plus .plusmenu #mpbtn .chev,html.plus .plusmenu #sbsum,html.plus .plusmenu details.pick>summary .chev{display:none}
 html.plus .plusmenu #mpbtn,html.plus .plusmenu details.pick>summary{width:100%;min-height:56px;border-color:transparent;background:transparent;gap:12px;justify-content:flex-start}
 html.plus .plusmenu #mpbtn:hover,html.plus .plusmenu details.pick>summary:hover{background:var(--line)}
@@ -513,6 +505,39 @@ html[data-theme=voice] .composer .bar #orbbtn{background:var(--flisk-accent);col
 @media (min-width:861px){.only-m{display:none}}
 /* Phones: the composer buttons fit on one row with the send button (Fleet shows its icon only, no arrows). */
 @media (max-width:520px){.composer{padding:10px 8px 8px 10px}.composer .bar{gap:3px}.composer .bar .chev{display:none}.composer .bar .chip{gap:5px;padding-right:7px}#sbsum{display:none}.composer .bar #mic,.composer .bar #voice,.composer .bar #orbbtn,.composer .bar .attach{width:32px;padding-left:0;padding-right:0;justify-content:center}.composer .send{width:36px;height:36px}}
+
+/* Side nav, after Astryx shell-side-nav: one flat left rail, plain icon rows, grouped history, no filled buttons, collapsible. */
+@media (min-width:861px){
+html .side,html .side *{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif!important}
+.side{padding:12px 8px 8px;gap:2px;font-size:14px;position:relative}
+.side .brand{padding:4px 8px 12px}
+.side .logo{font-size:15px;font-weight:600}
+html .side .newchat,html .side .search{display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;box-sizing:border-box;min-height:34px;padding:0 8px;border:0;border-radius:var(--radius);background:none!important;color:var(--ink)!important;font-size:14px;font-weight:400;text-align:left}
+.side .newchat:hover,.side .search:hover,.side .search:focus-within{background:rgba(127,127,120,.14)}
+.side .newchat svg,.side .search svg,.side .sidesec h4 svg{color:var(--dim);flex:none}
+.side .search input{font-size:14px;padding:0}
+.side .histwrap{margin:6px 0 0;padding-top:6px;border-top:1px solid var(--line)}
+#hist .day{padding:0;margin:0;font:inherit;letter-spacing:0;text-transform:none;color:var(--ink)}
+#hist .day button{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:34px;padding:0 8px;border:0;background:none;border-radius:var(--radius);cursor:pointer;font-size:14px;font-weight:400;color:var(--ink);text-align:left}
+#hist .day button::after{content:"";width:7px;height:7px;border:solid var(--dim);border-width:0 1.6px 1.6px 0;transform:rotate(-135deg) translate(-2px,-2px);transition:transform .15s}
+#hist .day button[aria-expanded=false]::after{transform:rotate(45deg) translate(-2px,-2px)}
+#hist .day button:hover{background:rgba(127,127,120,.14)}
+#hist li.hid{display:none}
+#hist li:not(.day):not(.more):not(.none){margin-left:10px;padding-left:8px;border-left:1px solid var(--line)}
+#hist li:not(.day) button:first-child{font-size:14px;font-weight:400;color:var(--dim);padding:7px 8px}
+#hist li:hover,#hist li.cur{background:rgba(127,127,120,.14)}
+#hist li:hover button:first-child,#hist li.cur button:first-child{color:var(--ink)}
+.side .sidesec{border-top:0;padding:0}
+.side .sidesec h4{min-height:34px;margin:0;padding:0 8px;font-size:14px;font-weight:400;color:var(--ink);border-radius:var(--radius)}
+.side .who{border-top:1px solid var(--line);padding:8px 8px 6px;margin-top:6px;font-size:13px}
+.side .sidecollapse{align-self:flex-start;display:flex;align-items:center;justify-content:center;width:32px;height:32px;margin:2px 0 0 2px;border:0;border-radius:var(--radius);background:none;color:var(--dim);cursor:pointer}
+.side .sidecollapse:hover{background:rgba(127,127,120,.14);color:var(--ink)}
+.sideexpand{display:none}
+.app.sidecol{grid-template-columns:0 minmax(0,1fr)}
+.app.sidecol .side{visibility:hidden;overflow:hidden;padding:0;border:0}
+.app.sidecol .sideexpand{display:flex;position:fixed;top:56px;left:8px;z-index:30;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);color:var(--dim);cursor:pointer}
+}
+@media (max-width:860px){.sidecollapse,.sideexpand{display:none!important}}
 `;
 
 const FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist+Mono:wght@400;500;600&display=swap">';
@@ -531,8 +556,9 @@ export const ICON_HEAD = `<link rel="icon" href="${FAVICON}"><link rel="apple-to
 import { i18nScript } from './i18n.js';
 const I18N = i18nScript();
 const shell = (title, body, script = '', index = false, theme = '') =>
-  `<!doctype html><html lang="en"${theme ? ` data-theme="${theme}"${theme === 'classic' ? '' : ' class="nt"'}` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>${index ? SEO_HEAD : '<meta name="robots" content="noindex">'}${ICON_HEAD}<meta name="theme-color" content="#F7F6F2">${index ? '' : '<meta name="description" content="Ask for a task or a website. Flisk Chat gets a real computer and does it.">'}${FONTS}<style>${CSS}${REASONING_CSS}</style><script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script></head><body><a class="skip-link" href="#main">Skip to content</a>${body}<script>${KEYBOARD_FIT}${script}
+  `<!doctype html><html lang="en"${theme ? ` data-theme="${theme}"${theme === 'classic' ? '' : ' class="nt"'}` : ''}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${esc(title)}</title>${index ? SEO_HEAD : '<meta name="robots" content="noindex">'}${ICON_HEAD}<meta name="theme-color" content="#F7F6F2">${index ? '' : '<meta name="description" content="Ask for a task or a website. Flisk Chat gets a real computer and does it.">'}${FONTS}<style>${CSS}${REASONING_CSS}${SETTINGS_CSS}</style><script defer data-domain="chat.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" data-product="Chat" data-icon="chat" data-accent="#2F7D4A" data-free-key data-siblings="Cilytics,Ranker" data-text="Type a task and a computer does it." defer></script></head><body><a class="skip-link" href="#main">Skip to content</a>${body}<script>${KEYBOARD_FIT}${script}
 ;${REASONING_JS}
+;${SETTINGS_JS}
 ;${I18N}</script></body></html>`;
 
 const LOGO = `<a class="logo" href="/">${icon('chat', 26)}<b style="font-weight:inherit">chat<span>.</span>flisk</b></a>`;
@@ -540,7 +566,7 @@ const LOGO = `<a class="logo" href="/">${icon('chat', 26)}<b style="font-weight:
 export const homePage = () =>
   shell(
     'Flisk Chat',
-    `<main id="main" class="col" style="padding-top:14vh;overflow:auto;flex:1;min-height:0;width:100%">${LOGO}<h1 style="font:600 36px/1.15 var(--sans);letter-spacing:-.025em;margin:28px 0 10px">Ask for a website, an app or a whole system. It gets a computer.</h1><p style="color:var(--dim);max-width:56ch">Type what you want. Flisk's free model plans it, runs it on a real computer from your own sandbox account, and gives you the result and a live link. Bigger asks work too: several services that run together, started and checked on the computer.</p><a class="btn go" href="/auth/start">Sign in with GitHub</a></main>`,
+    `<main id="main" class="col" style="padding-top:14vh;overflow:auto;flex:1;min-height:0;width:100%">${LOGO}<h1 style="font:600 36px/1.15 var(--sans);letter-spacing:-.025em;margin:28px 0 10px">Ask for a website or app. It gets a computer.</h1><p style="color:var(--dim);max-width:56ch">Type what you want. Flisk plans it, runs it on a real computer, and gives you the result and a live link.</p><a class="btn go next-cta" data-next-cta href="/auth/start?utm_source=chat&amp;utm_medium=cta&amp;utm_campaign=free-key">Start free with GitHub</a><p class="nocard" style="color:var(--dim);font-size:13px;margin:8px 0 0">No card. Free to start.</p></main>`,
   );
 
 export const messagePage = (title, text) =>
@@ -568,40 +594,12 @@ export const THEME_IDS = THEMES.map(([id]) => id);
 export const GITHUB_APP_URL = 'https://github.com/apps/flisk-chat';
 export const KEY_PAGES = { openrouter: ['OpenRouter', 'https://openrouter.ai/keys'], anthropic: ['Claude', 'https://console.anthropic.com/settings/keys'], openai: ['OpenAI', 'https://platform.openai.com/api-keys'] };
 
-export const reviewsPage = ({ login, saved, stored, limit, flash, error = '', form = {} }) =>
-  shell(
-    'Settings · chat',
-    `<div class="set">
-<nav class="setnav" aria-label="Settings"><div class="brand">${LOGO}</div><a href="/">${icon('chat', 16)}Back to chat</a><a href="#github" class="cur">GitHub reviews</a><a href="#ai">AI for reviews</a><a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">Computers</a><a href="https://flisk.si" target="_blank" rel="noopener">Flisk</a><div class="who"><span>@${esc(login)}</span><a href="/auth/signout">Sign out</a></div></nav>
-<main id="main" class="setmain">
-<h1>Settings</h1>
-${error ? `<p class="flash" role="alert" style="background:#FCE8E6;color:var(--red)">Not saved: ${esc(error)}</p>` : flash === 'saved' ? '<p class="flash" role="status">Saved. Your next review uses this AI.</p>' : flash === 'deleted' ? '<p class="flash" role="status">Deleted. Reviews use the free Flisk Wolf model again.</p>' : ''}
-<section id="github" class="setcard"><h2>Get a code review on any pull request</h2>
-<p>Chat reads your pull request and writes a review on GitHub: a summary, comments on the exact lines, one-click fixes and a verdict. You ask for it by writing a comment.</p>
-<ol class="steps"><li><b>1. Install the app once.</b> Pick the repos you want it on.<br><span class="row"><a class="btn go" href="${GITHUB_APP_URL}/installations/new" target="_blank" rel="noopener">Install the GitHub App</a></span></li>
-<li><b>2. Open any pull request on GitHub</b> and write one of these in the comment box at the bottom, then press Comment.
-<div class="cmds">
-<div class="cmd"><code>@flisk-chat review</code><button type="button" class="btn cp" data-copy="@flisk-chat review">Copy</button><span>Reads the changes and posts a review. Takes about 20 seconds.</span></div>
-<div class="cmd"><code>@flisk-chat review run</code><button type="button" class="btn cp" data-copy="@flisk-chat review run">Copy</button><span>The same, and also runs the project's lint and tests on one of your computers. The results are posted when it finishes.</span></div>
-<div class="cmd"><code>@flisk-chat auto on</code><button type="button" class="btn cp" data-copy="@flisk-chat auto on">Copy</button><span>Reviews every new pull request in this repo by itself. Write <code>@flisk-chat auto off</code> to stop.</span></div>
-</div></li>
-<li><b>3. Read the review</b> on the pull request. Nothing is merged or changed for you.</li></ol>
-<p class="hint">Only people who can push to the repo can ask. Reviews use the AI chosen below. A model can be wrong, so read before you merge.</p>
-<p class="row"><a class="btn" href="${GITHUB_APP_URL}" target="_blank" rel="noopener">View on GitHub</a><a class="btn" href="https://github.com/settings/installations" target="_blank" rel="noopener">Manage installed repos</a></p></section>
-<section id="ai" class="setcard"><h2>AI for reviews</h2>
-<p class="cur-ai">${saved ? `Reviews for <b>@${esc(login)}</b> use <b>${esc(saved.model)}</b> (${esc(saved.ai)}) with your key. You pay your provider; no daily limit.` : `Reviews for <b>@${esc(login)}</b> use the free Flisk Wolf model: ${limit} a day, and only the first part of a big diff.`}</p>
-${stored ? `<form method="post" action="/reviews/save" class="setform">
-<label>AI<select name="ai" id="aisel">${Object.entries(KEY_PAGES).map(([v, [n]]) => `<option value="${v}"${(form.ai || saved?.ai) === v ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
-<p class="keylinks">${Object.entries(KEY_PAGES).map(([v, [n, u]]) => `<a class="keylink" href="${u}" target="_blank" rel="noopener" data-for="${v}"${(saved?.ai || 'openrouter') === v ? '' : ' hidden'}>Get your ${n} key</a>`).join('')}</p>
-<label>Model name<input name="model" required maxlength="80" placeholder="e.g. anthropic/claude-sonnet-5.5" value="${esc(form.model ?? saved?.model ?? '')}"></label>
-<label>API key<input name="key" type="password" required minlength="8" maxlength="300" autocomplete="off"></label>
-<p class="hint">The key is encrypted before it is stored and never shown again.</p>
-<p class="row"><button class="btn go" type="submit">Save for reviews</button></p></form>` : '<p class="hint">Saving a key is not switched on yet.</p>'}
-${saved ? '<form method="post" action="/reviews/delete"><button class="btn" type="submit">Delete my saved key</button></form>' : ''}
-</section>
-</main></div>`,
-    `document.querySelectorAll('.cp').forEach((b)=>b.addEventListener('click',()=>{const t=b.dataset.copy;(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{b.textContent='Copied';setTimeout(()=>{b.textContent='Copy';},1500);}).catch(()=>{b.textContent='Select and copy';});}));const sel=document.getElementById('aisel');if(sel){const show=()=>document.querySelectorAll('.keylink').forEach((a)=>{a.hidden=a.dataset.for!==sel.value});sel.addEventListener('change',show);show();}`,
-  );
+// Hidden hook the org bar reads for the signed-in login. Empty for anonymous sessions, whose cookie login (anon-<16hex>) would pass the bar's login check.
+export const loginHook = (login, anon = false) => (login && !anon && !/^anon-/i.test(String(login)) ? `<span data-flisk-login hidden>${esc(login)}</span>` : '');
+
+// The settings dialog (src/settings-dialog.js): account, the AI for pull request reviews, GitHub reviews and the link to the computers.
+// GET /settings/panel serves its inside; the key is encrypted before it is stored and never shown again.
+export const settingsPanelHtml = (opts) => settingsPanel({ ...opts, keyPages: KEY_PAGES, appUrl: GITHUB_APP_URL });
 
 // Starter ideas per kind, for people who never write code.
 export const CATS = [
@@ -787,11 +785,15 @@ const saveAll=(all)=>{try{localStorage.setItem(KEY,JSON.stringify(all.slice(0,30
 const saveChat=()=>{if(!history.length)return;const prev=loadAll().find(c=>c.id===chatId);const all=loadAll().filter(c=>c.id!==chatId);if(!chatId)chatId=Date.now().toString(36);all.unshift({id:chatId,at:(prev&&prev.at)||Date.now(),title:history[0].content.split('\\n')[0].slice(0,80),msgs:history,memo,memoN});saveAll(all);drawHist();};
 function drawHist(){const q=($('q').value||'').toLowerCase();const all=loadAll().filter(c=>!q||c.title.toLowerCase().includes(q)||(c.msgs||[]).some(m=>String(m.content||'').toLowerCase().includes(q)||(m.files||[]).some(n=>String(n).toLowerCase().includes(q))));hist.textContent='';
   if(!all.length){hist.appendChild(node('li','none',q?'No chats match.':'Your chats show here. They stay in this browser.'));return;}
-  const LIM=10;let showAll=!!q||hist.dataset.all==='1';const rows=showAll?all:all.slice(0,LIM);let lastDay='';
+  const folded=drawHist.folded||(drawHist.folded=new Set());const LIM=10;let showAll=!!q||hist.dataset.all==='1';const rows=showAll?all:all.slice(0,LIM);let lastDay='';
   const dayName=(t)=>{const d=new Date(t),n=new Date(),k=(a)=>a.toDateString();if(k(d)===k(n))return 'Today';const y=new Date(n);y.setDate(n.getDate()-1);if(k(d)===k(y))return 'Yesterday';return d.toLocaleDateString(undefined,{day:'numeric',month:'short'});};
-  rows.forEach(c=>{const dn=c.at?dayName(c.at):'';if(dn&&dn!==lastDay){lastDay=dn;hist.appendChild(node('li','day',dn));}const li=node('li',c.id===chatId?'cur':''),b=node('button','',c.title),x=node('button','x','×');b.type=x.type='button';b.title=c.title+(c.at?' · '+new Date(c.at).toLocaleString():'');b.onclick=()=>{openChat(c);closeSide();};x.title='Delete this chat';x.setAttribute('aria-label','Delete chat: '+c.title);x.onclick=()=>{saveAll(loadAll().filter(o=>o.id!==c.id));if(chatId===c.id)newChat();drawHist();};li.append(b,x);hist.appendChild(li);});
+  rows.forEach(c=>{const dn=c.at?dayName(c.at):'';if(dn&&dn!==lastDay){lastDay=dn;const dl=node('li','day'),db=node('button','',dn);db.type='button';db.setAttribute('aria-expanded',folded.has(dn)?'false':'true');db.onclick=()=>{if(folded.has(dn))folded.delete(dn);else folded.add(dn);drawHist();};dl.appendChild(db);hist.appendChild(dl);}const li=node('li',(c.id===chatId?'cur':'')+(folded.has(dn)?' hid':'')),b=node('button','',c.title),x=node('button','x','×');b.type=x.type='button';b.title=c.title+(c.at?' · '+new Date(c.at).toLocaleString():'');b.onclick=()=>{openChat(c);closeSide();};x.title='Delete this chat';x.setAttribute('aria-label','Delete chat: '+c.title);x.onclick=()=>{saveAll(loadAll().filter(o=>o.id!==c.id));if(chatId===c.id)newChat();drawHist();};li.append(b,x);hist.appendChild(li);});
   if(!showAll&&all.length>LIM){const li=node('li','more'),m=node('button','','Show '+(all.length-LIM)+' older');m.type='button';m.onclick=()=>{hist.dataset.all='1';drawHist();};li.append(m);hist.appendChild(li);}}
 $('q').addEventListener('input',drawHist);
+// The sidebar folds away on a wide screen and the choice is remembered; on a phone the menu button already does this.
+{const app=document.querySelector('.app'),setC=(c)=>{app.classList.toggle('sidecol',c);$('sidecollapse').setAttribute('aria-expanded',c?'false':'true');try{localStorage.setItem('chat_side_col',c?'1':'0');}catch(e){}};
+let c0=false;try{c0=localStorage.getItem('chat_side_col')==='1';}catch(e){}if(c0)app.classList.add('sidecol');
+$('sidecollapse').onclick=()=>setC(true);$('sideexpand').onclick=()=>setC(false);}
 // Older turns fold into one short summary kept with the chat in this browser; the model sees it plus the last few messages.
 async function roll(){const upto=history.length-6;if(memoBusy||upto-memoN<6)return;memoBusy=true;const id=chatId,from=memoN;try{const r=await fetch('/api/memo',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({memo,msgs:history.slice(from,upto).map(m=>({role:m.role,content:m.content})),ai:{ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model}})});const b=await r.json().catch(()=>({}));if(r.ok&&b.memo&&id===chatId){memo=b.memo;memoN=upto;saveChat();}}catch(e){}memoBusy=false;}
 function newChat(){history=[];chatLang='';memo='';memoN=0;go.disabled=false;treeAnswer=null;box.placeholder='What should it do?';chatId=null;talk.textContent='';setup.hidden=true;signin.hidden=true;chatting(false);drawHist();box.focus();}
@@ -890,7 +892,7 @@ const fixModel=(m)=>{if(cur.key!=='openrouter'||!sugList.length||!m||sugList.ind
   const t=sugList.filter(id=>id.endsWith('/'+m));if(t.length===1)return {ok:true,model:t[0],fixed:true};
   const near=rank(m).slice(0,4);return {ok:false,near};};
 const stat=()=>{const has=!!(cur&&!cur.free&&lsGet('chat_key_'+cur.key));byStat.textContent=has?'Encrypted and saved in this browser only, never on our servers.':'Encrypted and saved in this browser only once you paste it, never on our servers.';byRm.hidden=!has;};
-async function loadOr(){if(orLoaded)return;orLoaded=true;try{const r=await fetch('https://openrouter.ai/api/v1/models');const j=await r.json();const d=(j.data||[]).filter(x=>x&&x.id);d.forEach(x=>{orNames[x.id]=x.name||'';orSees[x.id]=((x.architecture&&x.architecture.input_modalities)||[]).indexOf('image')>=0;});const ids=d.map(x=>x.id).sort();if(!ids.length){orLoaded=false;return;}
+async function loadOr(){if(orLoaded)return;orLoaded=true;try{const r=await fetch('https://openrouter.ai/api/v1/models');const j=await r.json();const d=(j.data||[]).filter(x=>x&&x.id);d.forEach(x=>{orNames[x.id]=x.name||'';orSees[x.id]=((x.architecture&&x.architecture.input_modalities)||[]).indexOf('image')>=0;});const ids=d.map(x=>x.id).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));if(!ids.length){orLoaded=false;return;}
   OR=d.map(x=>orModel(x.id,x.name,(Number(x.pricing&&x.pricing.prompt)||0)*1e6,x.context_length));orIds=ids;if(cur.key==='openrouter')fillSugg(ids);const same=OR.find(m=>m.id===cur.id);if(same&&same.name!==cur.name)pick(same);else if(!pop.hidden)drawList();}catch(e){orLoaded=false;}}
 byoKey.addEventListener('input',()=>{if(!cur.free){lsSet('chat_key_'+cur.key,byoKey.value.trim());stat();}});
 byoModel.addEventListener('input',()=>{shownName();if(!cur.free&&!cur.model)lsSet('chat_model_'+cur.key,byoModel.value.trim());byWarn.hidden=true;drawSug();});
@@ -943,9 +945,10 @@ if(pm&&cats)pm.prepend(cats);
 const setPlus=(on)=>{document.documentElement.classList.toggle('plus',on);if(pb)pb.setAttribute('aria-expanded',String(on));if(on)placeFloat(pm,pb);};
 if(pb)pb.onclick=()=>setPlus(!document.documentElement.classList.contains('plus'));
 {const mq=matchMedia('(max-width:860px)'),md=document.querySelector('.modes'),mp=document.getElementById('mp'),bar=document.querySelector('.composer .bar'),gr=bar&&bar.querySelector('.grow');
-const more=document.createElement('details');more.className='more';more.innerHTML='<summary>${fam('settings', 26)}<span class="phl"><b>Settings</b><small>AI model, computers, voice, files</small></span></summary><div class="morebody"></div>';
+const more=document.createElement('details');more.className='more';more.innerHTML='<summary>${fam('settings', 26)}<span class="phl"><b>Settings</b><small>AI model, computers, voice, files</small></span></summary><div class="morebody"><button type="button" class="morerow" data-open-settings>Account, reviews, computers</button></div>';
 const mb2=more.querySelector('.morebody'),rows=['attach','fileIn'].map(i=>document.getElementById(i)).concat([pm&&pm.querySelector('details.pick'),document.getElementById('voice'),document.getElementById('orbbtn')]);
 const place=()=>{if(!pm||!md||!mp)return;if(mq.matches){pm.prepend(md);pm.insertBefore(mp,md.nextSibling);mb2.append(mp,...rows.filter(Boolean));pm.append(more);}else{more.remove();rows.filter(Boolean).forEach(n=>pm.appendChild(n));if(gr){bar.insertBefore(md,gr);bar.insertBefore(mp,gr.nextSibling);}}};
+{const sr=more.querySelector('.morerow');if(sr)sr.addEventListener('click',()=>setPlus(false));}
 place();mq.addEventListener('change',place);{const px=document.getElementById('popx');if(px)px.onclick=()=>{closePop();mpBtn.focus({preventScroll:true});};}
 if(md)md.addEventListener('click',()=>{if(mq.matches)setTimeout(()=>setPlus(false),0);});}
 // A kind of task picked in the + menu shows its result: the menu closes, the box says what to type, and the ideas list opens (on Earth it sits behind "Try an idea").
@@ -1326,6 +1329,7 @@ async function run(task){
     else if(ev.type==='answer')answer=ev.text;else if(ev.type==='needcomputer')needPod=true;else if(ev.type==='browseranswer')browserInfo=ev;
     else if(ev.type==='error'){failed=true;errCard(turn,ev.error,ev.kind,task);}
     else if(ev.type==='file'&&ev.error)out('Could not put '+ev.path+' on the computer: '+ev.error,true);
+    else if(ev.type==='github'&&!ev.ok)out('GitHub sign-in on the computer failed: '+ev.error,true);
   };
   try{
     if(task.length>3)chatLang=langOf(task);const payload={mode:window.__mode||'chat',pod:podNow,cat:window.__cat||'',task,history,lang:chatLang,memo,ui:window.__LANG||'',providers:picked(),files:sendFiles,ai:{vision:canSee(),ai:aiSel.value,key:byoKey.value,model:cur.model||fixModel(byoModel.value.trim()).model||byoModel.value.trim()}};
@@ -1597,19 +1601,21 @@ export function appPage({ login, anon = false, connected = [], models = DEFAULT_
     .join('')}`;
   return shell(
     'Flisk Chat',
-    `<div class="earthstill" aria-hidden="true"></div><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div class="app">
+    `${loginHook(login, anon)}<div class="earthstill" aria-hidden="true"></div><canvas id="earth" class="earthc" aria-hidden="true"></canvas><div class="app">
 <nav class="thx frail" aria-label="Menu"><a class="fl" href="/" aria-label="Chat home">${icon('chat', 30)}</a><button type="button" data-act="new"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New</button><button type="button" data-act="hist"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>History</button><a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Computers</a><button type="button" data-act="voice"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3"/></svg>Voice</button>${login && !anon ? `<a href="/reviews"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>Settings</a><a class="end" href="/auth/signout"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</a>` : `<a class="end" href="/auth/start"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>Sign in</a>`}</nav>
 <aside id="side" class="side" aria-label="Chats">
 <div class="brand">${LOGO}<button type="button" id="sideclose" class="iconbtn only-m" aria-label="Close the menu">×</button></div>
-<button type="button" id="newchat" class="newchat">${icon('thunder', 18)}New chat</button>
+<button type="button" id="newchat" class="newchat"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New chat</button>
 <label class="search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input id="q" type="search" placeholder="Search your chats" aria-label="Search your chats" autocomplete="off"></label>
 <div class="histwrap"><ul id="hist"></ul></div>
 <section class="sidesec"><h4><span style="display:inline-flex;align-items:center;gap:6px">${icon('fleet', 16)}Computers</span><a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">manage</a></h4><ul class="comps">${comps}</ul></section>
 <section class="sidesec"><h4>Voice</h4><div class="soon">Voice talk: tap the wave and just talk, it answers out loud <span class="tag">new</span></div></section>
 <div class="who">${login && anon ? '<div class="optwrap"><a class="btn" href="/auth/start" style="width:100%;justify-content:center">Sign in with GitHub</a><small class="optin">Optional. It keeps your computers on every device and unlocks PR reviews and higher limits.</small></div>' : login ? `<span>@${esc(login)}</span><a href="/reviews">Settings</a><a href="/auth/signout">Sign out</a>` : '<a class="btn go" href="/auth/start" style="width:100%;justify-content:center">Sign in with GitHub</a>'}</div>
+<button type="button" id="sidecollapse" class="sidecollapse" aria-label="Collapse the sidebar" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
 </aside>
+<button type="button" id="sideexpand" class="sideexpand" aria-label="Expand the sidebar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
 <div id="scrim" class="scrim" aria-hidden="true"></div>
-<div class="main">
+<main id="main" class="main">
 <div class="top"><button type="button" id="sideopen" class="iconbtn" aria-label="Open the menu"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>${LOGO}</div>
 <div id="scroll" class="scroll"><div class="col">
 <section id="ideas" class="welcome"><div class="tpill">${esc(pill)}<em>New: voice talk</em></div><button type="button" id="vorb" class="vorb" aria-label="Start voice talk"><svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></button><h1><span class="h-def">What should we build?</span><span class="h-voice">Just talk. Flisk builds it.</span><span class="h-focus">${icon('chat', 34)}<span id="hello" data-who="${login && !anon ? esc(login) : ''}">Good evening</span></span></h1><div class="pitch"><p class="pl">Say what you want. A computer builds it.</p><p class="ps">A website, an app, a video or an answer, with a live link in minutes. Free, no sign-up.</p><div class="egs" role="group" aria-label="Examples"><button type="button" class="eg" data-t="A one-page website for my coffee shop">A coffee shop website</button><button type="button" class="eg" data-t="A wedding page with the date, the place and an RSVP form">A wedding invite page</button><button type="button" class="eg" data-t="A menu page for my bakery with prices and opening hours">A bakery menu page</button></div></div><p class="sub">${esc(sub)}</p>
@@ -1638,7 +1644,7 @@ ${earthUsers(esc)}
 <button id="go" class="send" type="submit" aria-label="Run"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 14V4M4.5 8.5L9 4l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
 </div></form>
 <p class="fine">${pod ? 'Runs on a small Linux in this tab, or on a real computer from your own sandbox account.' : 'Runs on a real computer from your own sandbox account.'} Your keys stay encrypted and are never shown. Enter sends, Shift+Enter adds a line. <label class="look">Look <select id="look" aria-label="Look of the page">${THEMES.map(([id, label]) => `<option value="${id}"${id === theme ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select></label></p>
-</div></div></div>
+</div></div></main>
 <aside class="thx rcol" aria-label="Computers and ideas"><h5>Computers · ${on.length} <a href="https://fleet.flisk.si/console?section=providers" target="_blank" rel="noopener">manage</a></h5>${on.length ? on.map((id) => `<div class="rc"><span class="wdot ok"></span>${esc(names[id])}<small>ready</small></div>`).join('') : `<div class="rc off"><span class="wdot"></span>${login && !anon ? 'None connected yet' : 'Sign in to see yours'}<small>—</small></div>`}<h5>Try saying</h5>${CATS[0].ideas.map((i) => `<button type="button" data-idea="${esc(i)}">“${esc(i)}”</button>`).join('')}</aside></div>
 <div id="oracle" class="oracle" hidden role="dialog" aria-modal="true" aria-label="Voice talk">
 <div class="otop"><span class="otitle">Flisk Oracle</span><span class="ohint">Talk. Pause when you are done. Tap the circle to interrupt.</span></div>
