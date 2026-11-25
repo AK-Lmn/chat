@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security Vulnerability Report
+    url: https://github.com/flisk-sh/chat/security/policy
+    about: Please report security issues privately through our security advisory policy.
