@@ -7,7 +7,7 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const app = read('web/src/App.jsx');
 const cards = read('web/src/Cards.jsx');
 const page = read('src/page.js');
-const built = read('src/next-app.generated.js'); // what / really serves
+const built = read('src/app.generated.js'); // what / really serves
 
 test('every field a turn collects is read by the page', () => {
   // A field events.js fills but nothing renders is a card the visitor never sees (widgets, workers and browser were).
@@ -36,6 +36,16 @@ test('widget, worker and browseranswer events reach the turn', () => {
   expect(t.browser.question).toBe('q');
 });
 
+test('failed github sign-in event produces an error output', () => {
+  let t = newTurn('fix bug');
+  t = applyEv(t, {type: 'github', ok: false, error: 'bad credentials'});
+  expect(t.outs).toEqual([{text: 'GitHub sign-in on the computer failed: bad credentials', bad: true}]);
+  // ok: true event produces no error output
+  let tOk = newTurn('fix bug');
+  tOk = applyEv(tOk, {type: 'github', ok: true, error: null});
+  expect(tOk.outs).toEqual([]);
+});
+
 test('a reroute is shown as a model step, not a computer', () => {
   const t = applyEv(newTurn('x'), {type: 'reroute', text: 'Trying another model'});
   expect(t.steps.at(-1).name).toBe('model');
@@ -53,12 +63,21 @@ test('the Oracle wakes the voice model when it opens', () => {
   expect(read('web/src/Oracle.jsx')).toContain("fetch('/api/talk/warm', {method: 'POST'})");
 });
 
+test('the Oracle re-requests microphone permissions on tap after refusal (#359)', () => {
+  const oracle = read('web/src/Oracle.jsx');
+  expect(oracle).toContain("else requestMic();");
+  expect(oracle).toContain("NotFoundError");
+  expect(oracle).toContain("NotAllowedError");
+  expect(oracle).toContain("No microphone found on this device.");
+  expect(oracle).toContain("The microphone is blocked. Allow it for this site, then tap the circle.");
+});
+
 test('the home page at / can be found by search engines and shows a link preview, as /classic does (#350)', async () => {
-  const {nextPage} = await import('../src/next-page.js');
+  const {chatPage} = await import('../src/app-page.js');
   const {appPage} = await import('../src/page.js');
   const head = (html) => html.slice(0, html.indexOf('</head>'));
   const tags = (html) => [...head(html).matchAll(/<(?:meta (?:name|property)="(?:robots|description|og:[a-z:]+|twitter:[a-z]+)"|link rel="(?:canonical|icon|apple-touch-icon)")[^>]*>/g)].map((m) => m[0]).sort();
-  const home = nextPage({login: null, anon: true});
+  const home = chatPage({login: null, anon: true});
   expect(home).not.toContain('noindex');
   expect(home).toContain('<meta name="robots" content="index,follow">');
   expect(home).toContain('<link rel="canonical" href="https://chat.flisk.si/">');
@@ -168,9 +187,24 @@ test('the phone top bar keeps every button on screen at 320, 360 and 375 px (#35
   const css = read('web/src/app.css');
   expect(css).toContain('@media (max-width:400px){.chat-head:has(.chat-head-end)');
   expect(app).toContain('const tiny = useNarrow(340);');
-  expect(app).toContain('{signIn && !tiny && <Button label="Sign in"');
-  expect(app).toContain("...(signIn && tiny ? [{label: 'Sign in with GitHub'");
+  expect(app).toContain('{signIn && !tiny && <Button label="Start free with GitHub"');
+  expect(app).toContain("...(signIn && tiny ? [{label: 'Start free with GitHub'");
   const qa = read('scripts/mobile-qa.mjs');
   expect(qa).toContain('for (const width of [320, 360, 375])');
   expect(qa).toContain('top bar');
+});
+
+test('guest does not expose internal anon id in user footer or badge (#363)', () => {
+  // Evaluate the helper from source: importing App.jsx would load web/src/api.js with this file's globals and break other tests.
+  const src = app.match(/export const userLabel = (.*);/)[1];
+  const userLabel = new Function('return ' + src.replace('boot = BOOT', 'boot'))();
+  expect(userLabel({login: 'anon-c8a5d77f7bbb99e5', anon: true})).toBe('Guest');
+  expect(userLabel({login: '', anon: false})).toBe('Guest');
+  expect(userLabel({login: null, anon: false})).toBe('Guest');
+  expect(userLabel({login: 'octocat', anon: false})).toBe('@octocat');
+  expect(app).toContain('userLabel()');
+  expect(app).toContain('Sign in with GitHub');
+  expect(app).not.toMatch(/@' \+ BOOT\.login/);
+  expect(built).toContain('Sign in with GitHub');
+  expect(built).not.toMatch(/@['"]\s*\+\s*BOOT\.login/);
 });

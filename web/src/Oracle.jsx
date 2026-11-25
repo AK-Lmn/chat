@@ -4,6 +4,7 @@ import {useState, useEffect, useRef} from 'react';
 import {Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
 import {BOOT} from './api.js';
+import {Tip} from './Tip.jsx';
 
 const b64 = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1] || ''); r.onerror = () => no(r.error); r.readAsDataURL(blob); });
 const sentences = (t) => (String(t).match(/[^.!?…\n]+[.!?…]*\s*/g) || [String(t)]).reduce((a, s) => { const l = a[a.length - 1]; if (l && l.length + s.length < 180) a[a.length - 1] = l + s; else a.push(s); return a; }, []).map((s) => s.trim()).filter(Boolean);
@@ -15,6 +16,7 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
   const [you, setYou] = useState('');
   const [say, setSay] = useState('');
   const live = useRef({on: false, stream: null, ctx: null, rec: null, aud: null, turns: [], lang: '', stopListen: null, stopSpeak: null});
+  const closeRef = useRef(null);
   const o = (st, m) => { setState(st); setMsg(m); };
 
   const speak = (text) => new Promise((done) => {
@@ -49,7 +51,7 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
     const timer = setInterval(tick, 60);
     L.stopListen = () => { if (r.state !== 'inactive') r.stop(); };
     r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    r.onstop = () => { clearInterval(timer); try { src.disconnect(); } catch (e) { /* done */ } L.stopListen = null; done(spoke ? new Blob(chunks, {type: r.mimeType || type || 'audio/webm'}) : null); };
+    r.onstop = () => { clearInterval(timer); try { src.disconnect(); } catch (e) { /* done */ } L.stopListen = null; done(spoke && talked >= 350 ? new Blob(chunks, {type: r.mimeType || type || 'audio/webm'}) : null); };
     r.start();
   });
 
@@ -89,24 +91,54 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
     onClose();
   };
 
+  closeRef.current = close;
+
+  const micHelp = (e) => {
+    const n = e && e.name;
+    if (n === 'NotFoundError' || n === 'OverconstrainedError') return 'No microphone found on this device.';
+    if (n === 'NotReadableError' || n === 'AbortError') return 'Another app is using the microphone. Close it, then tap the circle.';
+    if (n === 'NotAllowedError' || n === 'SecurityError') return 'The microphone is blocked. Allow it for this site, then tap the circle.';
+    return 'Could not open the microphone: ' + (e && e.message || e);
+  };
+
+  const requestMic = () => {
+    const L = live.current;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      o('idle', 'This browser cannot record. Try Chrome, Safari, Edge or Firefox.');
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!L.ctx && AC) {
+      try { L.ctx = new AC(); L.ctx.resume().catch(() => {}); } catch (e) { L.ctx = null; }
+    }
+    if (!L.aud) {
+      L.aud = new Audio(); L.aud.src = SILENT; const p = L.aud.play(); if (p) p.catch(() => {});
+    }
+    o('thinking', 'Opening the microphone…');
+    navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}).then((s) => {
+      if (!live.current.open) { s.getTracks().forEach((t) => t.stop()); return; }
+      L.stream = s; L.on = true; loop().catch(() => o('idle', 'Something went wrong. Tap the circle to try again.'));
+    }).catch((e) => o('idle', micHelp(e)));
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     // Wake the voice model while the visitor reads the intro, as /classic does, so the first answer comes quicker.
     if (BOOT.login) fetch('/api/talk/warm', {method: 'POST'}).catch(() => {});
-    const L = live.current; L.turns = []; L.lang = ''; setYou(''); setSay('');
+    const L = live.current; L.open = true; L.turns = []; L.lang = ''; setYou(''); setSay('');
     if (!BOOT.login) { o('idle', 'Sign in with GitHub to talk with the Oracle.'); return undefined; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) { o('idle', 'This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return undefined; }
-    // Made inside the tap that opened this screen: an iPhone keeps audio made later silent.
-    const AC = window.AudioContext || window.webkitAudioContext;
-    try { L.ctx = new AC(); L.ctx.resume().catch(() => {}); } catch (e) { L.ctx = null; }
-    L.aud = new Audio(); L.aud.src = SILENT; const p = L.aud.play(); if (p) p.catch(() => {});
-    o('thinking', 'Opening the microphone…');
-    let gone = false;
-    navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}).then((s) => {
-      if (gone) { s.getTracks().forEach((t) => t.stop()); return; }
-      L.stream = s; L.on = true; loop().catch(() => o('idle', 'Something went wrong. Tap the circle to try again.'));
-    }).catch(() => o('idle', 'The microphone is blocked. Allow it for this site, then tap the circle.'));
-    return () => { gone = true; if (L.on) { L.on = false; if (L.stopListen) L.stopListen(); if (L.stopSpeak) L.stopSpeak(); if (L.stream) L.stream.getTracks().forEach((t) => t.stop()); if (L.ctx) { try { L.ctx.close(); } catch (e) { /* closed */ } } } };
+    requestMic();
+    return () => { L.open = false; if (L.on) { L.on = false; if (L.stopListen) L.stopListen(); if (L.stopSpeak) L.stopSpeak(); if (L.stream) L.stream.getTracks().forEach((t) => t.stop()); if (L.ctx) { try { L.ctx.close(); } catch (e) { /* closed */ } } } };
+  }, [open]);
+
+  // The Back button closes the talk, like Esc, instead of leaving it open behind the page.
+  useEffect(() => {
+    if (!open) return undefined;
+    history.pushState({oracle: true}, '');
+    let popped = false;
+    const back = () => { popped = true; closeRef.current(); };
+    window.addEventListener('popstate', back);
+    return () => { window.removeEventListener('popstate', back); if (!popped && history.state && history.state.oracle) history.back(); };
   }, [open]);
 
   useEffect(() => {
@@ -118,9 +150,13 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
   if (!open) return null;
   const tap = () => {
     const L = live.current;
+    const now = Date.now(); if (now - (L.lastTap || 0) < 400) return; L.lastTap = now;
     if (state === 'speaking' && L.stopSpeak) { L.stopSpeak(); return; }
     if (state === 'listening' && L.stopListen) { L.stopListen(); return; }
-    if (state === 'idle' && L.stream) { L.on = true; loop().catch(() => {}); }
+    if (state === 'idle') {
+      if (L.stream) { L.on = true; loop().catch(() => {}); }
+      else requestMic();
+    }
   };
   return (
     <div className={'earth-talk ' + state} role="dialog" aria-modal="true" aria-label="Voice talk with the Flisk Oracle">
@@ -129,7 +165,7 @@ export function Oracle({open, onClose, aiBlock, onKeep, onBuild}) {
       <Text type="supporting" color="secondary" role="status">{msg}</Text>
       {you && <Text type="supporting" color="secondary">You: {you}</Text>}
       {say && <Text>{say}</Text>}
-      <Button label="End talk" variant="secondary" onClick={close} />
+      <Tip title="End talk" scene="talk" text="Stops listening and closes the voice chat with the Flisk Oracle."><span><Button label="End talk" variant="secondary" onClick={close} /></span></Tip>
     </div>
   );
 }

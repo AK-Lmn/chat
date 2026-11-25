@@ -137,8 +137,32 @@ export function homePath(path) {
   return String(path).replace(/^\/(?:home\/[^/]+|root)(?=\/|$)/, '~');
 }
 
+// Some models write a function call, {"name": "say", "text": "..."} or {"name": "widget": {...}} (not even valid JSON), instead of
+// {"say": "..."}. Rewrites that to the one shape every other part of the loop reads; any other text comes back unchanged.
+const ACTION_NAMES = 'say|run|write|read|publish|worker|image|site|video|system|share|search|widget';
+const NAME_WRAPPER = new RegExp(`^(\\s*(?:\`\`\`(?:json)?\\s*)?)\\{\\s*"name"\\s*:\\s*"(${ACTION_NAMES})"\\s*([,:])`);
+const NAME_PAYLOAD = { say: ['text', 'content', 'message', 'say'], run: ['command', 'run'], read: ['path', 'read'], publish: ['path', 'publish'], worker: ['path', 'worker'], search: ['query', 'search'] };
+export function unwrapName(text) {
+  const s = String(text ?? '');
+  const m = NAME_WRAPPER.exec(s);
+  if (!m) return s;
+  const [head, pre, name, sep] = m;
+  if (sep === ':') return `${pre}{"${name}":${s.slice(head.length)}`; // {"name":"say":"..."}: the value follows the name
+  const end = s.lastIndexOf('}');
+  let a;
+  try { a = JSON.parse(s.slice(pre.length, end + 1)); } catch { return s; }
+  const { name: _n, ...rest } = a;
+  let payload = rest.arguments ?? rest.parameters ?? rest.input;
+  if (typeof payload === 'string' && /^\s*\{/.test(payload) && name !== 'say') { try { payload = JSON.parse(payload); } catch { /* keep the text */ } }
+  if (payload === undefined) {
+    const key = (NAME_PAYLOAD[name] || []).find((k) => rest[k] !== undefined);
+    payload = key ? rest[key] : Object.keys(rest).length ? rest : undefined;
+  }
+  return payload === undefined ? s : `${pre}${JSON.stringify({ [name]: payload })}`;
+}
+
 export function parseAction(text) {
-  let s = String(text ?? '').trim();
+  let s = unwrapName(String(text ?? '').trim()).trim();
 
   // Strip common tool-call / DSML / XML wrappers the free model sometimes emits.
   s = s
@@ -147,6 +171,7 @@ export function parseAction(text) {
     .replace(/<\/?parameter[^>]*>/gi, '')
     .replace(/<\|[^|]+\|>/g, '')
     .trim();
+  s = unwrapName(s);
 
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
@@ -203,7 +228,47 @@ export function parseAction(text) {
     return { type: 'bad', text: String(text) };
   }
 
+  // A "say" the model wrote as nearly-JSON (a raw newline or a bare quote inside the string, or cut off mid-word) fails JSON.parse.
+  // Never show the braces and keys to a person: cut the words out, or ask the model again when there are none.
+  const salvaged = salvageSay(s);
+  if (salvaged) return salvaged;
+
   return { type: 'say', text: s || '(no answer)' };
+}
+
+// The last guard before a person reads an answer. Cuts model plumbing out of the text: a leftover {"say": ...} wrapper (also two of
+// them, or one nested in another), other action JSON (no words in it), and tool tags. Returns { text, changed, empty }.
+const PLUMBING_START = /^\s*(?:```(?:json)?\s*)?\{\s*"(say|run|write|read|publish|worker|image|site|video|system|share|search|widget)"/;
+const TOOL_TAGS = /<\|DSML\|>[\s\S]*?<\|\/DSML\|>|<\/?(?:invoke|parameter|tool_call|function_call)[^>]*>|<\|[^|]+\|>/gi;
+export function guardAnswer(text) {
+  const orig = String(text ?? '');
+  let t = unwrapName(orig.replace(TOOL_TAGS, '').trim());
+  for (let i = 0; i < 3 && PLUMBING_START.test(t); i++) {
+    const m = /^\s*(?:```(?:json)?\s*)?\{\s*"say"/.test(t);
+    if (!m) { t = ''; break; } // another action: there are no words in it
+    const one = salvageSay(t);
+    if (one?.type === 'say') { t = one.text; continue; }
+    const all = [...t.matchAll(/"say"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map((x) => x[1].replace(/\\n/g, '\n').replace(/\\(["\\/])/g, '$1').trim()).filter(Boolean);
+    t = all.join('\n\n');
+    break;
+  }
+  return { text: t, changed: t !== orig.trim(), empty: !t };
+}
+
+// Pulls the words out of a broken {"say": "..."} reply. Returns null when the text is not a say action at all.
+export function salvageSay(s) {
+  const m = /^\s*(?:```(?:json)?\s*)?\{\s*"say(?:"\s*:\s*"?)?/.exec(s);
+  if (!m) return null;
+  if (s.split('"say"').length > 2) return null; // two answers in one reply stay as written
+  let body = s.slice(m[0].length);
+  if (!/"say"\s*:/.test(m[0])) return { type: 'bad', text: s, why: 'That reply was cut off before any words. Answer again as {"say": "..."}.' };
+  body = body.replace(/\s*```\s*$/, '').replace(/"?\s*\}?\s*$/, '');
+  const text = body
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\(["\\/])/g, '$1')
+    .trim();
+  if (!text) return { type: 'bad', text: s, why: 'That reply had no words. Answer again as {"say": "..."}.' };
+  return { type: 'say', text, salvaged: true };
 }
 
 const IMAGE_SITE = /pollinations|picsum\.photos|source\.unsplash|loremflickr|placekitten|placeimg/i;
@@ -234,11 +299,21 @@ export function asksImage(task) {
   return { prompt: `${what}, ${real ? 'a photorealistic photo, natural light, sharp detail' : 'high detail'}`, caption: `Here is ${what}.` };
 }
 // The hack for when the drawing model has no budget left: the chat model writes the picture as SVG code (gradients, shadows,
-// highlights, layered shapes), which costs no drawing budget. The SVG is cleaned before it is kept: no script, no outside links.
-export const SVG_ASK = 'Draw the picture the user asks for as ONE SVG image, and reply with only the SVG code: no words, no code fence. Make it look realistic and three-dimensional, not flat: viewBox="0 0 800 800", a background with a gradient, every main shape filled with a linearGradient or radialGradient that goes from a light to a dark shade, soft shadows under objects (feGaussianBlur filter), bright highlights, darker shaded sides, fine detail such as fur strands, texture or reflections, and 40 or more shapes. No text, no script, no outside links.';
+// highlights, layered shapes), which costs no drawing budget. The ask is kept short: a 40-shape picture took the free model over
+// the 60 s limit on every try, so visitors got nothing. The SVG is cleaned before it is kept: no script, no outside links.
+export const SVG_ASK = 'Draw the picture the user asks for as ONE SVG image, and reply with only the SVG code: no words, no code fence. Keep it short so it is written fast: viewBox="0 0 800 800", a gradient background, 15 to 30 shapes, the main shapes filled with a linearGradient or radialGradient from a light to a dark shade, a soft shadow under the subject and a few bright highlights. No text, no script, no outside links.';
 export function cleanSvg(raw) {
-  const m = /<svg[\s>][\s\S]*<\/svg>/i.exec(String(raw || ''));
-  if (!m) return null;
+  let m = /<svg[\s>][\s\S]*<\/svg>/i.exec(String(raw || ''));
+  // A free model often runs out of tokens before </svg>. Keep what is complete: cut back to the last whole element, close what is open.
+  if (!m) {
+    const open = /<svg[\s>][\s\S]*/i.exec(String(raw || '').replace(/```(?:svg|xml)?/gi, ''));
+    const end = open ? Math.max(open[0].lastIndexOf('/>'), open[0].lastIndexOf('</')) : -1;
+    if (end < 0) return null;
+    let part = open[0].slice(0, open[0].indexOf('>', end) + 1);
+    const unclosed = (tag) => Math.max(0, (part.match(new RegExp(`<${tag}[\\s>]`, 'gi')) || []).length - (part.match(new RegExp(`</${tag}>`, 'gi')) || []).length);
+    part += '</g>'.repeat(unclosed('g')) + '</defs>'.repeat(unclosed('defs')) + '</svg>';
+    m = [part];
+  }
   let svg = m[0];
   // One pass can leave a new tag or attribute behind (<scr<script>ipt>), so clean until nothing changes.
   for (let prev = ''; prev !== svg;) {
@@ -330,6 +405,11 @@ export function noteDeadLinks(text, hadComputer) {
   return `${text}\n\n(The localhost addresses above were on this task's computer, which has stopped now, so they will not open for you. Ask me to publish the page if you want a link.)`;
 }
 
+// One address, however it is spelled: host in lower case, no #fragment, no trailing slash.
+export function webKey(url) {
+  try { const u = new URL(String(url)); u.hash = ''; return (u.origin + u.pathname.replace(/\/+$/, '') + u.search).toLowerCase(); } catch { return String(url).trim().toLowerCase(); }
+}
+
 export function cleanHistory(history) {
   if (!Array.isArray(history)) return [];
   return history
@@ -339,7 +419,9 @@ export function cleanHistory(history) {
       // A file attached on an earlier turn was on that turn's computer only; say so, so the model asks for it again.
       const names = Array.isArray(m.files) ? m.files.filter((n) => typeof n === 'string').slice(0, 3).map((n) => n.slice(0, 80)) : [];
       const note = m.role === 'user' && names.length ? `\n[Attached then: ${names.join(', ')}. Not on this computer any more: ask the user to attach it again if you need it.]` : '';
-      return { role: m.role, content: m.content.slice(0, 1500) + note };
+      // An earlier answer that still carries model plumbing would teach the model to write it again.
+      const body = m.role === 'assistant' ? guardAnswer(m.content).text || m.content : m.content;
+      return { role: m.role, content: body.slice(0, 1500) + note };
     });
 }
 
@@ -402,7 +484,7 @@ export async function runTask({ grade = null, stream = false, decision = null, c
   const steps = [];
   const links = [];
   // What went wrong or right, counted for the build analytics (src/index.js recordRun): why a build came out weak.
-  const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, refused: 0, refusedWhy: null, podMs: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
+  const stats = { big: isBigApp(task), bad: 0, empty: 0, provider: 0, errors: 0, refused: 0, refusedWhy: null, salvaged: 0, guarded: 0, podMs: 0, system: false, shared: false, copy: false, firstAction: null, failed: null };
   let refusedImage = 0;
   let gradeRetried = false;
   const t0 = Date.now();
@@ -436,6 +518,7 @@ export async function runTask({ grade = null, stream = false, decision = null, c
   // then another) once read until the run ran out of calls and ended on "the free AI is busy".
   const MAX_WEB_READS = 6;
   let webReads = 0;
+  const webSeen = new Set(); // the same address is read once per task: a repeat gives the model nothing new
   // Each reroute row once per run: the same "Flisk Wolf is resting" on every step filled the page with copies.
   const rerouteSeen = new Set();
   const reroute = (text) => { if (rerouteSeen.has(text)) return; rerouteSeen.add(text); emit({ type: 'reroute', text }); };
@@ -443,12 +526,21 @@ export async function runTask({ grade = null, stream = false, decision = null, c
   const drawImage = async (spec) => {
     emit({ type: 'image_start', prompt: spec.prompt });
     let pic = await Promise.resolve(photo(spec.prompt)).catch(() => '');
+    let busy = false;
     if (!pic) {
-      const r = await Promise.race([model([{ role: 'system', content: SVG_ASK }, { role: 'user', content: spec.prompt.replace(/,\s*(a photorealistic photo.*|high detail)$/i, '') }]), new Promise((_, no) => setTimeout(() => no(new Error('svg took too long')), 60_000))]).catch((e) => { console.warn('svg picture failed:', String(e?.message || e).slice(0, 200)); return null; });
-      const svg = cleanSvg(r?.text);
-      if (svg) pic = svgDataUrl(svg);
+      // The chat model writes the picture as SVG. A busy free model is short-lived, so it is asked again after the same waits as the main loop.
+      for (let attempt = 0; !pic && attempt <= BUSY_WAITS.length; attempt++) {
+        const r = await Promise.race([model([{ role: 'system', content: SVG_ASK }, { role: 'user', content: spec.prompt.replace(/,\s*(a photorealistic photo.*|high detail)$/i, '') }]), new Promise((_, no) => setTimeout(() => no(new Error('svg took too long')), 60_000))]).catch((e) => { console.warn('svg picture failed:', String(e?.message || e).slice(0, 200)); return null; });
+        const svg = cleanSvg(r?.text);
+        if (svg) { pic = svgDataUrl(svg); break; }
+        busy = r?.kind === 'busy';
+        if (r) console.warn('svg picture not usable:', r.kind || 'no svg in the reply', `${String(r.text || '').length} chars, ends`, String(r.error || r.text || '').slice(-100).replace(/\s+/g, ' '));
+        if (!busy || attempt === BUSY_WAITS.length) break;
+        emit({ type: 'reroute', text: `Every free model is busy, trying again in ${Math.round(BUSY_WAITS[attempt] / 1000)} s` });
+        await wait(BUSY_WAITS[attempt]);
+      }
     }
-    if (!pic) return { error: 'the picture could not be drawn right now: the daily picture limit is used up or the drawing model is busy. Try again later' };
+    if (!pic) return { error: busy ? 'every free model is busy right now, so the picture could not be drawn. Try again in a minute' : 'the picture could not be drawn right now. Try again in a minute' };
     const saved = saveImage ? await Promise.resolve(saveImage(pic, spec.prompt)).catch((e) => ({ error: String(e?.message || e) })) : { url: pic };
     if (saved?.error || !saved?.url) return { error: saved?.error || 'the picture could not be saved' };
     links.push(saved.url);
@@ -531,6 +623,7 @@ export async function runTask({ grade = null, stream = false, decision = null, c
       const action = parseAction(reply.text);
       if (typeof action.path === 'string') action.path = homePath(action.path);
       if (action.type === 'bad') stats.bad++;
+      if (action.salvaged) stats.salvaged++;
       if (stats.firstAction === null && action.type !== 'bad') stats.firstAction = action.type;
       if (action.type === 'bad' && !last) {
         emit({ type: 'retry' });
@@ -599,6 +692,18 @@ export async function runTask({ grade = null, stream = false, decision = null, c
         continue;
       }
       if (action.type === 'say' || last) {
+        // The last step before a visitor: whatever the parser let through, model plumbing ({"say": ...}, tool tags) never reaches the page.
+        if (action.type === 'say') {
+          const g0 = guardAnswer(action.text);
+          if (g0.changed) stats.guarded++;
+          if (g0.empty && !last) {
+            stats.bad++;
+            emit({ type: 'retry' });
+            messages.push({ role: 'user', content: 'That reply had no words for the person. Answer the ask as {"say": "..."} with plain words.' });
+            continue;
+          }
+          action.text = g0.empty ? '(no answer)' : g0.text;
+        }
         // Out of steps with an action still planned: never show that raw JSON as the answer.
         const text = action.type === 'say' ? withSources(splitPoints(noteDeadLinks(action.text, !!podId)), sources) : `I ran out of steps (${maxSteps}) before finishing. What I did is in the steps above; the computer is stopped now, so its files are gone. Ask again with a smaller first part${maxSteps < BYO_STEPS ? `, or pick a model with your own key for ${BYO_STEPS} steps` : ''}.`;
         // Jev reads the reply before it is final. A reply nobody saw yet and judged bad is asked again once, with the reason; words
@@ -629,7 +734,15 @@ export async function runTask({ grade = null, stream = false, decision = null, c
             messages.push({ role: 'user', content: `That is ${MAX_WEB_READS} pages read, the most one request can read. Answer now with "say" from what you have read, and say what you could not open.` });
             continue;
           }
-          if (w.widget.id === 'web') webReads++;
+          if (w.widget.id === 'web') {
+            const key = webKey(w.input.url);
+            if (webSeen.has(key)) {
+              messages.push({ role: 'user', content: `You already read ${w.input.url}: its text is above. Use it, or read a different page. Next action as JSON only.` });
+              continue;
+            }
+            webSeen.add(key);
+            webReads++;
+          }
           const r = await w.widget.run(w.input, { fetch: fetchImpl, citable });
           if (r.error && SUBREQUESTS_RE.test(r.error)) {
             emit({ type: 'error', error: SUBREQUESTS_USED, kind: 'subrequests' });
