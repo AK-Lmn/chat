@@ -15,7 +15,7 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel; the other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
 const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
@@ -50,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud, onSignPdf}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHistorySearch, onSignPdf}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -61,11 +61,12 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud, onSignPdf})
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => canClick(p, onReadAloud, onSignPdf);
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf) || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
     if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
     else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+    else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
   };
   return (
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={600} purpose="form">
