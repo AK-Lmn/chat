@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChatCommand } from '../web/src/chat-commands.js';
 import { altTextForFiles, ALT_TEXT_PROMPT, VISION_MODELS } from '../src/see.js';
-import { asksAltText, cleanFiles, runTask } from '../src/loop.js';
+import { cleanFiles, runTask } from '../src/loop.js';
+import { asksAltText, runWithAltText } from '../src/alt-text.js';
 import { handle } from '../src/index.js';
 import { makeSession } from '../src/session.js';
 import catalog from '../plugins/catalog.json';
@@ -102,7 +103,7 @@ describe('altTextForFiles and runTask alt-text execution', () => {
     const events = [];
     let asked = 0;
     const files = cleanFiles([{ name: 'cat.png', type: 'image/png', content: PNG_1PX, b64: true }]);
-    const r = await runTask({
+    const r = await runWithAltText(runTask, {
       task: 'describe this photo',
       plugin: 'chat.alt-text',
       files,
@@ -120,7 +121,7 @@ describe('altTextForFiles and runTask alt-text execution', () => {
   test('runTask falls back to a vision-capable BYO model when altText returns empty', async () => {
     const seen = [];
     const files = cleanFiles([{ name: 'cat.png', type: 'image/png', content: PNG_1PX, b64: true }]);
-    const r = await runTask({
+    const r = await runWithAltText(runTask, {
       task: 'describe this photo',
       plugin: 'chat.alt-text',
       files,
@@ -135,7 +136,7 @@ describe('altTextForFiles and runTask alt-text execution', () => {
 
   test('runTask returns a calm message when neither Workers AI nor a vision model is available', async () => {
     const files = cleanFiles([{ name: 'cat.png', type: 'image/png', content: PNG_1PX, b64: true }]);
-    const r = await runTask({
+    const r = await runWithAltText(runTask, {
       task: 'describe this photo',
       plugin: 'chat.alt-text',
       files,
