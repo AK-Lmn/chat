@@ -13,6 +13,7 @@ import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
+import {parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary} from './history-search.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
@@ -76,7 +77,7 @@ async function savePicture(src) {
 
 const copy = (u) => navigator.clipboard && navigator.clipboard.writeText(u).catch(() => {});
 
-function Answer({t, onAgain, onPick, onPreview, openUrl}) {
+function Answer({t, onAgain, onPick, onPreview, openUrl, onOpenChat}) {
   const text = shownText(t);
   const links = t.link ? [t.link] : [];
   const pics = pictures(text);
@@ -87,6 +88,13 @@ function Answer({t, onAgain, onPick, onPreview, openUrl}) {
       )}
       {t.outs.length > 0 && <pre style={{margin: 0, padding: 12, borderRadius: 12, background: 'var(--color-background-secondary, #8881)', overflow: 'auto', maxHeight: 220, fontSize: 12}}>{t.outs.map((o) => o.text).join('\n')}</pre>}
       {text && <ChatMessageBubble variant="ghost"><Markdown density="compact">{text}</Markdown></ChatMessageBubble>}
+      {t.historyResults && t.historyResults.length > 0 && onOpenChat && (
+        <HStack gap={2} wrap="wrap">
+          {t.historyResults.slice(0, 6).map((r) => (
+            <Button key={r.id} label={'Open: ' + (r.title || 'Untitled')} variant="secondary" size="sm" onClick={() => onOpenChat(r.chat)} />
+          ))}
+        </HStack>
+      )}
       {pics.length > 0 && <HStack gap={2} wrap="wrap">{pics.map((src, i) => <Button key={src} label={pics.length > 1 ? 'Save picture ' + (i + 1) : 'Save picture'} variant="secondary" size="sm" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} onClick={() => savePicture(src)} />)}</HStack>}
       {links.map((u) => {
         // A page this chat published (/s/<id>) is kept 7 days, so it can be downloaded to keep it, as on /classic (#354).
@@ -392,6 +400,26 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   // With Studio open, "remove the background", "crop to square", "make it an instagram story" or "make a meme", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
+  // Plugin chat.history-search: "find what I asked about pdfs" searches saved chats in this browser without hitting the API.
+  const runHistorySearch = useCallback((query, originalText = '') => {
+    const q = String(query || '').trim();
+    if (!q) {
+      setValue('find what I asked about ');
+      setNotice('Type a topic to search your chat history, e.g. "find what I asked about pdfs".');
+      return true;
+    }
+    const current = hist.current.length ? [{id: chatId, at: Date.now(), title: chatTitle(hist.current), msgs: hist.current.slice(-40), memo: memo.current.text, memoN: memo.current.n}] : [];
+    const pool = [...current, ...chats.filter((c) => c.id !== chatId)];
+    const results = searchChatHistory(pool, q);
+    setFilter(results.length ? q : '');
+    setNotice(results.length ? 'Found ' + results.length + (results.length === 1 ? ' matching chat.' : ' matching chats.') : 'No past chats matched "' + q + '".');
+    setTurns((all) => [...all, {task: originalText || 'find what I asked about ' + q, files: [], t: {...newTurn(originalText || q), answer: formatHistorySummary(q, results), status: 'Done', historyResults: results}}]);
+    return true;
+  }, [chats, chatId]);
+  const toHistorySearch = (text) => {
+    const c = parseHistorySearchCommand(text);
+    return !!c && runHistorySearch(c.query, text);
+  };
   // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
   const readResult = useCallback(() => {
     const words = resultText(turnsRef.current);
@@ -424,7 +452,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ } else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -435,6 +463,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (!files.length && toHistorySearch(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
     const slash = readSlash(task);
     const picked1 = slash ? slash.answer : answer;
@@ -501,7 +530,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const starters = guestHome ? GUEST_STARTERS : (BOOT.cats || []).slice(0, 6);
   const used = connected.length ? connected.join(', ') : '';
   const pcLabel = picked.length ? picked.map((p) => (BOOT.providerNames || {})[p] || p).join(' + ') : 'Fleet auto';
-  const shown = chats.filter((c) => !filter || c.title.toLowerCase().includes(filter.toLowerCase()));
+  const shown = chats.filter((c) => !filter || matchesChat(c, filter));
 
   const side = (
         <SideNav collapsible
@@ -577,7 +606,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 25 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 26 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -614,7 +643,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
               <ChatMessage sender="user"><ChatMessageBubble>{x.task}{x.files && x.files.length ? '\n📎 ' + x.files.join(', ') : ''}</ChatMessageBubble></ChatMessage>
               <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
                 {busy && i === turns.length - 1 && <Text type="supporting" color="secondary">{x.t.status}…</Text>}
-                <Answer t={x.t} openUrl={panel} onPreview={setPanel} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true}).catch(() => {})} onPick={pick} />
+                <Answer t={x.t} openUrl={panel} onPreview={setPanel} onOpenChat={openChat} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true}).catch(() => {})} onPick={pick} />
                 {x.long && <LongPill long={x.long} onSwitch={() => switchLong(i)} isLast={i === turns.length - 1} />}
               </ChatMessage>
             </div>
@@ -629,7 +658,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onReadAloud={readResult} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}
