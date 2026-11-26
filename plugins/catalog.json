@@ -419,7 +419,7 @@
       "id": "voice.commands",
       "title": "Voice commands",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "hey flisk"
