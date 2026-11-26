@@ -116,7 +116,8 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
         body: JSON.stringify({ model, messages, [opts.completion ? 'max_completion_tokens' : 'max_tokens']: maxTokens, ...(opts.temperature ? { temperature: 0 } : {}), ...(chosen.free ? { reasoning_effort: o.effort === 'medium' ? 'medium' : 'low' } : {}), ...(stream ? { stream: true } : {}) }),
         ...(chosen.ms ? { signal: AbortSignal.timeout(chosen.ms) } : {}),
       });
-      return { res: r, body: stream && r.ok ? null : await r.json().catch(() => null) };
+      const isSse = stream && r.ok && (r.headers?.get('content-type') || '').includes('text/event-stream');
+      return { res: r, body: isSse ? null : await r.json().catch(() => null) };
     };
     let res, body;
     try {
@@ -132,7 +133,7 @@ function oneModel(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', free: true
       return { error: `the model did not answer: ${String(e?.message || e).slice(0, 150)}`, kind: 'provider' };
     }
     if (!res.ok || (body?.error && !body?.choices)) return explainModelError(body, res.status, chosen);
-    if (stream) {
+    if (stream && (res.headers?.get('content-type') || '').includes('text/event-stream')) {
       let got;
       try { got = await readStream(res, o.onDelta); } catch (e) { return { error: `the model stopped answering: ${String(e?.message || e).slice(0, 150)}`, kind: 'provider' }; }
       if (got.error) return explainModelError({ error: got.error }, 0, chosen);
@@ -404,7 +405,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
       trace({ kind: 'rerouted', why: why.slice(0, 300), expected: 'wolf', actual: model && model !== by ? `${by} (${model})` : by, detail: `answered by ${model || by} after ${tried.length} failed${lang ? ` · lang ${lang}` : ''}`, lang: lang || undefined });
     };
     if (now() >= wolfOutUntil) {
-      const r = await wolf(messages, { effort: o.effort });
+      const r = await wolf(messages, { effort: o.effort, onDelta: o.onDelta });
       if (!r.error) return { ...r, by: 'wolf' };
       tried.push(`wolf: ${r.error}`);
       if (outOfCalls(r)) return noCalls();
@@ -414,7 +415,7 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
       const ids = (await freeOpenRouterModels(fetchImpl)).slice(0, OPENROUTER_TRIES);
       for (const id of ids) {
         switchTo(`${shortModel(id)} (OpenRouter, free)`);
-        const r = await oneModel(env, fetchImpl, { ai: 'openrouter', url: OPENROUTER_URL, model: id, key: env.OPENROUTER_KEY, referer: true })(messages);
+        const r = await oneModel(env, fetchImpl, { ai: 'openrouter', url: OPENROUTER_URL, model: id, key: env.OPENROUTER_KEY, referer: true })(messages, { onDelta: o.onDelta });
         if (!r.error) { rerouted('openrouter', id); return { ...r, by: id }; }
         tried.push(`${id}: ${r.error}`);
         if (outOfCalls(r)) return noCalls();
@@ -431,14 +432,14 @@ export function modelFrom(env = {}, fetchImpl = fetch, chosen = { ai: 'wolf', fr
     const viaBackups = async () => {
       if (vercelCap(env) && !(overVercel && (await overVercel(vercelCap(env))))) {
         switchTo(BACKUP_NAMES.vercel);
-        const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages);
+        const v = await oneModel(env, fetchImpl, { ai: 'vercel', url: env.VERCEL_URL || VERCEL_URL, model: env.VERCEL_MODEL || VERCEL_MODEL, key: env.VERCEL_AI_KEY, ms: 60_000 })(messages, { onDelta: o.onDelta });
         if (!v.error) { rerouted('vercel', env.VERCEL_MODEL || VERCEL_MODEL); return { ...v, by: 'vercel' }; }
         tried.push(`vercel: ${v.error}`);
         if (outOfCalls(v)) return noCalls();
       }
       if (env.NO_POLLINATIONS !== '1') {
         switchTo(BACKUP_NAMES.pollinations);
-        const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages);
+        const p = await oneModel(env, fetchImpl, { ai: 'pollinations', url: env.POLLINATIONS_TEXT_URL || POLLINATIONS_TEXT_URL, model: 'openai', key: '-', referer: true, ms: POLLINATIONS_MS })(messages, { onDelta: o.onDelta });
         if (!p.error) { rerouted('pollinations', 'openai'); return { ...p, by: 'pollinations' }; }
         tried.push(`pollinations: ${p.error}`);
         if (outOfCalls(p)) return noCalls();

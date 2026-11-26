@@ -556,6 +556,18 @@ test('a visitor-key model streams its reply: each piece reaches onDelta as it is
   expect(plain.text).toBe('ok');
 });
 
+test('the free model streams its reply to onDelta so voice talk speaks the first sentence sooner', async () => {
+  const sse = ['First sentence. ', 'Second sentence.'].map((t) => `data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\n`).join('') + `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;
+  let body;
+  const INFERENCE = { fetch: async (u, init) => { body = JSON.parse(init.body); return new Response(sse, { headers: { 'content-type': 'text/event-stream' } }); } };
+  const got = [];
+  const r = await streamModel({ INFERENCE, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions' }, fetch, { ai: 'wolf', free: true })([{ role: 'user', content: 'hi' }], { onDelta: (d) => got.push(d) });
+  expect(body.stream).toBe(true);
+  expect(got).toEqual(['First sentence. ', 'Second sentence.']);
+  expect(r.text).toBe('First sentence. Second sentence.');
+  expect(r.by).toBe('wolf');
+});
+
 test('voice talk keeps one voice for a whole reply', () => {
   const page = appPage({ login: 'ann', connected: [] });
   // uk and ru share letters: a later sentence keeps the first sentence's language instead of flipping the voice
