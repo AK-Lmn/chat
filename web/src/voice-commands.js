@@ -1,8 +1,15 @@
 // Plugin voice.commands: wake phrase "hey flisk" (spoken or typed) opens Voice talk or runs a chat command.
 // Returns {cmd, ...} when a voice command is recognized, or null to leave ordinary chat input untouched.
-const WAKE = /^(?:hey|hi|hello|ok|okay)\s*,?\s*flisk\b[\s,:;!?.-]*(.*)$/i;
+const WAKE = /^(?:hey|hi|hello|ok|okay)[\s,]*flisk\b(.*)$/i;
+const LEADING = /^[\s,:;!?.-]+/;
 const POLITELY = /^(?:(?:please|can you|could you|would you|will you)\b[\s,:;!?.-]*)+/i;
-const TRAILING = /[.!?]+$/g;
+
+// Drop trailing . ! ? without a regex that backtracks.
+function stripTrailing(text) {
+  let end = text.length;
+  while (end > 0 && '.!?'.includes(text[end - 1])) end--;
+  return text.slice(0, end);
+}
 
 const COMMANDS = [
   ['talk', /^(?:(?:start|open|begin)\s+)?(?:voice\s+talk|oracle|flisk\s+oracle|talk(?:\s+to\s+me)?|listen(?:\s+to\s+me)?)$/],
@@ -33,10 +40,10 @@ export function parseVoiceCommand(text) {
   const m = norm.match(WAKE);
   if (!m) return null;
 
-  const rest = m[1].trim();
+  const rest = m[1].replace(LEADING, '').trim();
   if (!rest) return {cmd: 'talk'};
 
-  const cleaned = rest.replace(POLITELY, '').replace(TRAILING, '').trim();
+  const cleaned = stripTrailing(rest.replace(POLITELY, '')).trim();
   if (!cleaned) return {cmd: 'talk'};
 
   const low = cleaned.toLowerCase();

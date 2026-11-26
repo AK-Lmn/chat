@@ -405,7 +405,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const runVoiceCommand = (c) => {
     switch (c.cmd) {
       case 'talk': setTalk(true); return true;
-      case 'dictate': dictate(); return true;
+      case 'dictate': void dictate(); return true;
       case 'newChat': newChat(); setNotice('Started a new chat.'); return true;
       case 'plugins': setPlugOpen(true); return true;
       case 'studio': setStudio(true); return true;
