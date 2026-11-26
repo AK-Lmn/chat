@@ -580,3 +580,20 @@ test('a request body over the audio limit is refused before it is read', async (
   expect(res.status).toBeLessThan(500);
   expect((await res.json()).heard).toBeUndefined();
 });
+
+test('talkReply caps non-build replies to two sentences', () => {
+  const long = 'First verse about forms. Second verse about taxes. Third verse keeps going. Fourth verse never ends.';
+  expect(talkReply(long).text).toBe('First verse about forms. Second verse about taxes.');
+});
+
+test('/api/talk with stream:true caps non-build replies to two sentences', async () => {
+  const long = 'Verse one is here, long enough to flush. Verse two is also here, long enough to flush. Verse three should be dropped. Verse four too.';
+  const INFERENCE = { fetch: async () => Response.json({ choices: [{ message: { content: long } }] }) };
+  const e = env({ INFERENCE, INFERENCE_KEY: 'ik', INFERENCE_URL: 'https://inf.test/v1/chat/completions' });
+  const cookie = (await makeSession(e, 'ann')).split(';')[0];
+  const res = await handle(new Request(`${ORIGIN}/api/talk`, { method: 'POST', headers: { cookie, origin: ORIGIN, 'content-type': 'application/json' }, body: JSON.stringify({ stream: true, history: [{ role: 'user', content: 'Sing me a song about a tax form' }], ai: { ai: 'wolf' } }) }), e, { fetchImpl: async () => Response.json({}) });
+  expect(res.status).toBe(200);
+  const lines = await readNd(res);
+  expect(lines.filter((l) => l.say).map((l) => l.say)).toEqual(['Verse one is here, long enough to flush.', 'Verse two is also here, long enough to flush.']);
+  expect(lines.at(-1).text).toBe('Verse one is here, long enough to flush. Verse two is also here, long enough to flush.');
+});
