@@ -12,6 +12,8 @@ import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
 import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
+import {SignPdfDialog} from './SignPdf.jsx';
+import {parseSignPdfCommand} from './sign-pdf.js';
 import {parseStudioCommand} from './studio-commands.js';
 import {parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary} from './history-search.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
@@ -261,9 +263,12 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
   const [files, setFiles] = useState([]);
+  const filesRef = useRef(files); filesRef.current = files;
   const [limit, setLimit] = useState(null);
   const [notice, setNotice] = useState('');
   const [plugOpen, setPlugOpen] = useState(false);
+  const [signPdfOpen, setSignPdfOpen] = useState(false);
+  const [signPdfFile, setSignPdfFile] = useState(null);
   // How the person wants the answer: Quick (default), Ask me first, Take your time. docs/adr/0002.
   const [answer, setAnswerRaw] = useState(() => { try { const v = sessionStorage.getItem('chat_answer'); return ['fast', 'ask', 'long'].includes(v) ? v : 'fast'; } catch (e) { return 'fast'; } });
   const setAnswer = useCallback((v) => { setAnswerRaw(v); try { sessionStorage.setItem('chat_answer', v); } catch (e) { /* storage blocked */ } }, []);
@@ -397,6 +402,22 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
+  const isPdfFile = (f) => !!(f && f.b64 && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')));
+  const openSignPdf = (fs = filesRef.current) => {
+    const pdf = (fs || []).find(isPdfFile) || null;
+    setSignPdfFile(pdf);
+    setSignPdfOpen(true);
+    return pdf;
+  };
+  // Spoken or typed "sign this" opens the Sign a PDF tool directly (with the attached PDF, if any).
+  const toSignPdf = (text, fs = filesRef.current) => {
+    if (!parseSignPdfCommand(text)) return false;
+    const pdf = openSignPdf(fs);
+    if (pdf) { setFiles([]); setNotice('Sign a PDF: ' + pdf.name); }
+    else if ((fs || []).length) setNotice('Attach a PDF file to sign.');
+    else setNotice('Sign a PDF');
+    return true;
+  };
   // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
@@ -452,7 +473,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ } else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        if (text && toSignPdf(text, filesRef.current)) { /* openSignPdf opens the Sign a PDF dialog */ } else if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ } else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -462,6 +483,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const submit = async (text) => {
     const task = (text || '').trim();
     if (!task && !files.length) return;
+    if (toSignPdf(task, files)) { setValue(''); return; }
     if (!files.length && toStudio(task)) { setValue(''); return; }
     if (!files.length && toHistorySearch(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
@@ -606,7 +628,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 25 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 26 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -658,7 +680,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onSignPdf={() => openSignPdf(files)} />
+      <SignPdfDialog open={signPdfOpen} onClose={() => { setSignPdfOpen(false); setSignPdfFile(null); }} initialFile={signPdfFile} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}

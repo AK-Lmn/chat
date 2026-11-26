@@ -349,7 +349,7 @@
       "id": "studio.sign-pdf",
       "title": "Sign a PDF",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "sign this"
