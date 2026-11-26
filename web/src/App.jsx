@@ -1,5 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
-import {AnswerBar, AnswerPalette, AskFirst, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
+import {AnswerBar, AnswerMenu, AskFirst, ShortcutHints, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
 import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
@@ -260,6 +260,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [answer, setAnswerRaw] = useState(() => { try { const v = sessionStorage.getItem('chat_answer'); return ['fast', 'ask', 'long'].includes(v) ? v : 'fast'; } catch (e) { return 'fast'; } });
   const setAnswer = useCallback((v) => { setAnswerRaw(v); try { sessionStorage.setItem('chat_answer', v); } catch (e) { /* storage blocked */ } }, []);
   const [palette, setPalette] = useState(false);
+  const closePalette = useCallback(() => setPalette(false), []);
   useEffect(() => { const sl = readSlash(value); if (sl && sl.answer !== answer) setAnswer(sl.answer); }, [value]);
   const [asking, setAsking] = useState(null); // {task, files} waiting for the three answers
   const held = useHeldModifier();
@@ -388,7 +389,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
-  // With Studio open, "remove the background" or "crop to square", spoken or typed, goes to the editor, not to the chat.
+  // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
   // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
@@ -549,7 +550,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       <div className={'earth-content' + (turns.length || limit ? '' : ' empty')} style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, minWidth: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={<>
-          <AnswerPalette open={palette} onOpenChange={setPalette} onPick={setAnswer} actions={[
+          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer>
+              : palette ? <ChatComposerDrawer label="Commands"><AnswerMenu onClose={closePalette} onPick={setAnswer} actions={[
             {id: 'new', label: 'New chat', run: newChat},
             {id: 'plugins', label: 'Plugins', run: () => setPlugOpen(true)},
             {id: 'model', label: 'Choose AI model', run: () => setMdlOpen(true)},
@@ -558,8 +560,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             {id: 'dictate', label: 'Dictate', run: dictate},
             {id: 'talk', label: 'Voice talk', run: () => setTalk(true)},
             {id: 'settings', label: 'Settings and usage', run: () => openSettings('usage')},
-          ]} />
-          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
+          ]} /></ChatComposerDrawer>
+              : held ? <ChatComposerDrawer label="Shortcuts"><ShortcutHints /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
             placeholder={PLACEHOLDER[answer] || 'Ask or build…'} {...(BOOT.embed && hints.length ? {placeholder: hints[hintAt % hints.length]} : {})}
             input={<ChatComposerInput autoFocus={!touch} enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
               if (touch && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
@@ -575,7 +577,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 23 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 24 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -587,7 +589,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             }
             footerActions={
               <HStack gap={1} align="center" wrap="wrap">
-                <AnswerBar value={answer} onChange={setAnswer} held={held} />
+                <AnswerBar value={answer} onChange={setAnswer} />
                 {brandOf(sel.provider) !== 'wolf' && <Tip brand={brandOf(sel.provider)} title="Which AI answers" scene="model" text="Which AI answers. Flisk Wolf is free; your own key is sent per request and never stored." more="Tap to switch, paste your key, or pick a model. Claude and OpenAI use your own key, so you pay them directly."><span><Button label={sel.name} variant="ghost" size="sm" icon={<Brand name={brandOf(sel.provider)} />} onClick={() => setMdlOpen(true)} /></span></Tip>}
                 {picked.length > 0 && <Tip brand="fleet" title="Where your app runs" scene="computers" text="Where your app runs. Fleet picks the cheapest of your connected computers." more="Tap to connect Daytona, Upstash, E2B or Isorun with a key."><span><Button label={pcLabel} variant="ghost" size="sm" icon={<Brand name={picked[0] || 'fleet'} />} onClick={() => setPcOpen(true)} /></span></Tip>}
               </HStack>

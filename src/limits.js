@@ -13,6 +13,8 @@ export const VOICE_PARTS_PER_DAY = 400;
 export const ANON_VOICE_PARTS_PER_DAY = 120;
 export const TALK_PER_DAY = 100;
 export const ANON_TALK_PER_DAY = 30;
+export const TALK_BURST_LIMIT = 8;
+export const TALK_BURST_WINDOW_MS = 10_000;
 export const MEMO_PER_DAY = 120;
 export const ANON_MEMO_PER_DAY = 40;
 export const SPEAK_PER_DAY = 2000;
@@ -62,6 +64,19 @@ export async function refundDailyLimit(login, { cache = globalThis.caches?.defau
 // Resolves true when the day's allowance is already used up.
 export const overQuota = (env, kind, { anon, id }) => overDailyLimit(id, { cache: env.LIMIT_CACHE, limit: limitOf(kind, anon), scope: scopeOf(kind, anon) });
 export const refundQuota = (env, kind, { anon, id }) => refundDailyLimit(id, { cache: env.LIMIT_CACHE, scope: scopeOf(kind, anon) });
+
+// Short per-visitor burst limit to stop rapid/parallel floods on /api/talk.
+export async function overBurstLimit(id, { cache = globalThis.caches?.default, now = Date.now(), limit = TALK_BURST_LIMIT, windowMs = TALK_BURST_WINDOW_MS, scope = 'talk-burst' } = {}) {
+  if (!cache) return false;
+  const url = `https://${scope}.invalid/${encodeURIComponent(id)}/${Math.floor(now / windowMs)}`;
+  try {
+    const hit = await cache.match(url);
+    const count = hit ? Number(await hit.text()) || 0 : 0;
+    if (count >= limit) return true;
+    await cache.put(url, new Response(String(count + 1), { headers: { 'cache-control': `max-age=${Math.ceil(windowMs / 1000) * 2}` } }));
+  } catch {}
+  return false;
+}
 
 // What a person has used today, read only (nothing is counted). Same keys as overDailyLimit, so the numbers match what the gate enforces.
 export async function usedToday(id, { cache = globalThis.caches?.default, scope, now = Date.now() }) {
