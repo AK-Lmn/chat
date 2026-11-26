@@ -1,5 +1,7 @@
 // What you say or type to the Studio plugin. Returns {cmd, ...} for a request Studio can do, or null for anything else (that goes to the chat as usual).
-// Two commands for now: remove the background, and crop (to a shape, when one is named).
+// Commands: remove the background, crop (to a shape, when one is named), and make a favicon/app icon set.
+import {parseIconCommand} from './favicons.js';
+
 const WORDS = {one: 1, two: 2, three: 3, four: 4, nine: 9, sixteen: 16};
 const SHAPES = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'];
 // "16:9", "16x9", "16 by 9", "sixteen to nine", or "square".
@@ -18,5 +20,5 @@ export function parseStudioCommand(text) {
   if (/\bcrop\b/.test(t)) {
     return {cmd: 'crop', ratio: shapeOf(t)};
   }
-  return null;
+  return parseIconCommand(t);
 }
