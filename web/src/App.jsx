@@ -12,6 +12,7 @@ import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
+import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -243,6 +244,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   // The composer has no mode picker: the Jev router decides from the words whether it is a question, a site, a picture or a video.
   const mode = 'ask';
   const [turns, setTurns] = useState([]); // [{task, files, t}]
+  const turnsRef = useRef(turns); turnsRef.current = turns;
+  const readerRef = useRef(null);
+  const getReader = () => (readerRef.current ||= createReader());
+  useEffect(() => () => readerRef.current?.stop(), []);
   useEffect(() => { document.documentElement.classList.toggle('chatting', turns.length > 0); }, [turns.length]);
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
@@ -316,6 +321,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (busy) return;
     markEngaged();
     await vaultReady;
+    readerRef.current?.stop();
     const [m, cat] = MODES[opts.mode || mode] || MODES.build;
     const sendFiles = opts.files || [];
     const idx = opts.reuse ? -1 : turns.length;
@@ -359,12 +365,22 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   // With Studio open, "remove the background" or "crop to square", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
+  // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
+  const readResult = useCallback(() => {
+    const words = resultText(turnsRef.current);
+    if (!words) { setNotice('No result to read aloud yet.'); return; }
+    setNotice('Reading result aloud…');
+    getReader().speak(words, {onEnd: () => setNotice((n) => (n === 'Reading result aloud…' ? '' : n))});
+  }, []);
+  const toReadAloud = (text) => { if (!isReadAloudCommand(text)) return false; readResult(); return true; };
   const dict = useRef(null);
   // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
   const dictate = async () => {
-    if (dict.current) { dict.current.stop(); return; }
+    const rdr = getReader();
+    if (dict.current) { if (!rdr.isSpeaking()) rdr.unlock(); dict.current.stop(); return; }
     if (!BOOT.login) { setNotice('Sign in with GitHub to use your voice.'); return; }
     if (!navigator.mediaDevices || !window.MediaRecorder) { setNotice('This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return; }
+    if (!rdr.isSpeaking()) rdr.unlock();
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); } catch (e) { setNotice('The microphone is blocked. Allow it for this site and try again.'); return; }
     const chunks = [];
@@ -381,7 +397,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -392,6 +408,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (!files.length && toReadAloud(task)) { setValue(''); return; }
     const fs = files; setValue(''); setFiles([]);
     run(task, {files: fs}).catch(() => {});
   };
@@ -407,7 +424,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   pick.free = sel.free;
 
   const [navOpen, setNavOpen] = useState(false); // the phone chat drawer
-  const newChat = () => { setNavOpen(false); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
+  const newChat = () => { setNavOpen(false); readerRef.current?.stop(); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
   // Delete one past chat from this browser (#355). Deleting the open chat starts a new one.
   const dropChat = (c) => {
     if (!confirm('Delete the chat "' + (c.title || 'Untitled') + '"? This cannot be undone.')) return;
@@ -480,7 +497,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     <ExplainContext.Provider value={ctx}>
     <div className="vv-root">
     {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
-    {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
+    {notice && <div className="caption" role="status" onClick={() => { readerRef.current?.stop(); setNotice(''); }}>{notice} (tap to close)</div>}
     {voiceNote && <div className="caption voice-note" role="status">Tap anywhere to start talking</div>}
     <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="turn-status">{liveText(turns, busy)}</div>
     {turns.length > 0 && <h1 className="sr-only">{'Flisk Chat: ' + String(turns[0].task || 'files').slice(0, 80)}</h1>  /* the greeting h1 is gone once a chat has turns (#357) */}
@@ -514,7 +531,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 22 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 23 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -564,7 +581,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onReadAloud={readResult} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}

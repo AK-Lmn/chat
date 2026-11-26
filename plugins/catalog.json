@@ -429,7 +429,7 @@
       "id": "voice.read-aloud",
       "title": "Read the result aloud",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "read it to me"

@@ -10,8 +10,9 @@ import catalog from '../../plugins/catalog.json';
 // A ready Studio plugin opens the Studio panel; the other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
+const canClick = (p, onReadAloud) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
 
-export function PluginsDialog({open, onClose, onStudio}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud}) {
   const [q, setQ] = useState('');
   useEffect(() => { if (open) setQ(''); }, [open]);
   const rows = useMemo(() => {
@@ -19,7 +20,10 @@ export function PluginsDialog({open, onClose, onStudio}) {
     return PLUGINS.filter((p) => !s || (p.title + ' ' + p.group + ' ' + p.voice.join(' ')).toLowerCase().includes(s))
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q]);
-  const pick = (p) => { if (opensStudio(p)) { onClose(); onStudio(); } };
+  const pick = (p) => {
+    if (opensStudio(p)) { onClose(); onStudio(); }
+    else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+  };
   return (
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={560} purpose="form">
       <div style={{display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, maxHeight: 'min(82dvh, 680px)'}}>
@@ -28,7 +32,7 @@ export function PluginsDialog({open, onClose, onStudio}) {
         <div role="list" aria-label="Plugins" style={{overflowY: 'auto', minHeight: 0, flex: 1, border: '1px solid var(--color-border-subtle, #8884)', borderRadius: 12}}>
           {rows.map((p) => (
             <button key={p.id} role="listitem" type="button" disabled={p.status !== 'ready'} onClick={() => pick(p)}
-              style={{display: 'flex', gap: 10, alignItems: 'center', width: '100%', textAlign: 'left', padding: '10px 12px', background: 'transparent', color: 'inherit', border: 0, borderBottom: '1px solid var(--color-border-subtle, #8884)', cursor: opensStudio(p) ? 'pointer' : 'default', opacity: p.status === 'ready' ? 1 : 0.6}}>
+              style={{display: 'flex', gap: 10, alignItems: 'center', width: '100%', textAlign: 'left', padding: '10px 12px', background: 'transparent', color: 'inherit', border: 0, borderBottom: '1px solid var(--color-border-subtle, #8884)', cursor: canClick(p, onReadAloud) ? 'pointer' : 'default', opacity: p.status === 'ready' ? 1 : 0.6}}>
               <span style={{flex: 1, minWidth: 0}}>
                 <Text weight="semibold">{p.title}</Text>
                 <Text type="supporting" color="secondary" style={{display: 'block'}}>{p.group + ' · say "' + p.voice[0] + '"'}</Text>
