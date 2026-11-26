@@ -1,4 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
+import {AnswerBar, AnswerPalette, AskFirst, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
 import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
@@ -29,7 +30,7 @@ import {Avatar} from '@astryxdesign/core/Avatar';
 import {Markdown} from '@astryxdesign/core/Markdown';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {
-  ChatComposer, ChatComposerInput, ChatLayout, ChatMessage, ChatMessageBubble,
+  ChatComposer, ChatComposerDrawer, ChatComposerInput, ChatLayout, ChatMessage, ChatMessageBubble,
   ChatMessageList, ChatToolCalls,
 } from '@astryxdesign/core/Chat';
 import {
@@ -255,6 +256,14 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [limit, setLimit] = useState(null);
   const [notice, setNotice] = useState('');
   const [plugOpen, setPlugOpen] = useState(false);
+  // How the person wants the answer: Quick (default), Ask me first, Take your time. docs/adr/0002.
+  const [answer, setAnswerRaw] = useState(() => { try { const v = sessionStorage.getItem('chat_answer'); return ['fast', 'ask', 'long'].includes(v) ? v : 'fast'; } catch (e) { return 'fast'; } });
+  const setAnswer = useCallback((v) => { setAnswerRaw(v); try { sessionStorage.setItem('chat_answer', v); } catch (e) { /* storage blocked */ } }, []);
+  const [palette, setPalette] = useState(false);
+  useEffect(() => { const sl = readSlash(value); if (sl && sl.answer !== answer) setAnswer(sl.answer); }, [value]);
+  const [asking, setAsking] = useState(null); // {task, files} waiting for the three answers
+  const held = useHeldModifier();
+  useAnswerKeys(setAnswer, useCallback(() => setPalette((o) => !o), []));
   const [studio, setStudio] = useState(false), studioFrame = useRef(null); // the Studio plugin beside the chat
   const [panel, setPanel] = useState(''); // the published page open in the side panel (#438)
   const [chats, setChats] = useState(loadChats);
@@ -317,6 +326,22 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     m.busy = false;
   };
 
+  // Take your time: the plain request answers first; this second request works longer and fills a pill under the answer.
+  const longCtl = useRef([]);
+  const startLong = useCallback((idx, payload) => {
+    const ac = new AbortController(); longCtl.current.push(ac);
+    let lt = newTurn(payload.task);
+    const putL = (nt, state) => { lt = nt; setTurns((all) => { const c = all.slice(); if (c[idx]) c[idx] = {...c[idx], long: {t: lt, state}}; return c; }); };
+    putL(lt, 'cook');
+    runTask({...payload, task: frame(payload.task, 'long')}, (ev) => putL(applyEv(lt, ev), 'cook'), ac.signal)
+      .then((res) => { if (!ac.signal.aborted) putL(lt, res.status && res.status !== 200 ? 'error' : 'done'); })
+      .catch(() => { if (!ac.signal.aborted) putL(lt, 'error'); });
+  }, []);
+  const switchLong = (i) => {
+    setTurns((all) => { const c = all.slice(); const x = c[i]; if (x && x.long && x.long.state === 'done') c[i] = {...x, t: x.long.t, long: {...x.long, switched: true}}; return c; });
+    const x = turns[i], reply = x && x.long ? shownText(x.long.t) : '';
+    if (reply && i === turns.length - 1 && hist.current.length && hist.current[hist.current.length - 1].role === 'assistant') hist.current[hist.current.length - 1].content = reply.slice(0, 4000);
+  };
   const run = useCallback(async (task, opts = {}) => {
     if (busy) return;
     markEngaged();
@@ -330,7 +355,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setTurns((all) => (opts.reuse ? all : [...all, {task, files: sendFiles.map((f) => f.name), t}]));
     setLimit(null); setBusy(true);
     const ac = new AbortController(); ctl.current = ac;
-    const payload = {mode: m, pod: !!opts.pod, cat, task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    if (opts.long && !opts.reuse) startLong(idx, payload);
     let res;
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
     catch (e) { res = {status: e.name === 'AbortError' ? 0 : -1}; if (res.status === -1) put({...t, error: {message: 'Could not reach Chat. Check your connection and try again.', kind: 'busy'}}); }
@@ -359,7 +385,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const reply = shownText(t);
     if (reply) hist.current.push({role: 'assistant', content: reply.slice(0, 4000)});
     persist(chatId); roll();
-  }, [busy, mode, turns, picked, sel, chatId]);
+  }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
   // With Studio open, "remove the background" or "crop to square", spoken or typed, goes to the editor, not to the chat.
@@ -409,9 +435,17 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
+    const slash = readSlash(task);
+    const picked1 = slash ? slash.answer : answer;
+    const words = slash ? slash.rest.trim() : task;
+    if (slash) setAnswer(slash.answer);
+    if (!words && !files.length) { setValue(''); return; }
     const fs = files; setValue(''); setFiles([]);
-    run(task, {files: fs}).catch(() => {});
+    if (picked1 === 'ask') { setAsking({task: words, files: fs}); return; }
+    run(words, {files: fs, send: picked1 === 'long' ? undefined : frame(words, picked1), long: picked1 === 'long'}).catch(() => {});
   };
+  const startAsked = (answers) => { const a = asking; setAsking(null); if (a) run(a.task, {files: a.files, send: frame(a.task, 'ask', answers)}).catch(() => {}); };
+  const skipAsked = () => startAsked([]);
 
   const pick = (what) => {
     if (what === 'setup-key' || what === 'choose-model' || what === 'change-provider' || what === 'change-model') setMdlOpen(true);
@@ -424,7 +458,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   pick.free = sel.free;
 
   const [navOpen, setNavOpen] = useState(false); // the phone chat drawer
-  const newChat = () => { setNavOpen(false); readerRef.current?.stop(); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
+  const newChat = () => { setNavOpen(false); readerRef.current?.stop(); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); longCtl.current.forEach((c) => c.abort()); longCtl.current = []; setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
   // Delete one past chat from this browser (#355). Deleting the open chat starts a new one.
   const dropChat = (c) => {
     if (!confirm('Delete the chat "' + (c.title || 'Untitled') + '"? This cannot be undone.')) return;
@@ -512,11 +546,21 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       }
       sideNav={BOOT.embed ? undefined : side}>
       <div className="chat-split">
-      <div className="earth-content" style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, minWidth: 0}}>
+      <div className={'earth-content' + (turns.length || limit ? '' : ' empty')} style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, minWidth: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
-        composer={
-          <ChatComposer className="one-row" value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
-            placeholder="Ask or build…" {...(BOOT.embed && hints.length ? {placeholder: hints[hintAt % hints.length]} : {})}
+        composer={<>
+          <AnswerPalette open={palette} onOpenChange={setPalette} onPick={setAnswer} actions={[
+            {id: 'new', label: 'New chat', run: newChat},
+            {id: 'plugins', label: 'Plugins', run: () => setPlugOpen(true)},
+            {id: 'model', label: 'Choose AI model', run: () => setMdlOpen(true)},
+            {id: 'computers', label: 'Choose computers', run: () => setPcOpen(true)},
+            {id: 'attach', label: 'Attach files', run: () => fileIn.current && fileIn.current.click()},
+            {id: 'dictate', label: 'Dictate', run: dictate},
+            {id: 'talk', label: 'Voice talk', run: () => setTalk(true)},
+            {id: 'settings', label: 'Settings and usage', run: () => openSettings('usage')},
+          ]} />
+          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
+            placeholder={PLACEHOLDER[answer] || 'Ask or build…'} {...(BOOT.embed && hints.length ? {placeholder: hints[hintAt % hints.length]} : {})}
             input={<ChatComposerInput autoFocus={!touch} enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
               if (touch && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
             }} />}
@@ -542,13 +586,14 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
               </HStack>
             }
             footerActions={
-              <HStack gap={1}>
+              <HStack gap={1} align="center" wrap="wrap">
+                <AnswerBar value={answer} onChange={setAnswer} held={held} />
                 {brandOf(sel.provider) !== 'wolf' && <Tip brand={brandOf(sel.provider)} title="Which AI answers" scene="model" text="Which AI answers. Flisk Wolf is free; your own key is sent per request and never stored." more="Tap to switch, paste your key, or pick a model. Claude and OpenAI use your own key, so you pay them directly."><span><Button label={sel.name} variant="ghost" size="sm" icon={<Brand name={brandOf(sel.provider)} />} onClick={() => setMdlOpen(true)} /></span></Tip>}
                 {picked.length > 0 && <Tip brand="fleet" title="Where your app runs" scene="computers" text="Where your app runs. Fleet picks the cheapest of your connected computers." more="Tap to connect Daytona, Upstash, E2B or Isorun with a key."><span><Button label={pcLabel} variant="ghost" size="sm" icon={<Brand name={picked[0] || 'fleet'} />} onClick={() => setPcOpen(true)} /></span></Tip>}
               </HStack>
             }
           />
-        }>
+        </>}>
         <ChatMessageList>
           {!turns.length && (
             <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
@@ -568,6 +613,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
               <ChatMessage sender="assistant" avatar={<Brand name="wolf" size={32} />}>
                 {busy && i === turns.length - 1 && <Text type="supporting" color="secondary">{x.t.status}…</Text>}
                 <Answer t={x.t} openUrl={panel} onPreview={setPanel} onAgain={(pod) => run(x.task, {pod: !!pod, reuse: true}).catch(() => {})} onPick={pick} />
+                {x.long && <LongPill long={x.long} onSwitch={() => switchLong(i)} isLast={i === turns.length - 1} />}
               </ChatMessage>
             </div>
           ))}
@@ -575,7 +621,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         </ChatMessageList>
       </ChatLayout>
       </div>
-      {studio && <StudioPanel frameRef={studioFrame} onClose={() => setStudio(false)} onReply={onStudioReply} />}
+      {studio && <StudioPanel scheme={scheme} frameRef={studioFrame} onClose={() => setStudio(false)} onReply={onStudioReply} />}
       {panel && <PagePanel url={panel} onClose={() => setPanel('')} onCopy={copy} />}
       </div>
     </AppShell>
