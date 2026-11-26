@@ -28,6 +28,13 @@ export function spokenReply(text) {
 // request (or "build it" after one) still starts the build.
 const BUILD_ASK = /\b(build|make|create|generate|develop)\b[\s\S]{0,60}\b(app|application|website|web ?site|site|page|video|dashboard|bot|game|tool|api|shop|store|system|calculator|landing)\b/i;
 const BUILD_IT = /^\W*(ok(ay)?\W+|yes\W+|please\W+)*(build|make|do) it\W*$/i;
+export const MAX_TALK_SENTENCES = 2;
+export function capSentences(text, max = MAX_TALK_SENTENCES) {
+  const t = String(text || '').trim();
+  if (!t || max <= 0) return '';
+  const parts = t.split(/(?<=[.!?…]+["'”’)\]]*)\s+|(?<=[。！？]+["”’）」]*)/).filter(Boolean);
+  return parts.slice(0, max).join(' ').trim();
+}
 export function talkReply(raw, heard = '', history = []) {
   let t = String(raw || '').trim(), build = '';
   const a = t.indexOf('{'), z = t.lastIndexOf('}');
@@ -40,8 +47,9 @@ export function talkReply(raw, heard = '', history = []) {
     build = build.slice(0, 2000);
   }
   // When building, only the first sentence is spoken: the task itself goes to the computer, not to the speaker.
+  // Non-build replies are capped to MAX_TALK_SENTENCES so the voice never reads a whole song or essay aloud.
   const said = spokenReply(t);
-  const text = (build ? said.split(/(?<=[.!?…])\s+/)[0] : said) || (build ? 'On it. I am building that now.' : '');
+  const text = (build ? capSentences(said, 1) : capSentences(said, MAX_TALK_SENTENCES)) || (build ? 'On it. I am building that now.' : '');
   return { text, build };
 }
 // Whisper's language code -> the name the model understands, so the reply comes back in the language spoken.

@@ -32,7 +32,7 @@ const EARLY_EVENTS = new Set(['delta', 'thinking', 'sources']);
 import { placeFrom, warmWeather, weatherNote } from './weather.js';
 import { ALEXA_PER_DAY, MAX_VOICE, alexaHandle, sign as alexaSign } from './alexa.js';
 import { withSecurityHeaders } from './security-headers.js';
-import { asksBuild, spokenReply, talkMessages, talkReply, transcribe } from './voice.js';
+import { asksBuild, MAX_TALK_SENTENCES, spokenReply, talkMessages, talkReply, transcribe } from './voice.js';
 export * from './voice.js';
 import { runEvents, sendTrace } from './trace.js';
 import { usageOf, answeredModel, freeModelOpts, limitOf, overBurstLimit, overDailyLimit, overQuota, refundQuota, taskLimitBody } from './limits.js';
@@ -816,15 +816,15 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
         const last = heard || String(messages[messages.length - 1]?.content || '');
         // An answer to "build me ..." is read after it is whole: only its first sentence is spoken, and a model may answer in JSON.
         const split = sentenceSplitter({ hold: asksBuild(last) });
-        let deltas = 0;
+        let deltas = 0, saidCount = 0;
         const job = (async () => {
-          const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(messages, { onDelta: (d) => { deltas++; for (const s of split.push(d)) { const t = spokenReply(s); if (t) emit({ say: t }); } } });
+          const r = await modelFrom(env, fetchImpl, chosen, freeModelOpts(env, await who(login), anon))(messages, { onDelta: (d) => { deltas++; for (const s of split.push(d)) { if (saidCount >= MAX_TALK_SENTENCES) break; const t = spokenReply(s); if (t) { saidCount++; emit({ say: t }); } } } });
           timed('llm', t1);
           if (r.error) { emit({ error: r.error, kind: r.kind }); return; }
           const { text, build } = talkReply(r.text, heard || String(messages[messages.length - 1]?.content || ''), messages);
           if (!text) { emit({ error: 'the model sent an empty answer' }); return; }
           // A model that streamed has said all but its last words; one that cannot (Flisk Wolf) sends the whole answer now.
-          const rest = deltas && split.live && !build ? split.flush().map(spokenReply).filter(Boolean) : splitReply(text);
+          const rest = deltas && split.live && !build ? split.flush().map(spokenReply).filter(Boolean).slice(0, Math.max(0, MAX_TALK_SENTENCES - saidCount)) : splitReply(text);
           for (const s of rest) emit({ say: s });
           emit({ done: true, text, ...(build ? { build } : {}), timing: timing.join(', ') });
         })()
