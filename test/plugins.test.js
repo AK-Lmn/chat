@@ -21,7 +21,7 @@ describe('plugin catalog', () => {
     expect(list.filter((p) => p.owner === 'flisk').length).toBeGreaterThanOrEqual(40);
   });
   test('the Studio tools are ready', () => {
-    for (const id of ['remove-background', 'crop', 'rotate-flip', 'adjust', 'resize', 'text', 'photo-batch', 'merge-pdf', 'shrink-pdf', 'watermark-pdf', 'social-sizes', 'sign-pdf'])
+    for (const id of ['remove-background', 'crop', 'rotate-flip', 'adjust', 'resize', 'text', 'photo-batch', 'merge-pdf', 'shrink-pdf', 'watermark-pdf', 'social-sizes', 'sign-pdf', 'heic'])
       expect(list.find((p) => p.id === 'studio.' + id).status).toBe('ready');
   });
 });
