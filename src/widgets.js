@@ -60,7 +60,9 @@ async function weather({ place, units }, { fetch }) {
     hours, days,
   };
   const d0 = days[0];
-  return { data, summary: `Weather card shown for ${data.place}: now ${data.now.temp}${data.unit} and ${now.toLowerCase()}, today ${d0.low} to ${d0.high}${data.unit}, rain chance ${d0.rain}%. The next 7 days are on the card.` };
+  // The model writes the 7-day table from this text, so every day's numbers are here: it must not make them up.
+  const dayLines = days.map((d) => `${d.date}: ${d.sky}, high ${d.high}${data.unit}, low ${d.low}${data.unit}, rain ${d.rain}%`).join('; ');
+  return { data, summary: `Weather card shown for ${data.place}: now ${data.now.temp}${data.unit} and ${now.toLowerCase()}, today ${d0.low} to ${d0.high}${data.unit}, rain chance ${d0.rain}%. Next 7 days (use only these numbers): ${dayLines}.` };
 }
 
 function chartClean(i) {
@@ -175,7 +177,7 @@ export const WIDGETS = {
   },
   weather: {
     id: 'weather', title: 'Weather',
-    prompt: '{"widget": {"kind": "weather", "place": "<city>", "units": "c"}} for the weather or a forecast anywhere ("units": "f" for Fahrenheit and mph). Draws a card with now, the next hours and 7 days. No computer is needed. Then "say" two or three bullets on what it means (a coat, rain, a good day for a walk); do not repeat the numbers.',
+    prompt: '{"widget": {"kind": "weather", "place": "<city>", "units": "c"}} for the weather or a forecast anywhere ("units": "f" for Fahrenheit and mph). Draws a card with now, the next hours and 7 days. No computer is needed. Then "say" one line on now, a Day | Sky | High / Low | Rain table of the 7 days copied exactly from the result, and two or three bullets on what it means (a coat, rain, a good day for a walk).',
     clean: (i) => (str(i.place, 80) ? { place: str(i.place, 80), units: i.units === 'f' ? 'f' : 'c' } : null),
     run: weather,
   },
