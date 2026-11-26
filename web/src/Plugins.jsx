@@ -15,9 +15,11 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel; the other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
+const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
+const canClick = (p, onReadAloud, onSignPdf) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -48,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud, onVoiceCommands}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onVoiceCommands, onHistorySearch, onSignPdf}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -59,13 +61,15 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud, onVoiceComm
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => opensStudio(p)
-    || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud)
-    || (p.status === 'ready' && p.id === 'voice.commands' && !!onVoiceCommands);
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf)
+    || (p.status === 'ready' && p.id === 'voice.commands' && !!onVoiceCommands)
+    || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
-    if (opensStudio(p)) { onClose(); onStudio(); }
+    if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
+    else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
     else if (p.status === 'ready' && p.id === 'voice.commands' && onVoiceCommands) { onClose(); onVoiceCommands(); }
+    else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
   };
   return (
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={600} purpose="form">
