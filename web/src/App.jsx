@@ -14,6 +14,7 @@ import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
+import {parseVoiceCommand} from './voice-commands.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -400,6 +401,27 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     getReader().speak(words, {onEnd: () => setNotice((n) => (n === 'Reading result aloud…' ? '' : n))});
   }, []);
   const toReadAloud = (text) => { if (!isReadAloudCommand(text)) return false; readResult(); return true; };
+  // Plugin voice.commands: "hey flisk" (spoken or typed) opens Voice talk or runs a chat command.
+  const runVoiceCommand = (c) => {
+    switch (c.cmd) {
+      case 'talk': setTalk(true); return true;
+      case 'dictate': dictate(); return true;
+      case 'newChat': newChat(); setNotice('Started a new chat.'); return true;
+      case 'plugins': setPlugOpen(true); return true;
+      case 'studio': setStudio(true); return true;
+      case 'closeStudio': setStudio(false); return true;
+      case 'settings': openSettings('usage'); return true;
+      case 'model': setMdlOpen(true); return true;
+      case 'computers': setPcOpen(true); return true;
+      case 'attach': fileIn.current && fileIn.current.click(); return true;
+      case 'readAloud': readResult(); return true;
+      case 'explain': setExplain((e) => !e); setCaption(''); return true;
+      case 'scheme': setScheme(c.scheme); setNotice('Look: ' + (LOOKS[c.scheme] || c.scheme)); return true;
+      case 'stop': readerRef.current?.stop(); ctl.current && ctl.current.abort(); dict.current?.stop(); setNotice('Stopped.'); return true;
+      case 'task': run(c.task).catch(() => {}); return true;
+      default: return false;
+    }
+  };
   const dict = useRef(null);
   // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
   const dictate = async () => {
@@ -424,7 +446,12 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        const vc = text && parseVoiceCommand(text);
+        if (text && toStudio(text)) setNotice('Studio: ' + text);
+        else if (text && toReadAloud(text)) { /* readResult sets notice */ }
+        else if (vc) runVoiceCommand(vc);
+        else if (text) setValue((v) => (v ? v + ' ' : '') + text);
+        else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -432,10 +459,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   };
 
   const submit = async (text) => {
-    const task = (text || '').trim();
+    let task = (text || '').trim();
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
+    if (!files.length) {
+      const vc = parseVoiceCommand(task);
+      if (vc && vc.cmd !== 'task') { runVoiceCommand(vc); setValue(''); return; }
+      if (vc && vc.cmd === 'task') task = vc.task;
+    }
     const slash = readSlash(task);
     const picked1 = slash ? slash.answer : answer;
     const words = slash ? slash.rest.trim() : task;
@@ -577,7 +609,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 24 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 25 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -629,7 +661,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onReadAloud={readResult} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}
