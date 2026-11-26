@@ -1,8 +1,9 @@
 import {parseSignPdfCommand} from './sign-pdf.js';
 import {parseIconCommand} from './favicons.js';
+import {parseHeicCommand} from './heic.js';
 
 // What you say or type to the Studio plugin. Returns {cmd, ...} for a request Studio can do, or null for anything else (that goes to the chat as usual).
-// Commands: remove the background, crop (to a shape, when one is named), social image sizes (mapped to Studio's crop ratios + target dimensions), sign a PDF, and a favicon/app icon set.
+// Commands: remove the background, crop (to a shape, when one is named), social image sizes (mapped to Studio's crop ratios + target dimensions), sign a PDF, convert HEIC to JPEG, and a favicon/app icon set.
 const WORDS = {one: 1, two: 2, three: 3, four: 4, nine: 9, sixteen: 16};
 const SHAPES = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'];
 const NON_PHOTO = /(?:^(?:what|why|how|when|where|who)\b)|\b(?:write|caption|ideas?|tips?|guide|tutorial|explain|describe|build|website|clone|script)\b/;
@@ -53,5 +54,5 @@ export function parseStudioCommand(text) {
   if (/\bcrop\b/.test(t)) {
     return {cmd: 'crop', ratio: shapeOf(t)};
   }
-  return parseIconCommand(t);
+  return parseIconCommand(t) || parseHeicCommand(t);
 }

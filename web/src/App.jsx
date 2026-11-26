@@ -14,11 +14,15 @@ import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {FaviconsDialog} from './Favicons.jsx';
 import {parseIconCommand} from './favicons.js';
+import {HeicDialog} from './Heic.jsx';
+import {parseHeicCommand, isConvertibleFile} from './heic.js';
 import {SignPdfDialog} from './SignPdf.jsx';
 import {parseSignPdfCommand} from './sign-pdf.js';
 import {parseStudioCommand} from './studio-commands.js';
+import {parseChatCommand} from './chat-commands.js';
 import {parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary} from './history-search.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
+import {parseVoiceCommand} from './voice-commands.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -271,6 +275,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [plugOpen, setPlugOpen] = useState(false);
   const [iconsOpen, setIconsOpen] = useState(false);
   const [iconsFile, setIconsFile] = useState(null);
+  const [heicOpen, setHeicOpen] = useState(false);
+  const [heicFiles, setHeicFiles] = useState([]);
   const [signPdfOpen, setSignPdfOpen] = useState(false);
   const [signPdfFile, setSignPdfFile] = useState(null);
   // How the person wants the answer: Quick (default), Ask me first, Take your time. docs/adr/0002.
@@ -373,7 +379,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setTurns((all) => (opts.reuse ? all : [...all, {task, files: sendFiles.map((f) => f.name), t}]));
     setLimit(null); setBusy(true);
     const ac = new AbortController(); ctl.current = ac;
-    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock(), ...(opts.plugin ? {plugin: opts.plugin} : {})};
     if (opts.long && !opts.reuse) startLong(idx, payload);
     let res;
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
@@ -406,6 +412,20 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
+  // Plugin studio.heic: "convert to jpeg" (spoken or typed, or picked in Plugins) opens the in-browser HEIC-to-JPEG converter.
+  const openHeic = (fs = filesRef.current) => {
+    const imgs = (fs || []).filter((f) => f && f.b64 && isConvertibleFile(f));
+    setHeicFiles(imgs);
+    setHeicOpen(true);
+    return imgs;
+  };
+  const toHeic = (text, fs = filesRef.current) => {
+    if (!parseHeicCommand(text)) return false;
+    const imgs = openHeic(fs);
+    if (imgs.length) { setFiles([]); setNotice('Convert HEIC to JPEG: ' + imgs.map((f) => f.name).join(', ')); }
+    else if ((fs || []).length) setNotice('Attach a HEIC, HEIF, or image file to convert to JPEG.');
+    return true;
+  };
   const isPdfFile = (f) => !!(f && f.b64 && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')));
   const openSignPdf = (fs = filesRef.current) => {
     const pdf = (fs || []).find(isPdfFile) || null;
@@ -443,6 +463,23 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (!c || c.cmd === 'makeIcons') return false;
     return sendToStudio(studioFrame.current, c);
   };
+  const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
+  // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
+  const toChatPlugin = (text, fs = filesRef.current, {fromVoice = false} = {}) => {
+    const c = parseChatCommand(text);
+    if (!c) return false;
+    if (c.cmd === 'altText') {
+      if (!fs.some(isPhoto)) {
+        if (fromVoice) setValue(text);
+        setNotice('Attach a photo first (+ -> Attach files), then send "' + text + '".');
+        return true;
+      }
+      setValue(''); setFiles([]);
+      run(text, {files: fs, plugin: 'chat.alt-text'}).catch(() => {});
+      return true;
+    }
+    return false;
+  };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
   // Plugin chat.history-search: "find what I asked about pdfs" searches saved chats in this browser without hitting the API.
   const runHistorySearch = useCallback((query, originalText = '') => {
@@ -472,6 +509,27 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     getReader().speak(words, {onEnd: () => setNotice((n) => (n === 'Reading result aloud…' ? '' : n))});
   }, []);
   const toReadAloud = (text) => { if (!isReadAloudCommand(text)) return false; readResult(); return true; };
+  // Plugin voice.commands: "hey flisk" (spoken or typed) opens Voice talk or runs a chat command.
+  const runVoiceCommand = (c) => {
+    switch (c.cmd) {
+      case 'talk': setTalk(true); return true;
+      case 'dictate': void dictate(); return true;
+      case 'newChat': newChat(); setNotice('Started a new chat.'); return true;
+      case 'plugins': setPlugOpen(true); return true;
+      case 'studio': setStudio(true); return true;
+      case 'closeStudio': setStudio(false); return true;
+      case 'settings': openSettings('usage'); return true;
+      case 'model': setMdlOpen(true); return true;
+      case 'computers': setPcOpen(true); return true;
+      case 'attach': fileIn.current && fileIn.current.click(); return true;
+      case 'readAloud': readResult(); return true;
+      case 'explain': setExplain((e) => !e); setCaption(''); return true;
+      case 'scheme': setScheme(c.scheme); setNotice('Look: ' + (LOOKS[c.scheme] || c.scheme)); return true;
+      case 'stop': readerRef.current?.stop(); ctl.current && ctl.current.abort(); dict.current?.stop(); setNotice('Stopped.'); return true;
+      case 'task': run(c.task).catch(() => {}); return true;
+      default: return false;
+    }
+  };
   const dict = useRef(null);
   // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
   const dictate = async () => {
@@ -496,7 +554,17 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toSignPdf(text, filesRef.current)) { /* openSignPdf opens the Sign a PDF dialog */ } else if (text && toIcons(text, filesRef.current)) { /* openIcons opens the icon set dialog */ } else if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ } else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        const vc = text && parseVoiceCommand(text);
+        if (text && toHeic(text, filesRef.current)) { /* openHeic opens the converter dialog */ }
+        else if (text && toSignPdf(text, filesRef.current)) { /* openSignPdf opens the Sign a PDF dialog */ }
+        else if (text && toIcons(text, filesRef.current)) { /* openIcons opens the icon set dialog */ }
+        else if (text && toStudio(text)) setNotice('Studio: ' + text);
+        else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ }
+        else if (text && toReadAloud(text)) { /* readResult sets notice */ }
+        else if (text && toChatPlugin(text, filesRef.current, {fromVoice: true})) {}
+        else if (vc) runVoiceCommand(vc);
+        else if (text) setValue((v) => (v ? v + ' ' : '') + text);
+        else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -504,13 +572,20 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   };
 
   const submit = async (text) => {
-    const task = (text || '').trim();
+    let task = (text || '').trim();
     if (!task && !files.length) return;
+    if (toHeic(task, files)) { setValue(''); return; }
     if (toSignPdf(task, files)) { setValue(''); return; }
     if (toIcons(task, files)) { setValue(''); return; }
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (toChatPlugin(task, files)) return;
     if (!files.length && toHistorySearch(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
+    if (!files.length) {
+      const vc = parseVoiceCommand(task);
+      if (vc && vc.cmd !== 'task') { runVoiceCommand(vc); setValue(''); return; }
+      if (vc && vc.cmd === 'task') task = vc.task;
+    }
     const slash = readSlash(task);
     const picked1 = slash ? slash.answer : answer;
     const words = slash ? slash.rest.trim() : task;
@@ -652,7 +727,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 27 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 30 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -704,8 +779,9 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onIcons={() => openIcons(files)} onSignPdf={() => openSignPdf(files)} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} onIcons={() => openIcons(files)} onHeic={() => openHeic(files)} />
       <SignPdfDialog open={signPdfOpen} onClose={() => { setSignPdfOpen(false); setSignPdfFile(null); }} initialFile={signPdfFile} />
+      <HeicDialog open={heicOpen} onClose={() => { setHeicOpen(false); setHeicFiles([]); }} initialFiles={heicFiles} />
       <FaviconsDialog open={iconsOpen} onClose={() => { setIconsOpen(false); setIconsFile(null); }} initialFile={iconsFile} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}

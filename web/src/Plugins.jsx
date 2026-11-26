@@ -15,11 +15,11 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel (studio.heic and studio.sign-pdf open their own in-browser tools); chat.alt-text starts an alt-text request; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.') && p.id !== 'studio.icons';
 const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
-const canClick = (p, onReadAloud, onSignPdf, onIcons) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && p.id === 'studio.icons' && !!onIcons) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
+const canClick = (p, onReadAloud, onSignPdf, onHeic, onIcons) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'studio.heic' && !!onHeic) || (p.id === 'studio.icons' && !!onIcons)));
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -50,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, onHistorySearch, onSignPdf}) {
+export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, onAltText, onVoiceCommands, onHistorySearch, onSignPdf, onHeic}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -61,12 +61,18 @@ export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, on
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => canClick(p, onReadAloud, onSignPdf, onIcons) || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf, onHeic, onIcons)
+    || (p.status === 'ready' && p.id === 'voice.commands' && !!onVoiceCommands)
+    || (p.status === 'ready' && p.id === 'chat.alt-text' && !!onAltText)
+    || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
     if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
+    else if (p.status === 'ready' && p.id === 'studio.heic' && onHeic) { onClose(); onHeic(); }
     else if (p.status === 'ready' && p.id === 'studio.icons' && onIcons) { onClose(); onIcons(); }
     else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+    else if (p.status === 'ready' && p.id === 'chat.alt-text' && onAltText) { onClose(); onAltText(p); }
+    else if (p.status === 'ready' && p.id === 'voice.commands' && onVoiceCommands) { onClose(); onVoiceCommands(); }
     else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
   };
   return (
@@ -90,7 +96,7 @@ export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, on
                   <Text weight="semibold" style={{display: 'block'}}>{p.title}</Text>
                   <Text type="supporting" color="secondary" style={{display: 'block'}}>{'Say "' + p.voice[0] + '"'}</Text>
                 </span>
-                {p.status === 'ready' ? <Badge label={opensStudio(p) ? 'Open' : 'Ready'} variant="success" /> : <Badge label="Soon" />}
+                {p.status === 'ready' ? <Badge label={opensStudio(p) || p.id === 'studio.heic' ? 'Open' : 'Ready'} variant="success" /> : <Badge label="Soon" />}
               </button>
             </div>
           ))}

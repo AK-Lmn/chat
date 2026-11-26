@@ -24,14 +24,14 @@ describe('studio.icons catalog & wiring', () => {
     }
   });
 
-  test('Plugins.jsx and App.jsx wire studio.icons to FaviconsDialog for typed, spoken, and picker flows', async () => {
-    const pluginsSrc = await Bun.file(new URL('../web/src/Plugins.jsx', import.meta.url)).text();
-    const appSrc = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
-    expect(pluginsSrc).toContain("p.id === 'studio.icons'");
-    expect(pluginsSrc).toContain('onIcons');
-    expect(appSrc).toContain('<FaviconsDialog');
-    expect(appSrc).toContain('toIcons(text, filesRef.current)');
-    expect(appSrc).toContain('toIcons(task, files)');
+  test('the picker, typed, spoken and dialog paths all reach FaviconsDialog', async () => {
+    const read = (name) => Bun.file(new URL('../web/src/' + name, import.meta.url)).text();
+    const [plugins, app] = await Promise.all([read('Plugins.jsx'), read('App.jsx')]);
+    const wanted = new Map([
+      [plugins, ["p.id === 'studio.icons'", 'onIcons']],
+      [app, ['<FaviconsDialog', 'toIcons(text, filesRef.current)', 'toIcons(task, files)']],
+    ]);
+    for (const [source, needles] of wanted) for (const needle of needles) expect(source.includes(needle)).toBe(true);
   });
 });
 
