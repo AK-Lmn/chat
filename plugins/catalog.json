@@ -349,7 +349,7 @@
       "id": "studio.sign-pdf",
       "title": "Sign a PDF",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "sign this"
@@ -369,7 +369,7 @@
       "id": "studio.heic",
       "title": "Convert HEIC to JPEG",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "convert to jpeg"
@@ -419,7 +419,7 @@
       "id": "voice.commands",
       "title": "Voice commands",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "hey flisk"
@@ -439,7 +439,7 @@
       "id": "chat.alt-text",
       "title": "Describe a photo for alt text",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "describe this photo"
