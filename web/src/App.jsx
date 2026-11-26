@@ -12,6 +12,7 @@ import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
+import {parseChatCommand} from './chat-commands.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -247,6 +248,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
   const [files, setFiles] = useState([]);
+  const filesRef = useRef(files); filesRef.current = files;
   const [limit, setLimit] = useState(null);
   const [notice, setNotice] = useState('');
   const [plugOpen, setPlugOpen] = useState(false);
@@ -324,7 +326,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setTurns((all) => (opts.reuse ? all : [...all, {task, files: sendFiles.map((f) => f.name), t}]));
     setLimit(null); setBusy(true);
     const ac = new AbortController(); ctl.current = ac;
-    const payload = {mode: m, pod: !!opts.pod, cat, task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    const payload = {mode: m, pod: !!opts.pod, cat, task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock(), ...(opts.plugin ? {plugin: opts.plugin} : {})};
     let res;
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
     catch (e) { res = {status: e.name === 'AbortError' ? 0 : -1}; if (res.status === -1) put({...t, error: {message: 'Could not reach Chat. Check your connection and try again.', kind: 'busy'}}); }
@@ -358,6 +360,23 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [dictating, setDictating] = useState(false);
   // With Studio open, "remove the background" or "crop to square", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
+  const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
+  // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
+  const toChatPlugin = (text, fs = filesRef.current, {fromVoice = false} = {}) => {
+    const c = parseChatCommand(text);
+    if (!c) return false;
+    if (c.cmd === 'altText') {
+      if (!fs.some(isPhoto)) {
+        if (fromVoice) setValue(text);
+        setNotice('Attach a photo first (+ -> Attach files), then send "' + text + '".');
+        return true;
+      }
+      setValue(''); setFiles([]);
+      run(text, {files: fs, plugin: 'chat.alt-text'}).catch(() => {});
+      return true;
+    }
+    return false;
+  };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
   const dict = useRef(null);
   // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
@@ -381,7 +400,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        if (text && toStudio(text)) setNotice('Studio: ' + text);
+        else if (text && toChatPlugin(text, filesRef.current, {fromVoice: true})) {}
+        else if (text) setValue((v) => (v ? v + ' ' : '') + text);
+        else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -392,6 +414,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (toChatPlugin(task, files)) return;
     const fs = files; setValue(''); setFiles([]);
     run(task, {files: fs}).catch(() => {});
   };
@@ -514,7 +537,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 22 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 23 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -564,7 +587,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}

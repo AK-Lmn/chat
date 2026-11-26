@@ -11,7 +11,7 @@ import { BYO_STEPS, GITHUB_STEPS, cleanFiles, MAX_STEPS, MAX_TASK, runTask } fro
 import { decide, gradeReply, imageIntent, modelFrom, modelLabel, resolveModel } from './model.js';
 import { lookup } from './lookup.js';
 import { cleanMode, formatResults, searchWeb } from './search.js';
-import { seeImages } from './see.js';
+import { altTextForFiles, seeImages } from './see.js';
 import { answer as answerApi, BUILD_SYSTEM, GAME_SYSTEM, extractHtml } from './answer.js';
 import { KIT_CSS, withKit } from './kit.js';
 import { previewHost } from './share.js';
@@ -892,7 +892,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       const decision = await (decide(env)?.(task, { needLang: !detectLang(task) }) ?? null);
       const turnLang = decision?.lang && !detectLang(task) ? decision.lang : heuristicLang;
       if (decision?.lang && heuristicLang && decision.lang !== heuristicLang) await sendTrace(env, { route: '/api/run', kind: 'unexpected', why: `Jev says ${decision.lang}, word lists say ${heuristicLang}`, lang: turnLang }, fetchImpl);
-      const job = runTask({ mode: cleanMode(body.mode), search: (q) => searchWeb(q, { fetch: fetchImpl }), grade: gradeReply(env), stream: true, decision, classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: turnLang, kind: String(body?.cat || '').slice(0, 12), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), emit })
+      const job = runTask({ mode: cleanMode(body.mode), search: (q) => searchWeb(q, { fetch: fetchImpl }), grade: gradeReply(env), stream: true, decision, classify: imageIntent(env), lookupFacts: (q) => lookup(q), task, history: body.history, lang: turnLang, kind: String(body?.cat || '').slice(0, 12), memo: body?.memo, github, origin, model: m.ask, maxSteps: chosen.free ? MAX_STEPS : (github?.token ? GITHUB_STEPS : BYO_STEPS), computer, track: podTracker(env, login, fleet), fetchImpl, citable: env.CITABLE ? (u, init) => env.CITABLE.fetch(u, init) : null, order, files: cleanFiles(body.files), vision: !chosen.free && body.ai?.vision !== false, modelName: modelLabel(chosen), publish: (content, o) => publishSite(env, login, content, origin, o?.limit), photo: (p) => sitePhoto(env, login, p), saveImage: (pic, p) => saveImage(env, login, pic, p, origin), saveVideo: (parts, title) => saveVideo(env, login, parts, title, origin), altText: (fs) => altTextForFiles(env, fs), plugin: typeof body?.plugin === 'string' ? body.plugin.slice(0, 40) : '', emit })
         .then(async (r) => {
           if (needPod) return;
           for (const e of buffered) send(e);
