@@ -18,6 +18,7 @@ import catalog from '../../plugins/catalog.json';
 // A ready Studio plugin opens the Studio panel; the other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
+const canClick = (p, onReadAloud) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -48,7 +49,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -59,7 +60,11 @@ export function PluginsDialog({open, onClose, onStudio}) {
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const pick = (p) => { if (opensStudio(p)) { onClose(); onStudio(); } };
+  const clickable = (p) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
+  const pick = (p) => {
+    if (opensStudio(p)) { onClose(); onStudio(); }
+    else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+  };
   return (
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={600} purpose="form">
       <div style={{display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0, maxHeight: 'min(82dvh, 680px)'}}>
@@ -75,7 +80,7 @@ export function PluginsDialog({open, onClose, onStudio}) {
         <div role="list" aria-label="Plugins" style={{overflowY: 'auto', minHeight: 0, flex: 1}}>
           {rows.map((p) => (
             <div role="listitem" key={p.id} style={{opacity: p.status === 'ready' ? 1 : 0.55}}>
-              <button type="button" className="plug-row" disabled={p.status !== 'ready'} onClick={() => pick(p)} style={{cursor: opensStudio(p) ? 'pointer' : 'default'}}>
+              <button type="button" className="plug-row" disabled={p.status !== 'ready'} onClick={() => pick(p)} style={{cursor: clickable(p) ? 'pointer' : 'default'}}>
                 <Tile p={p} />
                 <span style={{flex: 1, minWidth: 0}}>
                   <Text weight="semibold" style={{display: 'block'}}>{p.title}</Text>
