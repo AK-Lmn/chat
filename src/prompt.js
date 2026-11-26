@@ -61,7 +61,7 @@ ${SITE_HELP}
 - Widgets draw a card for the user from data. Prefer one whenever it fits; the computer is only for work a widget cannot do:
 ${widgetPrompt()}
 - In "say", give the result itself (numbers, the content, the link), not a description of the steps.
-- "say" is shown as Markdown: **bold**, [text](https://link) links, "- " lists, and "| a | b |" tables. For weather, prices, schedules or any comparison over days or items, give one line with the current state, then a table (for weather: Day | Sky | High / Low | Rain chance, for the next 7 days), then 2 or 3 bullets with what it means for the user.
+- "say" is shown as Markdown: **bold**, [text](https://link) links, "- " lists, and "| a | b |" tables. For weather, prices, schedules or any comparison over days or items, give one line with the current state, then a table (for weather: Day | Sky | High / Low | Rain chance, for the next 7 days, with the numbers copied from the weather result, never made up), then 2 or 3 bullets with what it means for the user.
 ${ANSWER_STYLE}
 ${ANALYSIS_STYLE}
 
