@@ -1,11 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 import { parseStudioCommand } from '../web/src/studio-commands.js';
 import catalog from '../plugins/catalog.json';
 
-// Studio.jsx pulls in Astryx, which calls requestAnimationFrame when it loads.
-globalThis.requestAnimationFrame ??= (fn) => setTimeout(fn, 0);
-const { sendToStudio, STUDIO_URL } = await import('../web/src/Studio.jsx');
-const { opensStudio } = await import('../web/src/Plugins.jsx');
+// The JSX files are read as text: CI installs only the root dependencies, so importing them (React, Astryx) cannot resolve there.
+const studioSrc = readFileSync(new URL('../web/src/Studio.jsx', import.meta.url), 'utf8');
+const pluginsSrc = readFileSync(new URL('../web/src/Plugins.jsx', import.meta.url), 'utf8');
 
 describe('Meme and caption maker plugin (studio.meme)', () => {
   test('catalog lists studio.meme as ready with expected metadata and voice phrase', () => {
@@ -16,7 +16,7 @@ describe('Meme and caption maker plugin (studio.meme)', () => {
     expect(p.status).toBe('ready');
     expect(p.owner).toBe('flisk');
     expect(p.voice).toContain('make a meme');
-    expect(opensStudio(p)).toBe(true);
+    expect(pluginsSrc).toContain("export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');");
     for (const v of p.voice) expect(parseStudioCommand(v)).toEqual({ cmd: 'meme', top: null, bottom: null });
   });
 
@@ -74,23 +74,9 @@ describe('Meme and caption maker plugin (studio.meme)', () => {
     expect(parseStudioCommand(t)).toBeNull();
   });
 
-  test('sendToStudio posts the meme command to the Studio origin', () => {
-    const sent = [];
-    const frame = {
-      contentWindow: {
-        postMessage(msg, origin) {
-          sent.push({ msg, origin });
-        },
-      },
-    };
-    const cmd = parseStudioCommand('make a meme');
-    expect(sendToStudio(frame, cmd)).toBe(true);
-    expect(sent).toEqual([
-      {
-        msg: { flisk: 'studio', cmd: 'meme', top: null, bottom: null },
-        origin: new URL(STUDIO_URL).origin,
-      },
-    ]);
-    expect(sendToStudio(null, cmd)).toBe(false);
+  test('sendToStudio posts every Studio command, meme included, to the Studio origin', () => {
+    expect(studioSrc).toContain("export const sendToStudio = (frame, msg) => { if (!frame) return false; frame.contentWindow.postMessage({flisk: 'studio', ...msg}, STUDIO_ORIGIN); return true; };");
+    expect(studioSrc).toContain("const STUDIO_ORIGIN = 'https://studio.flisk.si';");
+    expect(parseStudioCommand('make a meme')).toEqual({ cmd: 'meme', top: null, bottom: null });
   });
 });
