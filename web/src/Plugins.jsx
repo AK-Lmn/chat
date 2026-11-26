@@ -18,7 +18,8 @@ import catalog from '../../plugins/catalog.json';
 // A ready Studio plugin opens the Studio panel; chat.alt-text starts an alt-text request; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
-const canClick = (p, onReadAloud) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
+const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
+const canClick = (p, onReadAloud, onSignPdf) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -49,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud, onAltText, onHistorySearch}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onAltText, onHistorySearch, onSignPdf}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -60,9 +61,10 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud, onAltText, 
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => opensStudio(p) || (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'chat.alt-text' && !!onAltText) || (p.id === 'chat.history-search' && !!onHistorySearch)));
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf) || (p.status === 'ready' && ((p.id === 'chat.alt-text' && !!onAltText) || (p.id === 'chat.history-search' && !!onHistorySearch)));
   const pick = (p) => {
-    if (opensStudio(p)) { onClose(); onStudio(); }
+    if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
+    else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
     else if (p.status === 'ready' && p.id === 'chat.alt-text' && onAltText) { onClose(); onAltText(p); }
     else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
