@@ -15,10 +15,11 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel (except studio.heic, which opens the in-browser HEIC converter); the other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel (studio.heic and studio.sign-pdf open their own in-browser tools); chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
-const opensTool = (p, {onReadAloud, onHeic}) => (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'studio.heic' && !!onHeic)));
+const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
+const canClick = (p, onReadAloud, onSignPdf, onHeic) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'studio.heic' && !!onHeic)));
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -49,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHeic}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHistorySearch, onSignPdf, onHeic}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -60,11 +61,13 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHeic}) {
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => opensStudio(p) || opensTool(p, {onReadAloud, onHeic});
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf, onHeic) || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
-    if (p.status === 'ready' && p.id === 'studio.heic' && onHeic) { onClose(); onHeic(); }
+    if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
+    else if (p.status === 'ready' && p.id === 'studio.heic' && onHeic) { onClose(); onHeic(); }
     else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+    else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
   };
   return (
     <Dialog isOpen={open} onOpenChange={(o) => !o && onClose()} width={600} purpose="form">
