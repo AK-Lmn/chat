@@ -50,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHistorySearch, onSignPdf}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onVoiceCommands, onHistorySearch, onSignPdf}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -61,11 +61,14 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHistorySe
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => canClick(p, onReadAloud, onSignPdf) || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
+  const clickable = (p) => canClick(p, onReadAloud, onSignPdf)
+    || (p.status === 'ready' && p.id === 'voice.commands' && !!onVoiceCommands)
+    || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
     if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
     else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
+    else if (p.status === 'ready' && p.id === 'voice.commands' && onVoiceCommands) { onClose(); onVoiceCommands(); }
     else if (p.status === 'ready' && p.id === 'chat.history-search' && onHistorySearch) { onClose(); onHistorySearch(p); }
   };
   return (
