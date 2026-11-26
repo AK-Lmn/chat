@@ -369,7 +369,7 @@
       "id": "studio.heic",
       "title": "Convert HEIC to JPEG",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "convert to jpeg"

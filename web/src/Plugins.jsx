@@ -15,10 +15,10 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel; the other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel (except studio.heic, which opens the in-browser HEIC converter); the other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
-const canClick = (p, onReadAloud) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
+const opensTool = (p, {onReadAloud, onHeic}) => (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'studio.heic' && !!onHeic)));
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -49,7 +49,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onReadAloud}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onHeic}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -60,9 +60,10 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud}) {
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
+  const clickable = (p) => opensStudio(p) || opensTool(p, {onReadAloud, onHeic});
   const pick = (p) => {
-    if (opensStudio(p)) { onClose(); onStudio(); }
+    if (p.status === 'ready' && p.id === 'studio.heic' && onHeic) { onClose(); onHeic(); }
+    else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
   };
   return (
@@ -86,7 +87,7 @@ export function PluginsDialog({open, onClose, onStudio, onReadAloud}) {
                   <Text weight="semibold" style={{display: 'block'}}>{p.title}</Text>
                   <Text type="supporting" color="secondary" style={{display: 'block'}}>{'Say "' + p.voice[0] + '"'}</Text>
                 </span>
-                {p.status === 'ready' ? <Badge label={opensStudio(p) ? 'Open' : 'Ready'} variant="success" /> : <Badge label="Soon" />}
+                {p.status === 'ready' ? <Badge label={opensStudio(p) || p.id === 'studio.heic' ? 'Open' : 'Ready'} variant="success" /> : <Badge label="Soon" />}
               </button>
             </div>
           ))}
