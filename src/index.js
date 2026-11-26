@@ -35,7 +35,7 @@ import { withSecurityHeaders } from './security-headers.js';
 import { asksBuild, spokenReply, talkMessages, talkReply, transcribe } from './voice.js';
 export * from './voice.js';
 import { runEvents, sendTrace } from './trace.js';
-import { usageOf, answeredModel, freeModelOpts, limitOf, overDailyLimit, overQuota, refundQuota, taskLimitBody } from './limits.js';
+import { usageOf, answeredModel, freeModelOpts, limitOf, overBurstLimit, overDailyLimit, overQuota, refundQuota, taskLimitBody } from './limits.js';
 export * from './limits.js';
 
 // RFC 9116 contact for security researchers, published at /.well-known/security.txt.
@@ -774,6 +774,9 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
 
     if (path === '/api/talk') {
+      if (await overBurstLimit(await who(login), { cache: env.LIMIT_CACHE, now: env.now?.() })) {
+        return json(429, { error: 'Too many requests in a short time. Wait a few seconds and try again.' });
+      }
       const body = await readJson(request);
       const timing = [];
       const timed = (name, t0) => timing.push(`${name};dur=${Date.now() - t0}`);
