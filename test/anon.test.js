@@ -46,7 +46,7 @@ test('GitHub sign-in is still offered with an anonymous cookie, and refuses name
   expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize');
   const state = 'abc';
   const gh = async (u) => (String(u).includes('access_token') ? Response.json({ access_token: 't' }) : Response.json({ login: 'anon-0123456789abcdef' }));
-  const cb = await handle(new Request(`${ORIGIN}/auth/callback?code=c&state=${state}`, { headers: { cookie: `chat_state=${state}` } }), e, { fetchImpl: gh });
+  const cb = await handle(new Request(`${ORIGIN}/auth/callback?code=c&state=${state}`, { headers: { cookie: `__Host-chat_state=${state}` } }), e, { fetchImpl: gh });
   expect(cb.status).toBe(400);
   expect(cb.headers.get('set-cookie') || '').not.toContain('chat_sess');
 });

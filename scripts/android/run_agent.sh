@@ -12,6 +12,7 @@ for h in $BLOCK_HOSTS; do
   case "$ip" in ""|0.0.0.0|127.*) ;; *) echo "$h reachable from the emulator ($ip): aborting"; exit 1 ;; esac
 done
 # 2. Phone language (the emulator boots in en-US; google_apis images allow adb root)
+[[ "$LOCALE" =~ ^[A-Za-z_-]+$ ]] || { echo "LOCALE must be a language tag like en-US"; exit 1; }  # it goes into a shell command below
 if [[ "$(adb shell getprop persist.sys.locale | tr -d '\r')" != "$LOCALE" ]]; then
   adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
   adb shell "setprop persist.sys.locale $LOCALE; setprop ctl.restart zygote"; sleep 10; adb wait-for-device

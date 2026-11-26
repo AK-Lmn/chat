@@ -11,6 +11,14 @@ async function hmac(secret, text) {
 
 const secretOf = (env) => env.SESSION_SECRET || '';
 
+// Compares two secrets without stopping at the first different character.
+export function safeEqual(a, b) {
+  a = String(a); b = String(b);
+  let d = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return d === 0;
+}
+
 export async function makeSession(env, login, now = Date.now(), days = DAYS) {
   const body = `${login}.${now + days * 86400_000}`;
   const value = `${body}.${await hmac(secretOf(env), body)}`;
@@ -35,7 +43,7 @@ export async function readSession(env, request, now = Date.now()) {
   const sig = raw.slice(at + 1);
   const [login, exp] = [body.slice(0, body.lastIndexOf('.')), Number(body.slice(body.lastIndexOf('.') + 1))];
   if (!login || !(exp > now)) return null;
-  if ((await hmac(secretOf(env), body)) !== sig) return null;
+  if (!safeEqual(await hmac(secretOf(env), body), sig)) return null;
   return { login };
 }
 

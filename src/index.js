@@ -25,7 +25,7 @@ import { KEEP_DAYS, KEPT_PER_LOGIN } from './share.js';
 import { runOverSocket } from './browserpod.js';
 import { PHOTOS_PER_LOGIN, photoHistory, photosUsed, sitePhoto } from './photo.js';
 import { pageShot } from './shot.js';
-import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession, sameOrigin } from './session.js';
+import { ANON_DAYS, clearSession, isAnon, makeSession, newAnonLogin, readSession, safeEqual, sameOrigin } from './session.js';
 import { speakStream, MAX_SPEAK } from './tts.js';
 import { sentenceSplitter, splitReply } from './talk-stream.js';
 import { COGITO_TYPE, cogitoStream, wantsCogito } from './cogito.js';
@@ -224,7 +224,7 @@ export async function alertRun(env, { task, ai, anon, result }, fetchImpl = fetc
 async function adminRuns(request, env) {
   const key = env.ADMIN_KEY || '';
   const given = (request.headers.get('authorization') || '').replace(/^Bearer /, '');
-  if (!key || given !== key) return json(404, { error: 'not found' });
+  if (!key || !safeEqual(given, key)) return json(404, { error: 'not found' });
   const days = Math.min(90, Math.max(1, Number(new URL(request.url).searchParams.get('days')) || 7));
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const totals = await env.DB.prepare('SELECT COUNT(*) AS tasks, SUM(error IS NOT NULL) AS failed, SUM(shared) AS live_links, SUM(copy) AS copies, SUM(big) AS big_apps, SUM(big AND system) AS big_built_by_system, SUM(big AND NOT system) AS big_skipped_system, SUM(bad_json) AS bad_json, SUM(provider_retries) AS provider_retries, ROUND(AVG(steps), 1) AS avg_steps, ROUND(AVG(ms) / 1000.0, 1) AS avg_seconds FROM task_runs WHERE created >= ?').bind(since).first();
@@ -401,7 +401,8 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if (request.method === 'GET' && path === '/og.png') return new Response(OG_PNG, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path === '/apple-touch-icon.png') return new Response(TOUCH_ICON_PNG, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' } });
   if (request.method === 'GET' && path.startsWith('/logo/')) {
-    const host = decodeURIComponent(path.slice(6)).toLowerCase();
+    let host = '';
+    try { host = decodeURIComponent(path.slice(6)).toLowerCase(); } catch {}
     if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(host) || host.length > 100) return new Response(null, { status: 404 });
     for (const u of [`https://icons.duckduckgo.com/ip3/${host}.ico`, `https://www.google.com/s2/favicons?domain=${host}&sz=64`]) {
       try {
@@ -460,7 +461,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
   if (request.method === 'GET' && path === '/alexa/voice') {
     const text = String(url.searchParams.get('t') || '');
     const sig = String(url.searchParams.get('s') || '');
-    if (!env.ALEXA_KEY || !text || text.length > MAX_VOICE || sig !== (await alexaSign(text, env.ALEXA_KEY))) return json(403, { error: 'not allowed' });
+    if (!env.ALEXA_KEY || !text || text.length > MAX_VOICE || !safeEqual(sig, await alexaSign(text, env.ALEXA_KEY))) return json(403, { error: 'not allowed' });
     const hit = await alexaCache(env)?.match(new Request(url.toString())).catch(() => null);
     if (hit) return hit;
     const bytes = await alexaVoiceBytes(env, text).catch(() => null);
@@ -539,35 +540,35 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     const have = await readSession(env, request);
     // ?again=1: someone who signed in before chat asked for GitHub access goes through GitHub once more to allow it.
     if (have && !isAnon(have.login) && !url.searchParams.get('again')) return redirect('/');
-    if (env.DEV_LOGIN) return redirect('/', { 'set-cookie': await makeSession(env, env.DEV_LOGIN) });
+    if (env.DEV_LOGIN && /^(localhost|127\.0\.0\.1)$/.test(url.hostname)) return redirect('/', { 'set-cookie': await makeSession(env, env.DEV_LOGIN) });
     if (env.LOGIN_PUBLIC_KEY && !url.searchParams.get('again')) {
       // Identity comes from login.flisk.si (one GitHub app for every Flisk site). GitHub repo access is a separate step: ?again=1.
       const state = crypto.randomUUID();
       const back = new URL('/auth/done', origin);
       back.searchParams.set('s', state);
       const headers = new Headers({ location: `${env.LOGIN_ORIGIN || 'https://login.flisk.si'}/start?return=${encodeURIComponent(back.href)}` });
-      headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+      headers.append('set-cookie', `__Host-chat_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
       return new Response(null, { status: 302, headers });
     }
     if (!env.GITHUB_CLIENT_ID || !env.GITHUB_CLIENT_SECRET) return html(messagePage('Sign-in is not set up', 'GitHub sign-in has not been connected yet.'), 503);
     const state = crypto.randomUUID();
     const headers = new Headers({ location: githubAuthorizeUrl({ ...env, PUBLIC_ORIGIN: origin }, state) });
-    headers.append('set-cookie', `chat_state=${state}; Path=/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
+    headers.append('set-cookie', `__Host-chat_state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`);
     return new Response(null, { status: 302, headers });
   }
   if (request.method === 'GET' && path === '/auth/done') {
-    const cookie = /(?:^|;\s*)chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
+    const cookie = /(?:^|;\s*)__Host-chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
     const st = url.searchParams.get('s') || '';
     const who = env.LOGIN_PUBLIC_KEY && env.SESSION_SECRET && st && st === cookie ? await verifyLoginToken(url.searchParams.get('flisk_token'), env.LOGIN_PUBLIC_KEY, origin) : null;
     if (!who || !/^[A-Za-z0-9-]{1,39}$/.test(who.login) || /^anon-/i.test(who.login)) return html(messagePage('Sign-in failed', 'The sign-in link expired. Start again.'), 400);
     const headers = new Headers({ location: '/' });
     headers.append('set-cookie', await makeSession(env, who.login));
-    headers.append('set-cookie', 'chat_state=; Path=/auth; Max-Age=0');
+    headers.append('set-cookie', '__Host-chat_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
     return new Response(null, { status: 303, headers });
   }
   if (request.method === 'GET' && path === '/auth/callback') {
     const state = url.searchParams.get('state') || '';
-    const cookie = /(?:^|;\s*)chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
+    const cookie = /(?:^|;\s*)__Host-chat_state=([^;]+)/.exec(request.headers.get('cookie') || '')?.[1] || '';
     const code = url.searchParams.get('code') || '';
     if (!env.SESSION_SECRET || !code || !state || state !== cookie) return html(messagePage('Sign-in failed', 'The sign-in link expired. Start again.'), 400);
     const signed = await githubLogin(env, code, fetchImpl);
@@ -576,10 +577,12 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     await saveGithubToken(env, login, signed.token, signed.scope).catch(() => {});
     const headers = new Headers({ location: '/' });
     headers.append('set-cookie', await makeSession(env, login));
-    headers.append('set-cookie', 'chat_state=; Path=/auth; Max-Age=0');
+    headers.append('set-cookie', '__Host-chat_state=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0');
     return new Response(null, { status: 303, headers });
   }
   if (request.method === 'GET' && path === '/auth/signout') {
+    // A link from another site must not sign the visitor out.
+    if (request.headers.get('sec-fetch-site') === 'cross-site') return redirect('/');
     const was = await readSession(env, request);
     if (was && !isAnon(was.login)) await Promise.resolve(forgetGithubToken(env, was.login)).catch(() => {});
     return redirect('/', { 'set-cookie': clearSession() });
@@ -742,7 +745,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
 
     if (path === '/api/review-ai') {
       if (anon) return json(403, { error: 'PR reviews need GitHub sign-in' });
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const chosen = resolveModel({ ai: String(body?.ai || ''), key: String(body?.key || ''), model: String(body?.model || '') });
       if (chosen.error || chosen.free) return json(400, { error: chosen.error || 'pick an AI with your own key' });
       const r = await saveSettings(env, login, { ai: chosen.ai, model: chosen.model, key: chosen.key });
@@ -750,7 +753,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
 
     if (path === '/api/connect') {
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const card = PROVIDER_CARDS.find((c) => c.id === body?.provider);
       if (!card) return json(400, { error: 'pick one of the providers' });
       const r = await fleet.connect(card.id, String(body.key || ''));
@@ -758,7 +761,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
 
     if (path === '/api/transcribe') {
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const part = body?.part === true;
       const limit = limitOf(part ? 'voice-part' : 'voice', anon);
       if (await overQuota(env, part ? 'voice-part' : 'voice', { anon, id: await who(login) })) return json(429, { error: `You've used today's voice (${limit} ${part ? 'spoken phrases' : 'voice messages'}).${anon ? ' Sign in with GitHub for more, or come back tomorrow.' : ' Type instead, or come back tomorrow.'}` });
@@ -778,7 +781,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
       if (await overBurstLimit(await who(login), { cache: env.LIMIT_CACHE, now: env.now?.() })) {
         return json(429, { error: 'Too many requests in a short time. Wait a few seconds and try again.' });
       }
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const timing = [];
       const timed = (name, t0) => timing.push(`${name};dur=${Date.now() - t0}`);
       // One round trip per spoken turn: the audio comes with the request, is written down here, then answered.
@@ -844,7 +847,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
 
     if (path === '/api/memo') {
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const msgs = Array.isArray(body?.msgs) ? body.msgs : [];
       if (!msgs.length) return json(400, { error: 'nothing to remember' });
       const chosen = resolveModel(body.ai);
@@ -857,7 +860,7 @@ async function handleRequest(request, env = {}, { fetchImpl = fetch, waitUntil =
     }
 
     if (path === '/api/run') {
-      const body = await readJson(request);
+      const body = (await readJson(request)) || {};
       const task = String(body?.task || '').trim();
       if (!task) return json(400, { error: 'type a task' });
       if (task.length > MAX_TASK) return json(400, { error: `keep the task under ${MAX_TASK} characters` });
@@ -922,7 +925,7 @@ export default {
   // The voice button records, so the microphone stays allowed for chat's own pages; camera and location are off.
   fetch: async (request, env, ectx) =>
     withSecurityHeaders(
-      await handle(request, env, { waitUntil: ectx?.waitUntil ? (p) => ectx.waitUntil(p) : null }).catch((e) => json(500, { error: 'chat failed: ' + String(e?.message || e).slice(0, 200) })),
+      await handle(request, env, { waitUntil: ectx?.waitUntil ? (p) => ectx.waitUntil(p) : null }).catch((e) => (console.error('chat failed', e), json(500, { error: 'chat failed' }))),
       { permissionsPolicy: 'camera=(), microphone=(self), geolocation=()' },
     ),
   // Hourly (wrangler.toml [triggers]): delete computers that are past their time.

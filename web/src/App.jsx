@@ -104,7 +104,8 @@ function Answer({t, onAgain, onPick, onPreview, openUrl, onOpenChat}) {
       {pics.length > 0 && <HStack gap={2} wrap="wrap">{pics.map((src, i) => <Button key={src} label={pics.length > 1 ? 'Save picture ' + (i + 1) : 'Save picture'} variant="secondary" size="sm" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} onClick={() => savePicture(src)} />)}</HStack>}
       {links.map((u) => {
         // A page this chat published (/s/<id>) is kept 7 days, so it can be downloaded to keep it, as on /classic (#354).
-        const page = typeof location !== 'undefined' && u.startsWith(location.origin + '/s/');
+        // Compare the parsed address: a raw prefix check would accept /s/../ paths that leave /s/ once the browser normalizes them.
+        const page = typeof location !== 'undefined' && (() => { try { const x = new URL(u, location.origin); return x.origin === location.origin && x.pathname.startsWith('/s/'); } catch { return false; } })();
         return (
           <Card key={u}><VStack gap={2}>
             <HStack gap={2} align="center"><Badge label="Live" variant="success" /><Text type="supporting" color="secondary">{page ? 'Kept 7 days. Download the page to keep it.' : t.kept && t.kept.days ? 'Kept ' + t.kept.days + ' days' : 'Real link'}</Text></HStack>
