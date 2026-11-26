@@ -2,7 +2,7 @@
 // Commands: remove the background, crop (to a shape, when one is named), and social image sizes (mapped to Studio's crop ratios + target dimensions).
 const WORDS = {one: 1, two: 2, three: 3, four: 4, nine: 9, sixteen: 16};
 const SHAPES = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'];
-const NON_PHOTO = /^(?:what|why|how|when|where|who)\b|\b(?:write|caption|ideas?|tips?|guide|tutorial|explain|describe|build|website|clone|script)\b/;
+const NON_PHOTO = /(?:^(?:what|why|how|when|where|who)\b)|\b(?:write|caption|ideas?|tips?|guide|tutorial|explain|describe|build|website|clone|script)\b/;
 
 export const SOCIAL_SIZES = [
   {preset: 'instagram-story', match: /\b(?:instagram|ig|insta)\s+stor(?:y|ies)\b/, ratio: '9:16', width: 1080, height: 1920},
