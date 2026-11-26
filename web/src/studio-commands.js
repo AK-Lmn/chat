@@ -2,7 +2,7 @@
 // Commands: remove the background, crop (to a shape, when one is named), and make a meme or caption.
 const WORDS = {one: 1, two: 2, three: 3, four: 4, nine: 9, sixteen: 16};
 const SHAPES = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'];
-const MEME_SKIP = /^(?:what|why|how|who|when|where|explain)\b|\b(?:website|web ?site|site|app|application|page|generator|bot|video|subtitles?)\b/;
+const MEME_SKIP = /(?:^(?:what|why|how|who|when|where|explain)\b)|\b(?:website|web ?site|site|app|application|page|generator|bot|video|subtitles?)\b/;
 const unquote = (s) => s.replace(/^["']|["']$/g, '').trim() || null;
 
 // "16:9", "16x9", "16 by 9", "sixteen to nine", or "square".

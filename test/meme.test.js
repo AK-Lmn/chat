@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { parseStudioCommand } from '../web/src/studio-commands.js';
-import { sendToStudio, STUDIO_URL } from '../web/src/Studio.jsx';
-import { opensStudio } from '../web/src/Plugins.jsx';
 import catalog from '../plugins/catalog.json';
+
+// Studio.jsx pulls in Astryx, which calls requestAnimationFrame when it loads.
+globalThis.requestAnimationFrame ??= (fn) => setTimeout(fn, 0);
+const { sendToStudio, STUDIO_URL } = await import('../web/src/Studio.jsx');
+const { opensStudio } = await import('../web/src/Plugins.jsx');
 
 describe('Meme and caption maker plugin (studio.meme)', () => {
   test('catalog lists studio.meme as ready with expected metadata and voice phrase', () => {
