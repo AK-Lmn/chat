@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { isReadAloudCommand, spokenText, resultText, speechChunks, speechLang, createReader } from '../web/src/read-aloud.js';
 import { newTurn } from '../web/src/events.js';
 import catalog from '../plugins/catalog.json';
@@ -21,17 +22,18 @@ describe('read-aloud voice and typed commands', () => {
     expect(isReadAloudCommand(t)).toBe(true);
   });
 
-  test.each([
-    'what is the weather',
-    'build me a shop',
-    'read package.json',
-    'read this file and summarize it',
-    'how do I read a CSV in Python',
-    'write a story about someone who loved to read aloud in a very long sentence that goes on and on and on',
-    '',
-    null,
-  ])('%p is left to the chat', (t) => {
-    expect(isReadAloudCommand(t)).toBe(false);
+  test('ordinary requests are left to the chat', () => {
+    const ordinary = [
+      'what is the weather',
+      'build me a shop',
+      'read package.json',
+      'read this file and summarize it',
+      'how do I read a CSV in Python',
+      'write a story about someone who loved to read aloud in a very long sentence that goes on and on and on',
+      '',
+      null,
+    ];
+    for (const t of ordinary) expect(isReadAloudCommand(t)).toBe(false);
   });
 
   test('the catalog lists voice.read-aloud as ready with phrases the parser understands', () => {
@@ -121,13 +123,10 @@ describe('read-aloud audio player', () => {
 });
 
 describe('read-aloud app and picker wiring', () => {
-  test('App.jsx handles read-aloud in submit, dictate, and the plugin picker', async () => {
-    const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
-    expect(app).toContain("from './read-aloud.js'");
-    expect(app).toContain('toReadAloud(text)');
-    expect(app).toContain('toReadAloud(task)');
-    expect(app).toContain('onReadAloud={readResult}');
-    const dlg = await Bun.file(new URL('../web/src/Plugins.jsx', import.meta.url)).text();
-    expect(dlg).toContain("p.id === 'voice.read-aloud'");
+  test('App.jsx handles read-aloud in submit, dictate, and the plugin picker', () => {
+    const src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+    const app = src('../web/src/App.jsx');
+    for (const needle of ["from './read-aloud.js'", 'toReadAloud(text)', 'toReadAloud(task)', 'onReadAloud={readResult}']) expect(app).toContain(needle);
+    expect(src('../web/src/Plugins.jsx')).toContain("p.id === 'voice.read-aloud'");
   });
 });
