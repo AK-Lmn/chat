@@ -439,7 +439,7 @@
       "id": "chat.alt-text",
       "title": "Describe a photo for alt text",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "describe this photo"

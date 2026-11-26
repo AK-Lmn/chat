@@ -15,6 +15,7 @@ import {PluginsDialog} from './Plugins.jsx';
 import {SignPdfDialog} from './SignPdf.jsx';
 import {parseSignPdfCommand} from './sign-pdf.js';
 import {parseStudioCommand} from './studio-commands.js';
+import {parseChatCommand} from './chat-commands.js';
 import {parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary} from './history-search.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {parseVoiceCommand} from './voice-commands.js';
@@ -370,7 +371,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setTurns((all) => (opts.reuse ? all : [...all, {task, files: sendFiles.map((f) => f.name), t}]));
     setLimit(null); setBusy(true);
     const ac = new AbortController(); ctl.current = ac;
-    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock(), ...(opts.plugin ? {plugin: opts.plugin} : {})};
     if (opts.long && !opts.reuse) startLong(idx, payload);
     let res;
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
@@ -421,6 +422,23 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   };
   // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
+  const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
+  // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
+  const toChatPlugin = (text, fs = filesRef.current, {fromVoice = false} = {}) => {
+    const c = parseChatCommand(text);
+    if (!c) return false;
+    if (c.cmd === 'altText') {
+      if (!fs.some(isPhoto)) {
+        if (fromVoice) setValue(text);
+        setNotice('Attach a photo first (+ -> Attach files), then send "' + text + '".');
+        return true;
+      }
+      setValue(''); setFiles([]);
+      run(text, {files: fs, plugin: 'chat.alt-text'}).catch(() => {});
+      return true;
+    }
+    return false;
+  };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
   // Plugin chat.history-search: "find what I asked about pdfs" searches saved chats in this browser without hitting the API.
   const runHistorySearch = useCallback((query, originalText = '') => {
@@ -500,6 +518,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         else if (text && toStudio(text)) setNotice('Studio: ' + text);
         else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ }
         else if (text && toReadAloud(text)) { /* readResult sets notice */ }
+        else if (text && toChatPlugin(text, filesRef.current, {fromVoice: true})) {}
         else if (vc) runVoiceCommand(vc);
         else if (text) setValue((v) => (v ? v + ' ' : '') + text);
         else setNotice('I did not catch that. Try again.');
@@ -514,6 +533,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (!task && !files.length) return;
     if (toSignPdf(task, files)) { setValue(''); return; }
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (toChatPlugin(task, files)) return;
     if (!files.length && toHistorySearch(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
     if (!files.length) {
@@ -662,7 +682,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 27 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 28 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -714,7 +734,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} />
       <SignPdfDialog open={signPdfOpen} onClose={() => { setSignPdfOpen(false); setSignPdfFile(null); }} initialFile={signPdfFile} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
