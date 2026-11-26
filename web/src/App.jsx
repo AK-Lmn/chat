@@ -1,5 +1,5 @@
 import {useState, useEffect, useRef, useCallback} from 'react';
-import {AnswerBar, AnswerPalette, AskFirst, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
+import {AnswerBar, AnswerMenu, AskFirst, ShortcutHints, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
 import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
 import {Oracle} from './Oracle.jsx';
@@ -14,6 +14,7 @@ import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
 import {parseChatCommand} from './chat-commands.js';
+import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
 import {AppShell, useAppShellMobile} from '@astryxdesign/core/AppShell';
@@ -245,6 +246,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   // The composer has no mode picker: the Jev router decides from the words whether it is a question, a site, a picture or a video.
   const mode = 'ask';
   const [turns, setTurns] = useState([]); // [{task, files, t}]
+  const turnsRef = useRef(turns); turnsRef.current = turns;
+  const readerRef = useRef(null);
+  const getReader = () => (readerRef.current ||= createReader());
+  useEffect(() => () => readerRef.current?.stop(), []);
   useEffect(() => { document.documentElement.classList.toggle('chatting', turns.length > 0); }, [turns.length]);
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
@@ -257,6 +262,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [answer, setAnswerRaw] = useState(() => { try { const v = sessionStorage.getItem('chat_answer'); return ['fast', 'ask', 'long'].includes(v) ? v : 'fast'; } catch (e) { return 'fast'; } });
   const setAnswer = useCallback((v) => { setAnswerRaw(v); try { sessionStorage.setItem('chat_answer', v); } catch (e) { /* storage blocked */ } }, []);
   const [palette, setPalette] = useState(false);
+  const closePalette = useCallback(() => setPalette(false), []);
   useEffect(() => { const sl = readSlash(value); if (sl && sl.answer !== answer) setAnswer(sl.answer); }, [value]);
   const [asking, setAsking] = useState(null); // {task, files} waiting for the three answers
   const held = useHeldModifier();
@@ -343,6 +349,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (busy) return;
     markEngaged();
     await vaultReady;
+    readerRef.current?.stop();
     const [m, cat] = MODES[opts.mode || mode] || MODES.build;
     const sendFiles = opts.files || [];
     const idx = opts.reuse ? -1 : turns.length;
@@ -384,7 +391,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
-  // With Studio open, "remove the background" or "crop to square", spoken or typed, goes to the editor, not to the chat.
+  // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
   // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
@@ -404,12 +411,22 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     return false;
   };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
+  // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
+  const readResult = useCallback(() => {
+    const words = resultText(turnsRef.current);
+    if (!words) { setNotice('No result to read aloud yet.'); return; }
+    setNotice('Reading result aloud…');
+    getReader().speak(words, {onEnd: () => setNotice((n) => (n === 'Reading result aloud…' ? '' : n))});
+  }, []);
+  const toReadAloud = (text) => { if (!isReadAloudCommand(text)) return false; readResult(); return true; };
   const dict = useRef(null);
   // Voice typing: record, and when you tap again the words are written into the box (the same /api/transcribe as before).
   const dictate = async () => {
-    if (dict.current) { dict.current.stop(); return; }
+    const rdr = getReader();
+    if (dict.current) { if (!rdr.isSpeaking()) rdr.unlock(); dict.current.stop(); return; }
     if (!BOOT.login) { setNotice('Sign in with GitHub to use your voice.'); return; }
     if (!navigator.mediaDevices || !window.MediaRecorder) { setNotice('This browser cannot record. Try Chrome, Safari, Edge or Firefox.'); return; }
+    if (!rdr.isSpeaking()) rdr.unlock();
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); } catch (e) { setNotice('The microphone is blocked. Allow it for this site and try again.'); return; }
     const chunks = [];
@@ -427,6 +444,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
         if (text && toStudio(text)) setNotice('Studio: ' + text);
+        else if (text && toReadAloud(text)) { /* readResult sets notice */ }
         else if (text && toChatPlugin(text, filesRef.current, {fromVoice: true})) {}
         else if (text) setValue((v) => (v ? v + ' ' : '') + text);
         else setNotice('I did not catch that. Try again.');
@@ -441,6 +459,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
     if (toChatPlugin(task, files)) return;
+    if (!files.length && toReadAloud(task)) { setValue(''); return; }
     const slash = readSlash(task);
     const picked1 = slash ? slash.answer : answer;
     const words = slash ? slash.rest.trim() : task;
@@ -464,7 +483,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   pick.free = sel.free;
 
   const [navOpen, setNavOpen] = useState(false); // the phone chat drawer
-  const newChat = () => { setNavOpen(false); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); longCtl.current.forEach((c) => c.abort()); longCtl.current = []; setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
+  const newChat = () => { setNavOpen(false); readerRef.current?.stop(); ctl.current && ctl.current.abort(); hist.current = []; memo.current = {text: '', n: 0, busy: false}; setTurns([]); longCtl.current.forEach((c) => c.abort()); longCtl.current = []; setChatId('c' + Date.now()); setLimit(null); setBusy(false); setPanel(''); };
   // Delete one past chat from this browser (#355). Deleting the open chat starts a new one.
   const dropChat = (c) => {
     if (!confirm('Delete the chat "' + (c.title || 'Untitled') + '"? This cannot be undone.')) return;
@@ -537,7 +556,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     <ExplainContext.Provider value={ctx}>
     <div className="vv-root">
     {explain && <div className="caption" role="status">{caption || 'Explain mode: tap any dashed control to read what it does. Nothing will run.'}</div>}
-    {notice && <div className="caption" role="status" onClick={() => setNotice('')}>{notice} (tap to close)</div>}
+    {notice && <div className="caption" role="status" onClick={() => { readerRef.current?.stop(); setNotice(''); }}>{notice} (tap to close)</div>}
     {voiceNote && <div className="caption voice-note" role="status">Tap anywhere to start talking</div>}
     <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="turn-status">{liveText(turns, busy)}</div>
     {turns.length > 0 && <h1 className="sr-only">{'Flisk Chat: ' + String(turns[0].task || 'files').slice(0, 80)}</h1>  /* the greeting h1 is gone once a chat has turns (#357) */}
@@ -555,7 +574,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       <div className={'earth-content' + (turns.length || limit ? '' : ' empty')} style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, minWidth: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={<>
-          <AnswerPalette open={palette} onOpenChange={setPalette} onPick={setAnswer} actions={[
+          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer>
+              : palette ? <ChatComposerDrawer label="Commands"><AnswerMenu onClose={closePalette} onPick={setAnswer} actions={[
             {id: 'new', label: 'New chat', run: newChat},
             {id: 'plugins', label: 'Plugins', run: () => setPlugOpen(true)},
             {id: 'model', label: 'Choose AI model', run: () => setMdlOpen(true)},
@@ -564,8 +584,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             {id: 'dictate', label: 'Dictate', run: dictate},
             {id: 'talk', label: 'Voice talk', run: () => setTalk(true)},
             {id: 'settings', label: 'Settings and usage', run: () => openSettings('usage')},
-          ]} />
-          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
+          ]} /></ChatComposerDrawer>
+              : held ? <ChatComposerDrawer label="Shortcuts"><ShortcutHints /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
             placeholder={PLACEHOLDER[answer] || 'Ask or build…'} {...(BOOT.embed && hints.length ? {placeholder: hints[hintAt % hints.length]} : {})}
             input={<ChatComposerInput autoFocus={!touch} enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
               if (touch && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
@@ -581,7 +601,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 23 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 25 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -593,7 +613,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
             }
             footerActions={
               <HStack gap={1} align="center" wrap="wrap">
-                <AnswerBar value={answer} onChange={setAnswer} held={held} />
+                <AnswerBar value={answer} onChange={setAnswer} />
                 {brandOf(sel.provider) !== 'wolf' && <Tip brand={brandOf(sel.provider)} title="Which AI answers" scene="model" text="Which AI answers. Flisk Wolf is free; your own key is sent per request and never stored." more="Tap to switch, paste your key, or pick a model. Claude and OpenAI use your own key, so you pay them directly."><span><Button label={sel.name} variant="ghost" size="sm" icon={<Brand name={brandOf(sel.provider)} />} onClick={() => setMdlOpen(true)} /></span></Tip>}
                 {picked.length > 0 && <Tip brand="fleet" title="Where your app runs" scene="computers" text="Where your app runs. Fleet picks the cheapest of your connected computers." more="Tap to connect Daytona, Upstash, E2B or Isorun with a key."><span><Button label={pcLabel} variant="ghost" size="sm" icon={<Brand name={picked[0] || 'fleet'} />} onClick={() => setPcOpen(true)} /></span></Tip>}
               </HStack>
@@ -633,7 +653,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onReadAloud={readResult} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}

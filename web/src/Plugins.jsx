@@ -18,6 +18,7 @@ import catalog from '../../plugins/catalog.json';
 // A ready Studio plugin opens the Studio panel; chat.alt-text starts an alt-text request; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
 export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');
+const canClick = (p, onReadAloud) => opensStudio(p) || (p.status === 'ready' && p.id === 'voice.read-aloud' && !!onReadAloud);
 
 // One icon per plugin, matched on words in its id; anything unmatched gets the puzzle piece.
 const ICONS = [
@@ -48,7 +49,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onAltText}) {
+export function PluginsDialog({open, onClose, onStudio, onReadAloud, onAltText}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -59,9 +60,10 @@ export function PluginsDialog({open, onClose, onStudio, onAltText}) {
       .sort((a, b) => (a.status === b.status ? 0 : a.status === 'ready' ? -1 : 1));
   }, [q, tab]);
   const ready = rows.filter((p) => p.status === 'ready').length;
-  const clickable = (p) => opensStudio(p) || (p.status === 'ready' && p.id === 'chat.alt-text' && !!onAltText);
+  const clickable = (p) => opensStudio(p) || (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'chat.alt-text' && !!onAltText)));
   const pick = (p) => {
     if (opensStudio(p)) { onClose(); onStudio(); }
+    else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
     else if (p.status === 'ready' && p.id === 'chat.alt-text' && onAltText) { onClose(); onAltText(p); }
   };
   return (
