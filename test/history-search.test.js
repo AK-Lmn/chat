@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary } from '../web/src/history-search.js';
 import catalog from '../plugins/catalog.json';
 
@@ -21,18 +22,19 @@ describe('chat history search voice and typed commands', () => {
     expect(parseHistorySearchCommand(input)).toEqual({ cmd: 'historySearch', query });
   });
 
-  test.each([
-    'what is the weather',
-    'build me a shop',
-    'search the web for pdfs',
-    'find a good restaurant in Tokyo',
-    'how do I search chat history in React?',
-    'explain chat history search',
-    'write a very long story about what I asked in a chat once upon a time when everything went on and on and on',
-    '',
-    null,
-  ])('%p is left to the chat', (input) => {
-    expect(parseHistorySearchCommand(input)).toBeNull();
+  test('ordinary requests are left to the chat', () => {
+    const ordinary = [
+      'what is the weather',
+      'build me a shop',
+      'search the web for pdfs',
+      'find a good restaurant in Tokyo',
+      'how do I search chat history in React?',
+      'explain chat history search',
+      'write a very long story about what I asked in a chat once upon a time when everything went on and on and on',
+      '',
+      null,
+    ];
+    for (const input of ordinary) expect(parseHistorySearchCommand(input)).toBeNull();
   });
 
   test('catalog lists chat.history-search as ready with phrases the parser understands', () => {
@@ -107,14 +109,10 @@ describe('chat history matching and ranking', () => {
 });
 
 describe('App.jsx and Plugins.jsx wiring', () => {
-  test('wires chat.history-search in submit, dictate, sidebar filter, and plugin picker', async () => {
-    const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
-    expect(app).toContain("from './history-search.js'");
-    expect(app).toContain('toHistorySearch(task)');
-    expect(app).toContain('toHistorySearch(text)');
-    expect(app).toContain('matchesChat(c, filter)');
-    expect(app).toContain('onHistorySearch={');
-    const dlg = await Bun.file(new URL('../web/src/Plugins.jsx', import.meta.url)).text();
-    expect(dlg).toContain("p.id === 'chat.history-search'");
+  test('wires chat.history-search in submit, dictate, sidebar filter, and plugin picker', () => {
+    const src = (f) => readFileSync(new URL(f, import.meta.url), 'utf8');
+    const app = src('../web/src/App.jsx');
+    for (const needle of ["from './history-search.js'", 'toHistorySearch(task)', 'toHistorySearch(text)', 'matchesChat(c, filter)', 'onHistorySearch={']) expect(app).toContain(needle);
+    expect(src('../web/src/Plugins.jsx')).toContain("p.id === 'chat.history-search'");
   });
 });
