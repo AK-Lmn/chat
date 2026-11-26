@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { ANON_TALK_PER_DAY, ANON_TASKS_PER_DAY, handle } from '../src/index.js';
+import { TALK_BURST_LIMIT, TALK_BURST_WINDOW_MS } from '../src/limits.js';
 import { isAnon, makeSession, newAnonLogin, readSession } from '../src/session.js';
 
 const ORIGIN = 'https://chat.test';
@@ -64,8 +65,13 @@ test('anonymous visitors can talk, but PR review settings need GitHub', async ()
 });
 
 test('anonymous limits count the network address, so a fresh cookie does not reset them', async () => {
-  const e = env();
-  for (let i = 0; i < ANON_TALK_PER_DAY; i++) expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '9.9.9.9')).status).toBe(200);
+  let t = 1_700_000_000_000;
+  const e = { ...env(), now: () => t };
+  for (let i = 0; i < ANON_TALK_PER_DAY; i++) {
+    t += TALK_BURST_WINDOW_MS;
+    expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '9.9.9.9')).status).toBe(200);
+  }
+  t += TALK_BURST_WINDOW_MS;
   const over = await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '9.9.9.9');
   expect(over.status).toBe(429);
   expect((await over.json()).error).toMatch(/Sign in with GitHub/);
@@ -73,6 +79,18 @@ test('anonymous limits count the network address, so a fresh cookie does not res
   expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '8.8.8.8')).status).toBe(200);
   const ann = (await makeSession(e, 'ann')).split(';')[0];
   expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, ann, '9.9.9.9')).status).toBe(200);
+});
+
+test('burst limit throttles rapid /api/talk requests per visitor with 429', async () => {
+  const e = { ...env(), now: () => 1_700_000_000_000 };
+  for (let i = 0; i < TALK_BURST_LIMIT; i++) {
+    expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '4.4.4.4')).status).toBe(200);
+  }
+  const over = await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '4.4.4.4');
+  expect(over.status).toBe(429);
+  expect((await over.json()).error).toMatch(/Too many requests/);
+  // Different visitor is unaffected.
+  expect((await post(e, '/api/talk', { history: [{ role: 'user', content: 'hi' }], ai: { ai: 'wolf' } }, await anonCookie(e), '5.5.5.5')).status).toBe(200);
 });
 
 test('anonymous free tasks have their own, smaller daily limit', async () => {

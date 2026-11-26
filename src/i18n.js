@@ -370,6 +370,7 @@ Object.assign(UK, {
   'Signed in as {login}': 'Ви ввійшли як {login}',
   'Sign out': 'Вийти',
   'Not signed in': 'Ви не ввійшли',
+  'Too many requests in a short time. Wait a few seconds and try again.': 'Забагато запитів за короткий час. Зачекайте кілька секунд і спробуйте ще раз.',
   'Signing in with GitHub is optional. It keeps your chats and unlocks reviews of your pull requests.': 'Вхід через GitHub необов’язковий. Він зберігає ваші чати й відкриває рев’ю ваших pull request.',
   'Sign in with GitHub': 'Увійти через GitHub',
   'Reviews for {login} use {model} ({ai}) with your key. You pay your provider; no daily limit.': 'Рев’ю для {login} використовують {model} ({ai}) з вашим ключем. Ви платите своєму провайдеру; без денного ліміту.',
