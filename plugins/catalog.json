@@ -359,7 +359,7 @@
       "id": "studio.ocr",
       "title": "OCR: text from a photo or PDF",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "read the text"

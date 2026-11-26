@@ -28,7 +28,7 @@ const ICONS = [
   ['pages', GlobeAltIcon], ['analytics', ChartBarIcon], ['search', MagnifyingGlassIcon], ['listing', MegaphoneIcon], ['citable', SparklesIcon],
   ['grow', RocketLaunchIcon], ['agents', CpuChipIcon], ['seo', MagnifyingGlassIcon], ['voice', MicrophoneIcon], ['read-aloud', MicrophoneIcon],
   ['chat', ChatBubbleLeftRightIcon], ['pods', ServerStackIcon], ['sign', PencilSquareIcon], ['video', FilmIcon], ['meme', FaceSmileIcon],
-  ['emoji', FaceSmileIcon], ['erase', ScissorsIcon], ['photo', PhotoIcon], ['heic', PhotoIcon], ['icons', Squares2X2Icon], ['social', PhotoIcon],
+  ['emoji', FaceSmileIcon], ['erase', ScissorsIcon], ['photo', PhotoIcon], ['heic', PhotoIcon], ['icons', Squares2X2Icon], ['social', PhotoIcon], ['ocr', DocumentTextIcon],
 ];
 const iconOf = (p) => (ICONS.find(([k]) => p.id.includes(k)) || [0, p.group === 'Connectors' ? LinkIcon : PuzzlePieceIcon])[1];
 

@@ -10,6 +10,7 @@ import { cleanSite, LAYOUTS, photoPrompt, renderSite } from './sites.js';
 import { scrub, setupGithub } from './github.js';
 import { searchWords, sourcesNote, splitPoints, wantsLookup, withSources } from './lookup.js';
 import { answerFromWeb, cleanQuery, formatResults, modeNote, searchWeb } from './search.js';
+import { isPdfFile, parseOcrCommand } from './ocr.js';
 
 export { MAX_STEPS };
 // A layout page carries its fonts and a photo, so it may be bigger than a hand-written page.
@@ -432,12 +433,14 @@ const SCAFFOLD = /\bflisk\s+create\b|flisk\.sh\/install\.sh/;
 
 // Kinds picked in the chat that make something other than a picture: the name is what the model is told.
 export const BUILD_KINDS = { website: 'a website to build', build: 'a website, app or system to build', app: 'a small app to build', system: 'a system to build' };
-export async function runTask({ grade = null, stream = false, decision = null, classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, mode = 'chat', search = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', kind = '', memo = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export async function runTask({ grade = null, stream = false, decision = null, classify = null, task, history = [], github = undefined, origin = 'https://chat.flisk.si', model, computer, publish, photo = async () => '', saveImage = null, ocrText = null, plugin = '', track = {}, saveVideo = async () => ({ error: 'videos are not set up here' }), lookupFacts = null, mode = 'chat', search = null, fetchImpl = fetch, citable = null, order = [], files = [], vision = false, modelName = '', note = '', lang = '', kind = '', memo = '', emit = () => {}, maxSteps = MAX_STEPS, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  const wantsOcr = (plugin === 'studio.ocr' || !!parseOcrCommand(task)) && files.some((f) => f.image || isPdfFile(f));
   const where = files.length ? `\n\nThe user attached ${files.length} file(s), already on the computer in the current folder: ${files.map((f) => f.path).join(', ')}. Use them.` : '';
   // A model that sees images gets the attached pictures themselves, not only the file on the computer.
   const pics = vision ? files.filter((f) => f.image && f.content.length <= 1_400_000) : []; // about 1 MB: bigger pictures stay on the computer only
+  const ocrPrompt = wantsOcr ? ' Transcribe all readable text in the attached image(s) accurately, preserving line breaks and reading order. Reply with {"say": "<extracted text>"} and do not start a computer.' : '';
   const first = pics.length
-    ? [{ type: 'text', text: `${task}${where} The picture${pics.length > 1 ? 's are' : ' is'} also shown to you here: look at ${pics.length > 1 ? 'them' : 'it'} to answer.` }, ...pics.map((f) => ({ type: 'image_url', image_url: { url: `data:${f.image};base64,${f.content}` } }))]
+    ? [{ type: 'text', text: `${task}${where} The picture${pics.length > 1 ? 's are' : ' is'} also shown to you here: look at ${pics.length > 1 ? 'them' : 'it'} to answer.${ocrPrompt}` }, ...pics.map((f) => ({ type: 'image_url', image_url: { url: `data:${f.image};base64,${f.content}` } }))]
     : task + where;
   // The page sends the new task as the last history entry too: drop it so the model gets the task once.
   const past = Array.isArray(history) ? history.slice() : [];
@@ -546,6 +549,20 @@ export async function runTask({ grade = null, stream = false, decision = null, c
     links.push(saved.url);
     return { url: saved.url };
   };
+  if (wantsOcr) {
+    const text = ocrText ? await Promise.resolve(ocrText(files)).catch(() => '') : '';
+    if (text) {
+      stats.firstAction = 'ocr';
+      emit({ type: 'note', target: 'Reading text from the attached file' });
+      emit({ type: 'answer', text });
+      return await finish(text);
+    }
+    if (!pics.length && !files.some(isPdfFile)) {
+      const msg = 'Sorry, I could not read the text from that photo right now. Try again in a minute, or choose a model that can see images in Settings.';
+      emit({ type: 'answer', text: msg });
+      return await finish(msg);
+    }
+  }
   if (direct) {
     stats.firstAction = 'image';
     const r = await drawImage(direct);

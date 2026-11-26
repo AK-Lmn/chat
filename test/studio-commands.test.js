@@ -14,7 +14,7 @@ describe('Studio voice and typed commands', () => {
     expect(parseStudioCommand(t)).toBeNull();
   });
   test('the catalog lists ready Studio commands, with phrases the parser understands', () => {
-    for (const [id, cmd] of [['studio.remove-background', 'removeBackground'], ['studio.crop', 'crop'], ['studio.social-sizes', 'crop']]) {
+    for (const [id, cmd] of [['studio.remove-background', 'removeBackground'], ['studio.crop', 'crop'], ['studio.social-sizes', 'crop'], ['studio.ocr', 'ocr']]) {
       const p = catalog.plugins.find((x) => x.id === id);
       expect(p.status).toBe('ready');
       for (const v of p.voice) expect(parseStudioCommand(v)?.cmd).toBe(cmd);

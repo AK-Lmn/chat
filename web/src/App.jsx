@@ -13,6 +13,7 @@ import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
 import {parseStudioCommand} from './studio-commands.js';
+import {parseOcrCommand, isPdfFile, isPhotoFile, extractPdfText} from '../../src/ocr.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
 import {QuestionMarkCircleIcon} from '@heroicons/react/24/outline';
@@ -253,6 +254,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
   const [files, setFiles] = useState([]);
+  const filesRef = useRef(files); filesRef.current = files;
   const [limit, setLimit] = useState(null);
   const [notice, setNotice] = useState('');
   const [plugOpen, setPlugOpen] = useState(false);
@@ -356,7 +358,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     setTurns((all) => (opts.reuse ? all : [...all, {task, files: sendFiles.map((f) => f.name), t}]));
     setLimit(null); setBusy(true);
     const ac = new AbortController(); ctl.current = ac;
-    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock()};
+    const payload = {mode: m, pod: !!opts.pod, cat, task: opts.send || task, history: hist.current.slice(-6).map((x) => ({role: x.role, content: x.content})), lang: task.length > 3 ? lang(task) : '', memo: memo.current.text, ui: '', providers: picked, files: sendFiles, ai: aiBlock(), ...(opts.plugin ? {plugin: opts.plugin} : {})};
     if (opts.long && !opts.reuse) startLong(idx, payload);
     let res;
     try { res = await runTask(payload, (ev) => put(applyEv(t, ev)), ac.signal); }
@@ -389,9 +391,32 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   }, [busy, mode, turns, picked, sel, chatId, startLong]);
 
   const [dictating, setDictating] = useState(false);
-  // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
+  // With Studio open, "remove the background", "crop to square", "make it an instagram story", or "read the text", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const onStudioReply = useCallback((r) => setNotice('Studio: ' + r.note), []);
+  // Plugin studio.ocr: when a photo or PDF is attached, "read the text" (typed or spoken) reads text from it directly.
+  const toOcr = (text, fs = filesRef.current) => {
+    if (!parseOcrCommand(text)) return false;
+    const targets = fs.filter((f) => isPhotoFile(f) || isPdfFile(f));
+    if (!targets.length) return false;
+    setValue(''); setFiles([]);
+    if (targets.every((f) => isPdfFile(f) && !isPhotoFile(f))) {
+      Promise.all(targets.map(async (f) => ({name: f.name, text: await extractPdfText(f.content)}))).then((got) => {
+        if (got.every((x) => x.text)) {
+          const answer = got.length === 1 ? got[0].text : got.map((x) => `**${x.name}:**\n\n${x.text}`).join('\n\n');
+          const t = {...newTurn(text), answer, status: 'Done'};
+          setTurns((all) => [...all, {task: text, files: fs.map((f) => f.name), t}]);
+          hist.current.push({role: 'user', content: text}, {role: 'assistant', content: answer.slice(0, 4000)});
+          persist(chatId);
+        } else {
+          run(text, {files: fs, plugin: 'studio.ocr'}).catch(() => {});
+        }
+      }).catch(() => run(text, {files: fs, plugin: 'studio.ocr'}).catch(() => {}));
+      return true;
+    }
+    run(text, {files: fs, plugin: 'studio.ocr'}).catch(() => {});
+    return true;
+  };
   // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
   const readResult = useCallback(() => {
     const words = resultText(turnsRef.current);
@@ -424,7 +449,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const b = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(b.error || 'Voice answered ' + res.status);
         const text = String(b.text || '').trim();
-        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
+        if (text && toStudio(text)) setNotice('Studio: ' + text); else if (text && toOcr(text, filesRef.current)) {} else if (text && toReadAloud(text)) { /* readResult sets notice */ } else if (text) setValue((v) => (v ? v + ' ' : '') + text); else setNotice('I did not catch that. Try again.');
       } catch (e) { setNotice(String(e.message || e).slice(0, 160)); }
     };
     dict.current = {stop: () => { if (r.state !== 'inactive') r.stop(); }};
@@ -435,6 +460,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     const task = (text || '').trim();
     if (!task && !files.length) return;
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (toOcr(task, files)) return;
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
     const slash = readSlash(task);
     const picked1 = slash ? slash.answer : answer;
@@ -577,7 +603,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 24 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 25 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
