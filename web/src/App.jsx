@@ -438,7 +438,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     else setNotice('Sign a PDF');
     return true;
   };
-  // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
+  // With Studio open, "remove the background", "crop to square", "make it an instagram story" or "make a meme", spoken or typed, goes to the editor, not to the chat.
   const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
   const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
   // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
@@ -702,7 +702,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 29 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 30 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
