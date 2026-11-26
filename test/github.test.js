@@ -14,7 +14,7 @@ test('sign-in asks GitHub for public_repo and keeps the token sealed, sign-out f
   const start = await handle(new Request(`${ORIGIN}/auth/start`), env, {});
   expect(new URL(start.headers.get('location')).searchParams.get('scope')).toBe('public_repo');
   const gh = async (u) => (String(u).includes('access_token') ? Response.json({ access_token: TOKEN, scope: 'public_repo' }) : Response.json({ login: 'ann' }));
-  const cb = await handle(new Request(`${ORIGIN}/auth/callback?code=c&state=st`, { headers: { cookie: 'chat_state=st' } }), env, { fetchImpl: gh });
+  const cb = await handle(new Request(`${ORIGIN}/auth/callback?code=c&state=st`, { headers: { cookie: '__Host-chat_state=st' } }), env, { fetchImpl: gh });
   expect(cb.status).toBe(303);
   const row = await env.DB.prepare('SELECT token_enc FROM github_tokens WHERE login = ?').bind('ann').first();
   expect(row.token_enc).not.toContain(TOKEN);

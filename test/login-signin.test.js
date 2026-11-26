@@ -6,7 +6,7 @@ const ORIGIN = 'https://chat.test';
 const keys = await makeKeys();
 const other = await makeKeys();
 const env = { PUBLIC_ORIGIN: ORIGIN, SESSION_SECRET: 's', LOGIN_PUBLIC_KEY: keys.publicKey };
-const done = (s, token, cookie = `chat_state=${s}`) => handle(new Request(`${ORIGIN}/auth/done?s=${s}&flisk_token=${encodeURIComponent(token)}`, { headers: { cookie } }), env, {});
+const done = (s, token, cookie = `__Host-chat_state=${s}`) => handle(new Request(`${ORIGIN}/auth/done?s=${s}&flisk_token=${encodeURIComponent(token)}`, { headers: { cookie } }), env, {});
 
 describe('sign-in through login.flisk.si', () => {
   test('/auth/start goes to login.flisk.si with a state cookie, needing no GitHub app', async () => {
@@ -14,7 +14,7 @@ describe('sign-in through login.flisk.si', () => {
     const to = new URL(res.headers.get('location'));
     expect(to.origin + to.pathname).toBe('https://login.flisk.si/start');
     const s = new URL(to.searchParams.get('return')).searchParams.get('s');
-    expect(res.headers.get('set-cookie')).toContain(`chat_state=${s}`);
+    expect(res.headers.get('set-cookie')).toContain(`__Host-chat_state=${s}`);
   });
   test('?again=1 still asks GitHub for repo access', async () => {
     const res = await handle(new Request(`${ORIGIN}/auth/start?again=1`), { ...env, GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 'x' }, {});
