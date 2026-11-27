@@ -11,32 +11,31 @@ import {
 import { parseStudioCommand } from '../web/src/studio-commands.js';
 import catalog from '../plugins/catalog.json';
 
-describe('studio.icons catalog & wiring', () => {
-  test('catalog marks studio.icons as ready with its voice phrase', () => {
-    const p = catalog.plugins.find((x) => x.id === 'studio.icons');
-    expect(p).toBeDefined();
-    expect(p.title).toBe('Favicon and app icon set');
-    expect(p.group).toBe('Studio next');
-    expect(p.status).toBe('ready');
-    for (const v of p.voice) {
-      expect(parseIconCommand(v)).toEqual({ cmd: 'makeIcons' });
-      expect(parseStudioCommand(v)).toEqual({ cmd: 'makeIcons' });
-    }
+test('studio.icons catalog entry and App/Plugins wiring', async () => {
+  const entry = catalog.plugins.find((x) => x.id === 'studio.icons');
+  expect(entry).toMatchObject({
+    id: 'studio.icons',
+    title: 'Favicon and app icon set',
+    group: 'Studio next',
+    status: 'ready',
+  });
+  entry.voice.forEach((phrase) => {
+    expect(parseIconCommand(phrase)).toEqual({ cmd: 'makeIcons' });
+    expect(parseStudioCommand(phrase)).toEqual({ cmd: 'makeIcons' });
   });
 
-  test('the picker, typed, spoken and dialog paths all reach FaviconsDialog', async () => {
-    const read = (name) => Bun.file(new URL('../web/src/' + name, import.meta.url)).text();
-    const [plugins, app] = await Promise.all([read('Plugins.jsx'), read('App.jsx')]);
-    const wanted = new Map([
-      [plugins, ["p.id === 'studio.icons'", 'onIcons']],
-      [app, ['<FaviconsDialog', 'toIcons(text, filesRef.current)', 'toIcons(task, files)']],
-    ]);
-    for (const [source, needles] of wanted) for (const needle of needles) expect(source.includes(needle)).toBe(true);
-  });
+  const pluginsSrc = await Bun.file(new URL('../web/src/Plugins.jsx', import.meta.url)).text();
+  expect(pluginsSrc).toContain("p.id === 'studio.icons'");
+  expect(pluginsSrc).toContain('onIcons');
+
+  const appSrc = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+  expect(appSrc).toContain('<FaviconsDialog');
+  expect(appSrc).toContain('toIcons(text, filesRef.current)');
+  expect(appSrc).toContain('toIcons(task, files)');
 });
 
-describe('icon set voice and typed commands', () => {
-  test.each([
+test('icon set voice and typed command parser', () => {
+  const triggers = [
     'make icons from this',
     'Make icons from this.',
     'please make icons from this',
@@ -46,11 +45,12 @@ describe('icon set voice and typed commands', () => {
     'build an icon set from this logo',
     'turn this into app icons',
     'favicon and app icon set',
-  ])('"%s" triggers makeIcons', (phrase) => {
+  ];
+  for (const phrase of triggers) {
     expect(parseIconCommand(phrase)).toEqual({ cmd: 'makeIcons' });
-  });
+  }
 
-  test.each([
+  const ignored = [
     'what is a favicon',
     'how do app icons work',
     'build me a website with icons',
@@ -59,9 +59,10 @@ describe('icon set voice and typed commands', () => {
     'make icons from this ' + 'word '.repeat(20),
     '',
     null,
-  ])('%p is left to the chat', (phrase) => {
+  ];
+  for (const phrase of ignored) {
     expect(parseIconCommand(phrase)).toBeNull();
-  });
+  }
 });
 
 describe('icon set builders (ICO, manifest, HTML, ZIP)', () => {
