@@ -3,7 +3,8 @@ import {parseIconCommand} from './favicons.js';
 import {parseHeicCommand} from './heic.js';
 
 // What you say or type to the Studio plugin. Returns {cmd, ...} for a request Studio can do, or null for anything else (that goes to the chat as usual).
-// Commands: remove the background, crop (to a shape, when one is named), social image sizes (mapped to Studio's crop ratios + target dimensions), make a meme or caption, sign a PDF, convert HEIC to JPEG, and a favicon/app icon set.
+// Commands: remove the background, crop (to a shape, when one is named), social image sizes (mapped to Studio's crop ratios + target dimensions), make a meme or caption, sign a PDF, convert HEIC to JPEG, a favicon/app icon set, and OCR ("read the text").
+import {parseOcrCommand} from '../../src/ocr.js';
 const WORDS = {one: 1, two: 2, three: 3, four: 4, nine: 9, sixteen: 16};
 const SHAPES = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2'];
 const MEME_SKIP = /(?:^(?:what|why|how|who|when|where|explain)\b)|\b(?:website|web ?site|site|app|application|page|generator|bot|video|subtitles?)\b/;
@@ -77,5 +78,5 @@ export function parseStudioCommand(text) {
   if (/\bcrop\b/.test(t)) {
     return {cmd: 'crop', ratio: shapeOf(t)};
   }
-  return parseIconCommand(t) || memeOf(text, t) || parseHeicCommand(t);
+  return parseIconCommand(t) || memeOf(text, t) || parseHeicCommand(t) || parseOcrCommand(t);
 }

@@ -1,10 +1,13 @@
+import { extractPdfText, isPdfFile } from './ocr.js';
+
 // Reading a picture: the posts @askflisk answers often point at one ("is this ranking right?", a screenshot, a chart),
-// and the chat.alt-text plugin describes an attached photo for screen readers.
+// and the chat.alt-text plugin describes an attached photo for screen readers; studio.ocr reads text from attached photos and PDFs.
 // A vision model on Workers AI writes down what is in it (text, names, tiers, or alt text).
 export const VISION_MODELS = ['@cf/meta/llama-3.2-11b-vision-instruct', '@cf/llava-hf/llava-1.5-7b-hf'];
 export const MAX_IMAGE_BYTES = 3_000_000;
 export const MAX_IMAGES = 2;
 export const ALT_TEXT_PROMPT = 'Write concise, accurate alt text for this photo for screen readers. Describe the main subject, setting, and any visible text in one or two plain sentences under 300 characters. Do not start with "Image of" or "Photo of".';
+export const OCR_PROMPT = 'Read and transcribe all text visible in this image accurately, preserving line breaks and reading order. Output only the extracted text, with no extra commentary.';
 // Only pictures that X and Bluesky themselves host: the bot sends links, chat fetches them, so no link to anywhere else is followed.
 export const IMAGE_URL = /^https:\/\/pbs\.twimg\.com\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\/[\w./-]+(?:\?[\w=&.%-]*)?$/;
 // Bluesky: the photos of a post (cdn.bsky.app) and the preview frame of its video (video.bsky.app), both Bluesky's own hosts.
@@ -50,4 +53,24 @@ export async function altTextForFiles(env, files) {
   }
   if (!results.length) return '';
   return results.length === 1 ? results[0].text : results.map((r) => `**${r.path}:** ${r.text}`).join('\n\n');
+}
+
+// OCR for attached photos and PDFs (studio.ocr plugin): returns extracted plain text, '' when none could be read.
+export async function ocrForFiles(env, files) {
+  if (!Array.isArray(files) || !files.length) return '';
+  const results = [];
+  for (const f of files) {
+    if (!f || typeof f.content !== 'string' || !f.content) continue;
+    if (f.image) {
+      let buf;
+      try { buf = Uint8Array.from(atob(f.content), (c) => c.charCodeAt(0)); } catch { continue; }
+      const text = await seeBytes(env, buf, OCR_PROMPT, 1200);
+      if (text) results.push({ path: f.path || 'photo', text });
+    } else if (isPdfFile(f)) {
+      const text = await extractPdfText(f.content);
+      if (text) results.push({ path: f.path || 'document.pdf', text });
+    }
+  }
+  if (!results.length) return '';
+  return results.length === 1 ? results[0].text : results.map((r) => `**${r.path}:**\n\n${r.text}`).join('\n\n');
 }

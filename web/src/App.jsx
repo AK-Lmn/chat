@@ -21,6 +21,7 @@ import {parseSignPdfCommand} from './sign-pdf.js';
 import {parseStudioCommand} from './studio-commands.js';
 import {parseChatCommand} from './chat-commands.js';
 import {parseHistorySearchCommand, searchChatHistory, matchesChat, formatHistorySummary} from './history-search.js';
+import {parseOcrCommand, isPhotoFile} from '../../src/ocr.js';
 import {isReadAloudCommand, resultText, createReader} from './read-aloud.js';
 import {parseVoiceCommand} from './voice-commands.js';
 import {newTurn, applyEv, nextSteps, chatTitle, shownText, liveText, pictures, wantsVoice, resetText} from './events.js';
@@ -465,7 +466,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   };
   const toStudio = (text) => {
     const c = studio && parseStudioCommand(text);
-    if (!c || c.cmd === 'makeIcons') return false;
+    if (!c || c.cmd === 'makeIcons' || c.cmd === 'ocr') return false;
     return sendToStudio(studioFrame.current, c);
   };
   const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
@@ -505,6 +506,15 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const toHistorySearch = (text) => {
     const c = parseHistorySearchCommand(text);
     return !!c && runHistorySearch(c.query, text);
+  };
+  // Plugin studio.ocr: when a photo or PDF is attached, "read the text" (typed or spoken) reads text from it directly.
+  const toOcr = (text, fs = filesRef.current) => {
+    if (!parseOcrCommand(text)) return false;
+    const targets = fs.filter((f) => isPhotoFile(f) || isPdfFile(f));
+    if (!targets.length) return false;
+    setValue(''); setFiles([]);
+    run(text, {files: fs, plugin: 'studio.ocr'}).catch(() => {});
+    return true;
   };
   // Plugin voice.read-aloud: "read it to me" (spoken or typed) reads the latest result aloud instead of sending a task.
   const readResult = useCallback(() => {
@@ -563,6 +573,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         if (text && toHeic(text, filesRef.current)) { /* openHeic opens the converter dialog */ }
         else if (text && toSignPdf(text, filesRef.current)) { /* openSignPdf opens the Sign a PDF dialog */ }
         else if (text && toIcons(text, filesRef.current)) { /* openIcons opens the icon set dialog */ }
+        else if (text && toOcr(text, filesRef.current)) { /* toOcr reads the attached file */ }
         else if (text && toStudio(text)) setNotice('Studio: ' + text);
         else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ }
         else if (text && toReadAloud(text)) { /* readResult sets notice */ }
@@ -583,6 +594,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (toSignPdf(task, files)) { setValue(''); return; }
     if (toIcons(task, files)) { setValue(''); return; }
     if (!files.length && toStudio(task)) { setValue(''); return; }
+    if (toOcr(task, files)) return;
     if (toChatPlugin(task, files)) return;
     if (!files.length && toHistorySearch(task)) { setValue(''); return; }
     if (!files.length && toReadAloud(task)) { setValue(''); return; }
@@ -732,7 +744,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 31 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 32 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -784,7 +796,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} onIcons={() => openIcons(files)} onHeic={() => openHeic(files)} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} onIcons={() => openIcons(files)} onHeic={() => openHeic(files)} onOcr={(p) => { if (!toOcr(p.voice[0], files)) { setValue(p.voice[0]); setNotice('Attach a photo or PDF first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} />
       <SignPdfDialog open={signPdfOpen} onClose={() => { setSignPdfOpen(false); setSignPdfFile(null); }} initialFile={signPdfFile} />
       <HeicDialog open={heicOpen} onClose={() => { setHeicOpen(false); setHeicFiles([]); }} initialFiles={heicFiles} />
       <FaviconsDialog open={iconsOpen} onClose={() => { setIconsOpen(false); setIconsFile(null); }} initialFile={iconsFile} />

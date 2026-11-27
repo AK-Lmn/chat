@@ -15,9 +15,9 @@ import {
 import catalog from '../../plugins/catalog.json';
 
 // The plugin picker behind the + menu: the whole catalog (plugins/catalog.json), ready ones first, so nothing is offered that is not there.
-// A ready Studio plugin opens the Studio panel (studio.heic and studio.sign-pdf open their own in-browser tools); chat.alt-text starts an alt-text request; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
+// A ready Studio plugin opens the Studio panel (studio.heic and studio.sign-pdf open their own in-browser tools, studio.ocr reads an attached photo or PDF); chat.alt-text starts an alt-text request; chat.history-search starts a chat history search; other ready ones show what to say. Coming soon ones are listed and not clickable.
 export const PLUGINS = catalog.plugins;
-export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.') && p.id !== 'studio.icons';
+export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.') && p.id !== 'studio.icons' && p.id !== 'studio.ocr';
 const isSignPdf = (p) => p.status === 'ready' && p.id === 'studio.sign-pdf';
 const canClick = (p, onReadAloud, onSignPdf, onHeic, onIcons) => (isSignPdf(p) ? !!onSignPdf || opensStudio(p) : opensStudio(p)) || (p.status === 'ready' && ((p.id === 'voice.read-aloud' && !!onReadAloud) || (p.id === 'studio.heic' && !!onHeic) || (p.id === 'studio.icons' && !!onIcons)));
 
@@ -29,7 +29,7 @@ const ICONS = [
   ['pages', GlobeAltIcon], ['analytics', ChartBarIcon], ['search', MagnifyingGlassIcon], ['listing', MegaphoneIcon], ['citable', SparklesIcon],
   ['grow', RocketLaunchIcon], ['agents', CpuChipIcon], ['seo', MagnifyingGlassIcon], ['voice', MicrophoneIcon], ['read-aloud', MicrophoneIcon],
   ['chat', ChatBubbleLeftRightIcon], ['pods', ServerStackIcon], ['sign', PencilSquareIcon], ['video', FilmIcon], ['meme', FaceSmileIcon],
-  ['emoji', FaceSmileIcon], ['erase', ScissorsIcon], ['photo', PhotoIcon], ['heic', PhotoIcon], ['icons', Squares2X2Icon], ['social', PhotoIcon],
+  ['emoji', FaceSmileIcon], ['erase', ScissorsIcon], ['photo', PhotoIcon], ['heic', PhotoIcon], ['icons', Squares2X2Icon], ['social', PhotoIcon], ['ocr', DocumentTextIcon],
 ];
 const iconOf = (p) => (ICONS.find(([k]) => p.id.includes(k)) || [0, p.group === 'Connectors' ? LinkIcon : PuzzlePieceIcon])[1];
 
@@ -50,7 +50,7 @@ function Tile({p}) {
   );
 }
 
-export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, onAltText, onVoiceCommands, onHistorySearch, onSignPdf, onHeic}) {
+export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, onAltText, onVoiceCommands, onHistorySearch, onSignPdf, onHeic, onOcr}) {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   useEffect(() => { if (open) { setQ(''); setTab('all'); } }, [open]);
@@ -64,11 +64,13 @@ export function PluginsDialog({open, onClose, onStudio, onIcons, onReadAloud, on
   const clickable = (p) => canClick(p, onReadAloud, onSignPdf, onHeic, onIcons)
     || (p.status === 'ready' && p.id === 'voice.commands' && !!onVoiceCommands)
     || (p.status === 'ready' && p.id === 'chat.alt-text' && !!onAltText)
+    || (p.status === 'ready' && p.id === 'studio.ocr' && !!onOcr)
     || (p.status === 'ready' && p.id === 'chat.history-search' && !!onHistorySearch);
   const pick = (p) => {
     if (isSignPdf(p) && onSignPdf) { onClose(); onSignPdf(); }
     else if (p.status === 'ready' && p.id === 'studio.heic' && onHeic) { onClose(); onHeic(); }
     else if (p.status === 'ready' && p.id === 'studio.icons' && onIcons) { onClose(); onIcons(); }
+    else if (p.status === 'ready' && p.id === 'studio.ocr' && onOcr) { onClose(); onOcr(p); }
     else if (opensStudio(p)) { onClose(); onStudio(); }
     else if (p.status === 'ready' && p.id === 'voice.read-aloud' && onReadAloud) { onClose(); onReadAloud(); }
     else if (p.status === 'ready' && p.id === 'chat.alt-text' && onAltText) { onClose(); onAltText(p); }
