@@ -15,5 +15,7 @@
 ## fleet
 
 `capabilities/fleet.json` lists the six tools of fleet's MCP server. chat does not send a fleet key: it calls fleet as a
-trusted site (`src/fleet.js`). `test/fleet-connector.test.js` checks that the five routes chat uses for these actions match
-the file. chat's other fleet calls (connections, public links) are not in it. The file does not change what chat does at run time.
+trusted site (`src/fleet.js`). That client takes the method and path of five pod actions from the file, so editing a
+route there changes what chat calls. After an edit, run the sync script. `test/fleet-connector.test.js` checks the exact
+requests. Sign-in, request bodies and chat's other fleet calls (connections, public links) stay in `src/fleet.js`.
+`access` is not enforced.
