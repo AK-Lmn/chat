@@ -279,3 +279,10 @@ html[data-scheme] .astryx-app-shell .one-row .astryx-chat-composer-input, html[d
 .earth-content.empty .astryx-chat-composer.one-row { position: relative; }
 .earth-content.empty .astryx-chat-composer.one-row > .astryx-chat-composer-drawer { position: absolute; left: 0; right: 0; bottom: calc(100% - 28px); margin: 0; z-index: 5; }
 .earth-content.empty .astryx-chat-composer.one-row > div:not(.astryx-chat-composer-drawer) { position: relative; z-index: 6; }
+/* Narrow screens: the buttons do not fit beside the text, or even in one row. Text, then the modes, then + and send. */
+@media (max-width:600px){
+.astryx-chat-composer.one-row > div > div:nth-child(2){grid-column:1/-1;grid-row:1}
+.astryx-chat-composer.one-row > div > div:last-child > div:first-child{grid-column:1/-1;grid-row:2;justify-self:center}
+.astryx-chat-composer.one-row > div > div:first-child{grid-column:1;grid-row:3;justify-self:start}
+.astryx-chat-composer.one-row > div > div:last-child > div:last-child{grid-column:4;grid-row:3}
+}
