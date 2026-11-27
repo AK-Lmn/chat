@@ -19,6 +19,30 @@ test('the main screen strings are translated', () => {
   expect(UK_PATTERNS.some(([re]) => re.test('3 computers connected · Fleet picks the cheapest'))).toBe(true);
 });
 
+test('every first-screen string of the new home page has a Ukrainian form', () => {
+  // The React home page renders these directly. The Ukrainian script only
+  // swaps strings it knows, so a missing entry leaves that part of the page
+  // in English for a Ukrainian visitor.
+  const firstScreen = [
+    'Make real websites and apps from a sentence',
+    'Describe a website or app. Get a live link.',
+    'What shall we make today?',
+    'Free, no sign-up. Pick an example or type your own.',
+    'Ask a question, or describe a website or app.',
+    'Flisk Chat makes them on a computer that is yours. You can look around first.',
+    'Start free with GitHub',
+    'No card. Free to start.',
+    'Tap to try:',
+    'Website',
+    'Small app',
+    'Check a page',
+    'Try an idea',
+  ];
+  const t = loadT('uk');
+  const missing = firstScreen.filter((s) => t(s) === s);
+  expect(missing).toEqual([]);
+});
+
 test('the Ukrainian script swaps text and placeholders in a browser-like document', () => {
   // Minimal DOM check of the translate function through the real script text.
   const src = i18nScript();
