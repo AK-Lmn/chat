@@ -22,7 +22,7 @@ const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|y
 export const BYO_STEPS = 16;
 export const MAX_WORKER = 100_000;
 export const GITHUB_STEPS = 20; // a fork-to-PR run needs more than 16 actions, but Workers Free stops at 50 subrequests per run (a 32-action run died at 25)
-export const MAX_TASK = 2000;
+export const MAX_TASK = 6000;
 const OUT_CHARS = 1500;
 
 
