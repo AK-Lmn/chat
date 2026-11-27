@@ -116,14 +116,11 @@ html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{backg
 
 /* The composer is one row: + , the text, send. Astryx stacks header, input and footer; here they share a grid row. */
 .one-row > div{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:end;column-gap:var(--spacing-1,4px);row-gap:0;padding:var(--spacing-1,4px) var(--spacing-2,8px)!important}
-.one-row > div > div:first-child{grid-column:1;grid-row:1;align-self:end}
-.one-row > div > div:nth-child(2){grid-column:2;grid-row:1}
+.one-row > div > div:first-child{grid-column:1;grid-row:2;align-self:end}
+.one-row > div > div:nth-child(2){grid-column:1/-1;grid-row:1;padding-inline:8px}
 .one-row > div > div:last-child{display:contents!important}
-.one-row > div > div:last-child > div:first-child{grid-column:3;grid-row:1;align-self:end}
-.one-row > div > div:last-child > div:last-child{grid-column:4;grid-row:1;align-self:end}
-/* Once the text wraps, it takes the whole width and the buttons move to their own row under it. */
-.one-row.tall > div > div:nth-child(2){grid-column:1/-1;grid-row:1}
-.one-row.tall > div > div:first-child,.one-row.tall > div > div:last-child > div{grid-row:2}
+.one-row > div > div:last-child > div:first-child{grid-column:3;grid-row:2;align-self:end;justify-self:end;margin-right:4px}
+.one-row > div > div:last-child > div:last-child{grid-column:4;grid-row:2;align-self:end}
 
 /* + menu scenes: a tiny working UI per row, one 5 s timeline, spring easing. Rests at 100 x 30, zooms on hover.
    Colour is currentColor and hierarchy is opacity, so it follows every theme. */
@@ -279,10 +276,18 @@ html[data-scheme] .astryx-app-shell .one-row .astryx-chat-composer-input, html[d
 .earth-content.empty .astryx-chat-composer.one-row { position: relative; }
 .earth-content.empty .astryx-chat-composer.one-row > .astryx-chat-composer-drawer { position: absolute; left: 0; right: 0; bottom: calc(100% - 28px); margin: 0; z-index: 5; }
 .earth-content.empty .astryx-chat-composer.one-row > div:not(.astryx-chat-composer-drawer) { position: relative; z-index: 6; }
-/* Narrow screens: the buttons do not fit beside the text, or even in one row. Text, then the modes, then + and send. */
+/* The message box is always two rows: the text across the whole box, then one quiet row with +, the modes and send. */
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control{background:transparent!important;padding:0!important;gap:0!important}
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control-item{min-width:0!important;padding-inline:8px!important;font-size:12px!important}
 @media (max-width:600px){
-.astryx-chat-composer.one-row > div > div:nth-child(2){grid-column:1/-1;grid-row:1}
-.astryx-chat-composer.one-row > div > div:last-child > div:first-child{grid-column:1/-1;grid-row:2;justify-self:center}
-.astryx-chat-composer.one-row > div > div:first-child{grid-column:1;grid-row:3;justify-self:start}
-.astryx-chat-composer.one-row > div > div:last-child > div:last-child{grid-column:4;grid-row:3}
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control-item svg,
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control-item :has(> svg){display:none!important}
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control-item *{font-size:12px!important;gap:0!important}
+}
+@media (max-width:360px){
+html .astryx-chat-composer.astryx-chat-composer.one-row .astryx-segmented-control-item{padding-inline:5px!important}
+}
+/* On phones, long text scrolls inside the box, so the send button stays on screen. */
+@media (max-width:600px){
+html .astryx-chat-composer.astryx-chat-composer.one-row [contenteditable]{max-height:66px!important;overflow-y:auto!important}
 }
