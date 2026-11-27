@@ -315,6 +315,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   useEffect(() => { if (hints.length < 2) return undefined; const t = setInterval(() => setHintAt((n) => n + 1), 4000); return () => clearInterval(t); }, [hints]);
   const ctl = useRef(null);
   const fileIn = useRef(null);
+  // Ready to type on open. ChatComposerInput ignores autoFocus on its editor, so focus it through its handle.
+  // Not on touch screens, where focus would pop the keyboard up over the page.
+  const composerInput = useRef(null);
+  useEffect(() => { if (!touch) composerInput.current?.focus(); }, []);
   const ctx = {on: explain, show: setCaption};
   useKeyboardViewport();
   // A task is running: ask before the tab is closed or reloaded, as /classic does (#352).
@@ -714,7 +718,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
           ]} /></ChatComposerDrawer>
               : held ? <ChatComposerDrawer label="Shortcuts"><ShortcutHints /></ChatComposerDrawer> : undefined} value={value} onChange={setValue} onSubmit={submit} onStop={() => ctl.current && ctl.current.abort()} isStopShown={busy} isDisabled={false}
             placeholder={PLACEHOLDER[answer] || 'Ask or build…'} {...(BOOT.embed && hints.length ? {placeholder: hints[hintAt % hints.length]} : {})}
-            input={<ChatComposerInput autoFocus={!touch} enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
+            input={<ChatComposerInput handleRef={composerInput} enterKeyHint={touch ? 'enter' : 'send'} onKeyDown={(e) => {
               if (touch && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
             }} />}
             headerActions={
