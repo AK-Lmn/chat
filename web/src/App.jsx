@@ -1,4 +1,4 @@
-import {useState, useEffect, useRef, useCallback} from 'react';
+import {useState, useEffect, useLayoutEffect, useRef, useCallback} from 'react';
 import {AnswerBar, AnswerMenu, AskFirst, ShortcutHints, LongPill, PLACEHOLDER, frame, readSlash, useAnswerKeys, useHeldModifier} from './Modes.jsx';
 import {Tip, ExplainContext} from './Tip.jsx';
 import {Brand} from './Brand.jsx';
@@ -270,6 +270,14 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   useEffect(() => { document.documentElement.classList.toggle('chatting', turns.length > 0); }, [turns.length]);
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
+  // True once the text takes more than one line. It stays until the box is empty: going back as soon as the wider
+  // box fits the text on one line would make the layout jump back and forth.
+  const [tall, setTall] = useState(false);
+  useLayoutEffect(() => {
+    const box = document.querySelector('.one-row [contenteditable="true"]');
+    if (!value.trim() && !value.includes('\n')) setTall(false);
+    else if (box && box.scrollHeight > 32) setTall(true);
+  }, [value]);
   const [files, setFiles] = useState([]);
   const filesRef = useRef(files); filesRef.current = files;
   const [limit, setLimit] = useState(null);
@@ -717,7 +725,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       <div className={'earth-content' + (turns.length || limit ? '' : ' empty')} style={{display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, minWidth: 0}}>
       <ChatLayout style={{flex: 1, minHeight: 0}} density="spacious"
         composer={<>
-          <ChatComposer className="one-row" drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer>
+          <ChatComposer className={tall ? 'one-row tall' : 'one-row'} drawer={asking ? <ChatComposerDrawer label="Questions"><AskFirst task={asking.task} onDone={startAsked} onSkip={skipAsked} /></ChatComposerDrawer>
               : palette ? <ChatComposerDrawer label="Commands"><AnswerMenu onClose={closePalette} onPick={setAnswer} actions={[
             {id: 'new', label: 'New chat', run: newChat},
             {id: 'plugins', label: 'Plugins', run: () => setPlugOpen(true)},

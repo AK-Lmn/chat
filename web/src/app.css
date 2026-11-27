@@ -121,6 +121,9 @@ html[data-scheme=earth] [role=menu],html[data-scheme=earth] [role=listbox]{backg
 .one-row > div > div:last-child{display:contents!important}
 .one-row > div > div:last-child > div:first-child{grid-column:3;grid-row:1;align-self:end}
 .one-row > div > div:last-child > div:last-child{grid-column:4;grid-row:1;align-self:end}
+/* Once the text wraps, it takes the whole width and the buttons move to their own row under it. */
+.one-row.tall > div > div:nth-child(2){grid-column:1/-1;grid-row:1}
+.one-row.tall > div > div:first-child,.one-row.tall > div > div:last-child > div{grid-row:2}
 
 /* + menu scenes: a tiny working UI per row, one 5 s timeline, spring easing. Rests at 100 x 30, zooms on hover.
    Colour is currentColor and hierarchy is opacity, so it follows every theme. */
