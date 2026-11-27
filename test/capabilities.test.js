@@ -27,5 +27,5 @@ for (const m of CAPABILITIES) {
   });
 }
 test('every capability names who may call it', () => {
-  for (const m of CAPABILITIES) expect(['none', 'login.flisk.si']).toContain(m.auth);
+  for (const m of CAPABILITIES) expect(['none', 'login.flisk.si', 'fleet-key']).toContain(m.auth);
 });

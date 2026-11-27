@@ -91,5 +91,84 @@ export const CAPABILITIES = [
         "needsComputer": false
       }
     ]
+  },
+  {
+    "service": "fleet",
+    "origin": "https://fleet.flisk.si",
+    "auth": "fleet-key",
+    "capabilities": [
+      {
+        "id": "pod_create",
+        "title": "Start a computer",
+        "does": "Starts a pod on one of the user's own sandbox providers. The provider may bill while it runs.",
+        "access": "spend",
+        "http": "POST /v1/pods",
+        "input": {
+          "cpu": "vCPUs",
+          "ram": "GB of memory",
+          "provider": "optional: use only this provider"
+        },
+        "needsComputer": false
+      },
+      {
+        "id": "pod_run",
+        "title": "Run a command",
+        "does": "Runs one shell command in a pod.",
+        "access": "write",
+        "http": "POST /v1/pods/{id}/run",
+        "input": {
+          "id": "pod id",
+          "command": "shell command"
+        },
+        "needsComputer": false
+      },
+      {
+        "id": "pod_write_file",
+        "title": "Write a file",
+        "does": "Writes a file in a pod.",
+        "access": "write",
+        "http": "PUT /v1/pods/{id}/files",
+        "input": {
+          "id": "pod id",
+          "path": "file path",
+          "content": "file content"
+        },
+        "needsComputer": false
+      },
+      {
+        "id": "pod_read_file",
+        "title": "Read a file",
+        "does": "Reads a file from a pod.",
+        "access": "read",
+        "http": "GET /v1/pods/{id}/files",
+        "input": {
+          "id": "pod id",
+          "path": "file path"
+        },
+        "needsComputer": false
+      },
+      {
+        "id": "pod_list",
+        "title": "List computers",
+        "does": "Lists the user's pods.",
+        "access": "read",
+        "http": "GET /v1/pods",
+        "input": {
+          "status": "optional filter"
+        },
+        "needsComputer": false
+      },
+      {
+        "id": "pod_stop",
+        "title": "Stop a computer",
+        "does": "Stops a pod.",
+        "access": "write",
+        "http": "DELETE /v1/pods/{id}",
+        "input": {
+          "id": "pod id"
+        },
+        "needsComputer": false
+      }
+    ]
   }
 ];
