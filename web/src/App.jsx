@@ -12,6 +12,8 @@ import {Widget, WorkerCard, BrowserAnswer} from './Cards.jsx';
 import {PagePanel} from './Panel.jsx';
 import {StudioPanel, sendToStudio} from './Studio.jsx';
 import {PluginsDialog} from './Plugins.jsx';
+import {FaviconsDialog} from './Favicons.jsx';
+import {parseIconCommand} from './favicons.js';
 import {HeicDialog} from './Heic.jsx';
 import {parseHeicCommand, isConvertibleFile} from './heic.js';
 import {SignPdfDialog} from './SignPdf.jsx';
@@ -272,6 +274,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
   const [limit, setLimit] = useState(null);
   const [notice, setNotice] = useState('');
   const [plugOpen, setPlugOpen] = useState(false);
+  const [iconsOpen, setIconsOpen] = useState(false);
+  const [iconsFile, setIconsFile] = useState(null);
   const [heicOpen, setHeicOpen] = useState(false);
   const [heicFiles, setHeicFiles] = useState([]);
   const [signPdfOpen, setSignPdfOpen] = useState(false);
@@ -444,7 +448,26 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     return true;
   };
   // With Studio open, "remove the background", "crop to square", "make it an instagram story" or "make a meme", spoken or typed, goes to the editor, not to the chat.
-  const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };
+  const isImageFile = (f) => !!(f && f.b64 && (/^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|svg|bmp|ico|avif)$/i.test(f.name || '')));
+  const openIcons = (fs = filesRef.current) => {
+    const img = (fs || []).find(isImageFile) || null;
+    setIconsFile(img);
+    setIconsOpen(true);
+    return img;
+  };
+  // Spoken or typed "make icons from this" opens the Favicon and app icon set tool directly (with the attached image, if any).
+  const toIcons = (text, fs = filesRef.current) => {
+    if (!parseIconCommand(text)) return false;
+    const img = openIcons(fs);
+    if (img) { setFiles([]); setNotice('Favicon and app icon set: ' + img.name); }
+    else if ((fs || []).length) setNotice('Attach a PNG, JPEG, WebP, or SVG image to make icons from.');
+    return true;
+  };
+  const toStudio = (text) => {
+    const c = studio && parseStudioCommand(text);
+    if (!c || c.cmd === 'makeIcons') return false;
+    return sendToStudio(studioFrame.current, c);
+  };
   const isPhoto = (f) => !!(f && f.b64 && /^image\//.test(f.type || ''));
   // Spoken or typed "describe this photo" calls the chat.alt-text plugin directly when a photo is attached.
   const toChatPlugin = (text, fs = filesRef.current, {fromVoice = false} = {}) => {
@@ -539,6 +562,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
         const vc = text && parseVoiceCommand(text);
         if (text && toHeic(text, filesRef.current)) { /* openHeic opens the converter dialog */ }
         else if (text && toSignPdf(text, filesRef.current)) { /* openSignPdf opens the Sign a PDF dialog */ }
+        else if (text && toIcons(text, filesRef.current)) { /* openIcons opens the icon set dialog */ }
         else if (text && toStudio(text)) setNotice('Studio: ' + text);
         else if (text && toHistorySearch(text)) { /* runHistorySearch sets notice */ }
         else if (text && toReadAloud(text)) { /* readResult sets notice */ }
@@ -557,6 +581,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (!task && !files.length) return;
     if (toHeic(task, files)) { setValue(''); return; }
     if (toSignPdf(task, files)) { setValue(''); return; }
+    if (toIcons(task, files)) { setValue(''); return; }
     if (!files.length && toStudio(task)) { setValue(''); return; }
     if (toChatPlugin(task, files)) return;
     if (!files.length && toHistorySearch(task)) { setValue(''); return; }
@@ -707,7 +732,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 30 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 31 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},
@@ -759,9 +784,10 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     </AppShell>
     </div>
       <SettingsDialog open={setOpen} onClose={closeSettings} section={setSec} onSection={setSetSec} scheme={scheme} setScheme={setScheme} explain={explain} onExplain={() => { setExplain((e) => !e); setCaption(''); }} onModel={() => setMdlOpen(true)} />
-      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} onHeic={() => openHeic(files)} />
+      <PluginsDialog open={plugOpen} onClose={() => setPlugOpen(false)} onStudio={() => setStudio(true)} onAltText={(p) => { if (files.some(isPhoto)) toChatPlugin(p.voice[0], files); else { setValue(p.voice[0]); setNotice('Attach a photo first (+ -> Attach files), then send.'); fileIn.current && fileIn.current.click(); } }} onHistorySearch={() => { if (value.trim()) { const q = value.trim(); setValue(''); runHistorySearch(q); } else runHistorySearch(''); }} onReadAloud={readResult} onVoiceCommands={() => setTalk(true)} onSignPdf={() => openSignPdf(files)} onIcons={() => openIcons(files)} onHeic={() => openHeic(files)} />
       <SignPdfDialog open={signPdfOpen} onClose={() => { setSignPdfOpen(false); setSignPdfFile(null); }} initialFile={signPdfFile} />
       <HeicDialog open={heicOpen} onClose={() => { setHeicOpen(false); setHeicFiles([]); }} initialFiles={heicFiles} />
+      <FaviconsDialog open={iconsOpen} onClose={() => { setIconsOpen(false); setIconsFile(null); }} initialFile={iconsFile} />
       <ModelDialog open={mdlOpen} onClose={() => setMdlOpen(false)} models={BOOT.models || []} value={sel} onUse={setSel} />
       <Oracle open={talk} onClose={() => setTalk(false)} aiBlock={aiBlock}
         onBuild={(t) => { run(t).catch(() => {}); }}

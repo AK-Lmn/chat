@@ -16,7 +16,7 @@ describe('Meme and caption maker plugin (studio.meme)', () => {
     expect(p.status).toBe('ready');
     expect(p.owner).toBe('flisk');
     expect(p.voice).toContain('make a meme');
-    expect(pluginsSrc).toContain("export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.');");
+    expect(pluginsSrc).toContain("export const opensStudio = (p) => p.status === 'ready' && p.id.startsWith('studio.') && p.id !== 'studio.icons';");
     for (const v of p.voice) expect(parseStudioCommand(v)).toEqual({ cmd: 'meme', top: null, bottom: null });
   });
 
