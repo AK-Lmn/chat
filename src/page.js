@@ -1086,7 +1086,7 @@ async function toText(blob){const res=await fetch('/api/transcribe',{method:'POS
 // recognizer is not used: in Arc, Brave and headless Chrome it starts, then hears nothing and says nothing.
 let micBase='',micParts=[],micWait=0,micFail='',micOut=false;
 function showSaid(){const t=micParts.filter(Boolean).join(' ').replace(/ +/g,' ').trim();
-  box.value=((micBase?micBase+' ':'')+t+(micWait?' …':'')).trim().slice(0,2000);box.dispatchEvent(new Event('input'));box.scrollTop=box.scrollHeight;}
+  box.value=((micBase?micBase+' ':'')+t+(micWait?' …':'')).trim().slice(0,6000);box.dispatchEvent(new Event('input'));box.scrollTop=box.scrollHeight;}
 function sendPart(blob){const i=micParts.length;micParts.push('');micWait++;showSaid();
   return toText(blob).then((t)=>{if(t===null)micOut=true;else micParts[i]=t;},(e)=>{micFail=String(e.message||e);}).finally(()=>{micWait--;showSaid();});}
 async function micDone(sends){
@@ -1641,7 +1641,7 @@ ${earthUsers(esc)}
 <div id="signin" class="card" hidden><b>Sign in to run this</b><small>One click with GitHub. Your task is kept and runs right after.</small><div style="margin-top:10px"><a class="btn go" href="/auth/start">Sign in with GitHub</a></div></div>
 </div></div>
 <div class="dock"><div class="col">
-<form id="ask" class="composer"><div id="files" class="files"></div><textarea id="task" maxlength="2000" rows="2" placeholder="What should it do?" aria-label="Task" autofocus></textarea>
+<form id="ask" class="composer"><div id="files" class="files"></div><textarea id="task" maxlength="6000" rows="2" placeholder="What should it do?" aria-label="Task" autofocus></textarea>
 <div class="bar">
 <button type="button" id="plus" class="chip ico" aria-expanded="false" aria-controls="ask" title="More: model, computers, voice, attach" aria-label="More options"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
 <div id="plusmenu" class="plusmenu" role="menu" aria-label="More options"><button type="button" id="attach" class="attach" title="Attach files (up to 3, 5 MB in all)" aria-label="Attach files"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input id="fileIn" type="file" multiple hidden>
