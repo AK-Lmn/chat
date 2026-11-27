@@ -65,7 +65,7 @@ export function settingsPanel({ login = '', anon = false, saved = null, stored =
       irow('usage', t('Free tasks'), t('Counts reset every day at midnight UTC.'), `<button type="button" class="sd-btn" data-sd-go="usage">${t('See usage')}</button>`) +
       irow('ai', t('AI model and keys'), t('Flisk Wolf is free, or add your own key.'), `<button type="button" class="sd-btn" data-sd-model>${t('Choose the AI')}</button>`));
 
-  const keyLinks = Object.entries(keyPages).map(([v, [n, u]]) => `<a class="sd-keylink" href="${u}" target="_blank" rel="noopener" data-for="${v}"${(form.ai || saved?.ai || 'openrouter') === v ? '' : ' hidden'}>${t('Get your {name} key').replace('{name}', esc(n))}</a>`).join('');
+  const keyLinks = Object.entries(keyPages).map(([v, [n, u]]) => `<a class="sd-keylink" href="${esc(u)}" target="_blank" rel="noopener" data-for="${v}"${(form.ai || saved?.ai || 'openrouter') === v ? '' : ' hidden'}>${t('Get your {name} key').replace('{name}', esc(n))}</a>`).join('');
   const curLine = saved
     ? t('Reviews for {login} use {model} ({ai}) with your key. You pay your provider; no daily limit.').replace('{login}', who).replace('{model}', `<b>${esc(saved.model)}</b>`).replace('{ai}', esc(saved.ai))
     : t('Reviews for {login} use the free Flisk Wolf model: {n} a day, and only the first part of a big diff.').replace('{login}', who).replace('{n}', String(limit));
@@ -83,9 +83,9 @@ ${row(t('API key'), t('The key is encrypted before it is stored and never shown 
 
   const cmds = COMMANDS.map(([c, d]) => `<li class="sd-cmd"><code>${esc(c)}</code><button type="button" class="sd-btn" data-sd-copy="${esc(c)}" aria-label="${esc(t('Copy') + ' ' + c)}">${t('Copy')}</button><span>${t(d)}</span></li>`).join('');
   const github = group('', `<p class="sd-lead">${t('Chat reads your pull request and writes a review on GitHub: a summary, comments on the exact lines, one-click fixes and a verdict. You ask for it by writing a comment.')}</p>`) +
-    group('', row('1. ' + t('Install the app once'), t('Pick the repos you want it on.'), `<a class="sd-btn go" href="${appUrl}/installations/new" target="_blank" rel="noopener">${t('Install the GitHub App')}</a>`)) +
+    group('', row('1. ' + t('Install the app once'), t('Pick the repos you want it on.'), `<a class="sd-btn go" href="${esc(appUrl)}/installations/new" target="_blank" rel="noopener">${t('Install the GitHub App')}</a>`)) +
     group(t('Commands'), `<p class="sd-hint">2. ${t('Open any pull request on GitHub and write one of these in the comment box at the bottom, then press Comment.')}</p><ul class="sd-cmds">${cmds}</ul>`) +
-    group('', row('3. ' + t('Read the review'), t('Nothing is merged or changed for you.'), `<a class="sd-btn" href="${appUrl}" target="_blank" rel="noopener">${t('View on GitHub')}</a><a class="sd-btn" href="https://github.com/settings/installations" target="_blank" rel="noopener">${t('Manage installed repos')}</a>`)) +
+    group('', row('3. ' + t('Read the review'), t('Nothing is merged or changed for you.'), `<a class="sd-btn" href="${esc(appUrl)}" target="_blank" rel="noopener">${t('View on GitHub')}</a><a class="sd-btn" href="https://github.com/settings/installations" target="_blank" rel="noopener">${t('Manage installed repos')}</a>`)) +
     `<p class="sd-hint">${t('Only people who can push to the repo can ask. Reviews use the AI chosen in AI for reviews. A model can be wrong, so read before you merge.')}</p>`;
 
   const computers = group('', row(t('Your computers'), t('Connect the computers and cloud accounts where chat runs your tasks. This opens in Fleet, in a new tab.'), `<a class="sd-btn go" href="${COMPUTERS_URL}" target="_blank" rel="noopener">${t('Open Computers')}</a>`));

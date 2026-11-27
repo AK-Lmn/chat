@@ -1,7 +1,7 @@
 // Alexa skill endpoint: "Alexa, open Flisk" on an Echo. Alexa turns speech into text (no Whisper), this answers with
 // the same Flisk Oracle prompt as voice talk, and Alexa speaks it in its own voice.
-// Auth: Amazon cannot add headers, so the endpoint URL carries a secret (?key=ALEXA_KEY); the skill id and the request
-// age are checked too. Own-account (development) skills need no Amazon review.
+// Auth: Amazon cannot add headers, so the endpoint URL carries a secret (?key=ALEXA_KEY); the skill id (required) and the
+// request age are checked too. Own-account (development) skills need no Amazon review.
 import { talkMessages, talkReply } from './voice.js';
 
 export const ALEXA_PER_DAY = 300;
@@ -57,7 +57,7 @@ export async function alexaHandle(request, env, { ask, overLimit, now = Date.now
   let body;
   try { body = await request.json(); } catch { return Response.json({ error: 'send an Alexa request' }, { status: 400 }); }
   const id = body?.session?.application?.applicationId || body?.context?.System?.application?.applicationId || '';
-  if (env.ALEXA_SKILL_ID && !same(id, env.ALEXA_SKILL_ID)) return Response.json({ error: 'wrong skill' }, { status: 403 });
+  if (!env.ALEXA_SKILL_ID || !same(id, env.ALEXA_SKILL_ID)) return Response.json({ error: 'wrong skill' }, { status: 403 });
   const at = Date.parse(body?.request?.timestamp || '');
   if (!Number.isFinite(at) || Math.abs(now - at) > MAX_AGE_MS) return Response.json({ error: 'request too old' }, { status: 400 });
 

@@ -117,7 +117,8 @@ jobs:
           APP_DIR: ${{ inputs.source_repo != '' && format('src/{0}', inputs.app_dir) || inputs.app_dir }}
           BUILD_COMMAND: ${{ inputs.android_build }}
           ARTIFACT: ${{ inputs.apk_path }}
-        run: bash scripts/build/android.sh "$APP_DIR" "${{ inputs.framework }}"
+          FRAMEWORK: ${{ inputs.framework }}
+        run: bash scripts/build/android.sh "$APP_DIR" "$FRAMEWORK"
       - name: Encrypt APK
         env: { ARTIFACT_PASSPHRASE: "${{ secrets.ARTIFACT_PASSPHRASE }}" }
         run: mkdir -p out && openssl enc -aes-256-cbc -pbkdf2 -salt -in app.apk -out out/app.apk.enc -pass env:ARTIFACT_PASSPHRASE
@@ -164,7 +165,8 @@ jobs:
           BUILD_COMMAND: ${{ inputs.ios_build }}
           ARTIFACT: ${{ inputs.ios_app_path }}
           IOS_SCHEME: ${{ vars.IOS_SCHEME }}   # optional repo variable, for projects with several schemes
-        run: bash scripts/build/ios.sh "$APP_DIR" "${{ inputs.framework }}"
+          FRAMEWORK: ${{ inputs.framework }}
+        run: bash scripts/build/ios.sh "$APP_DIR" "$FRAMEWORK"
       - name: Encrypt .app
         env: { ARTIFACT_PASSPHRASE: "${{ secrets.ARTIFACT_PASSPHRASE }}" }
         run: mkdir -p out && openssl enc -aes-256-cbc -pbkdf2 -salt -in app-ios.tgz -out out/app-ios.tgz.enc -pass env:ARTIFACT_PASSPHRASE
@@ -255,7 +257,9 @@ jobs:
 
       - name: Encrypt results
         if: always()
-        run: bash scripts/encrypt_results.sh "${{ matrix.persona }}"
+        env:
+          PERSONA: ${{ matrix.persona }}
+        run: bash scripts/encrypt_results.sh "$PERSONA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with: { name: "results-${{ matrix.persona }}", path: results.enc/, retention-days: 14 }
@@ -351,7 +355,9 @@ jobs:
 
       - name: Encrypt results
         if: always()
-        run: bash scripts/encrypt_results.sh "${{ matrix.persona }}"
+        env:
+          PERSONA: ${{ matrix.persona }}
+        run: bash scripts/encrypt_results.sh "$PERSONA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with: { name: "results-${{ matrix.persona }}", path: results.enc/, retention-days: 14 }

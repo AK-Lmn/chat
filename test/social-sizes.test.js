@@ -58,7 +58,7 @@ describe('Social image sizes plugin (studio.social-sizes)', () => {
     const appSrc = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
     const readyCount = catalog.plugins.filter((p) => p.status === 'ready').length;
     expect(appSrc).toContain(`${catalog.plugins.length} plugins, ${readyCount} ready`);
-    expect(appSrc).toContain('const toStudio = (text) => { const c = studio && parseStudioCommand(text); return !!c && sendToStudio(studioFrame.current, c); };');
+    expect(appSrc).toContain("const toStudio = (text) => {\n    const c = studio && parseStudioCommand(text);\n    if (!c || c.cmd === 'makeIcons' || c.cmd === 'ocr') return false;\n    return sendToStudio(studioFrame.current, c);\n  };");
     expect(appSrc).toContain('if (text && toStudio(text))');
     expect(appSrc).toContain('if (!files.length && toStudio(task))');
   });

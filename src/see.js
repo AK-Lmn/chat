@@ -1,11 +1,12 @@
 import { extractPdfText, isPdfFile } from './ocr.js';
 
 // Reading a picture: the posts @askflisk answers often point at one ("is this ranking right?", a screenshot, a chart),
-// and the studio.ocr plugin reads text from attached photos and PDFs.
-// A vision model on Workers AI writes down what is in it (text, names, tiers), and the answer is made from that.
+// and the chat.alt-text plugin describes an attached photo for screen readers; studio.ocr reads text from attached photos and PDFs.
+// A vision model on Workers AI writes down what is in it (text, names, tiers, or alt text).
 export const VISION_MODELS = ['@cf/meta/llama-3.2-11b-vision-instruct', '@cf/llava-hf/llava-1.5-7b-hf'];
 export const MAX_IMAGE_BYTES = 3_000_000;
 export const MAX_IMAGES = 2;
+export const ALT_TEXT_PROMPT = 'Write concise, accurate alt text for this photo for screen readers. Describe the main subject, setting, and any visible text in one or two plain sentences under 300 characters. Do not start with "Image of" or "Photo of".';
 export const OCR_PROMPT = 'Read and transcribe all text visible in this image accurately, preserving line breaks and reading order. Output only the extracted text, with no extra commentary.';
 // Only pictures that X and Bluesky themselves host: the bot sends links, chat fetches them, so no link to anywhere else is followed.
 export const IMAGE_URL = /^https:\/\/pbs\.twimg\.com\/(?:media|ext_tw_video_thumb|amplify_video_thumb|tweet_video_thumb)\/[\w./-]+(?:\?[\w=&.%-]*)?$/;
@@ -36,6 +37,22 @@ export async function seeImages(env, urls, question, fetchImpl = fetch) {
     if (text) parts.push(text);
   }
   return parts.join('\n---\n').slice(0, 1800);
+}
+
+// Alt text for attached image files (chat.alt-text plugin): plain sentences, '' when none could be read.
+export async function altTextForFiles(env, files) {
+  if (!env?.AI || !Array.isArray(files)) return '';
+  const imgs = files.filter((f) => f?.image && typeof f.content === 'string' && f.content);
+  if (!imgs.length) return '';
+  const results = [];
+  for (const f of imgs) {
+    let buf;
+    try { buf = Uint8Array.from(atob(f.content), (c) => c.charCodeAt(0)); } catch { continue; }
+    const text = await seeBytes(env, buf, ALT_TEXT_PROMPT, 300);
+    if (text) results.push({ path: f.path || 'photo', text });
+  }
+  if (!results.length) return '';
+  return results.length === 1 ? results[0].text : results.map((r) => `**${r.path}:** ${r.text}`).join('\n\n');
 }
 
 // OCR for attached photos and PDFs (studio.ocr plugin): returns extracted plain text, '' when none could be read.

@@ -197,3 +197,30 @@ describe('runTask and /api/run studio.ocr integration', () => {
     expect(body).toContain('HELLO WORLD');
   });
 });
+
+describe('POST /api/run reads a PDF the way the page sends it', () => {
+  test('base64 PDF text comes back without a vision model or a computer', async () => {
+    const env = { SESSION_SECRET: 's'.repeat(32) };
+    const cookie = (await makeSession(env, 'ada')).split(';')[0];
+    const pdf = '%PDF-1.4\n1 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 72 700 Td (Hello from a PDF) Tj ET\nendstream\nendobj\n%%EOF';
+    const req = new Request('https://chat.flisk.si/api/run', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://chat.flisk.si', cookie },
+      body: JSON.stringify({ task: 'read the text', plugin: 'studio.ocr', files: [{ name: 'my scan.pdf', type: 'application/pdf', content: btoa(pdf), b64: true }], ai: { ai: 'wolf' } }),
+    });
+    const res = await handle(req, env, { fetchImpl: async () => new Response('{}', { status: 200 }) });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('Hello from a PDF');
+  });
+});
+
+describe('studio.ocr runs in chat, not in the Studio editor (Studio has no OCR)', () => {
+  test('the picker and the Studio command path both keep OCR in chat', async () => {
+    const plugins = await Bun.file(new URL('../web/src/Plugins.jsx', import.meta.url)).text();
+    const app = await Bun.file(new URL('../web/src/App.jsx', import.meta.url)).text();
+    expect(plugins).toContain("p.id !== 'studio.ocr'");
+    expect(plugins).toContain('onOcr(p)');
+    expect(app).toContain("c.cmd === 'ocr') return false;");
+    expect(app).toContain('onOcr={');
+  });
+});

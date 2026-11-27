@@ -349,7 +349,7 @@
       "id": "studio.sign-pdf",
       "title": "Sign a PDF",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "sign this"
@@ -369,7 +369,7 @@
       "id": "studio.heic",
       "title": "Convert HEIC to JPEG",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "convert to jpeg"
@@ -379,7 +379,7 @@
       "id": "studio.icons",
       "title": "Favicon and app icon set",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "make icons from this"
@@ -399,7 +399,7 @@
       "id": "studio.meme",
       "title": "Meme and caption maker",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "make a meme"
@@ -419,7 +419,7 @@
       "id": "voice.commands",
       "title": "Voice commands",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "hey flisk"
@@ -439,7 +439,7 @@
       "id": "chat.alt-text",
       "title": "Describe a photo for alt text",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "describe this photo"
@@ -449,7 +449,7 @@
       "id": "chat.history-search",
       "title": "Chat history search",
       "group": "Voice and chat",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "find what I asked about pdfs"
