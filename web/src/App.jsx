@@ -154,6 +154,9 @@ function ErrorCard({t, onPick}) {
 // The one big sign-in button of the signed-out home page. The utm tag tells analytics which button brought the visit; /auth/start ignores it.
 const HERO_SIGNIN = '/auth/start?utm_source=chat&utm_medium=cta&utm_campaign=free-key';
 
+// Only what the limit card reads is kept from the server's answer.
+const limitInfo = (body, task) => ({error: body?.error, limit: body?.limit, resetsIn: body?.resetsIn, task});
+
 function LimitCard({info, task, onPick}) {
   const err = info.error ? (info.error.endsWith('.') ? info.error : info.error + '.') : 'You used all ' + (info.limit || '') + ' free tasks today.';
   const reset = resetText(info.resetsIn);
@@ -403,7 +406,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       // Keep the task (and its files) so it runs on its own once the visitor is back from GitHub sign-in, as on /classic.
       try { sessionStorage.setItem('chat_pending', String(task).slice(0, 8000)); if (sendFiles.length) sessionStorage.setItem('chat_pending_files', JSON.stringify(sendFiles)); } catch (e) { /* storage blocked or files too big */ }
       setTurns((all) => all.slice(0, -1)); setNotice('Sign in with GitHub to run tasks.'); return; }
-    if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
+    if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit(limitInfo(res.body, task)); return; }
     // No cloud computer connected: run the task on the small Linux in this tab, as /classic does. If the tab cannot start it,
     // the card to connect a computer is shown instead.
     if (res.status === 409 && podOk()) {
@@ -415,7 +418,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
       }
       setBusy(false); ctl.current = null;
       if (res.status === -1) { put({...t, error: {message: 'The computer in this tab stopped before the task finished. Try again.', kind: 'busy'}}); return; }
-      if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit({...res.body, task}); return; }
+      if (res.status === 429) { setTurns((all) => all.slice(0, -1)); setLimit(limitInfo(res.body, task)); return; }
     }
     if (res.status === 409) { put({...t, needPod: true}); return; }
     if (res.status && res.status !== 200) { put({...t, error: {message: (res.body && res.body.error) || 'Something went wrong.', kind: 'other'}}); return; }
@@ -659,8 +662,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (p && BOOT.login) run(p, {files: Array.isArray(pf) ? pf.slice(0, 3) : []}).catch(() => {});
     else if (p) setValue(p);
   }, []);
-  // Only a value shaped like a model id is stored (model lists arrive from outside this page).
-  useEffect(() => { try { if (/^[\w.:/@~-]{1,60}$/.test(sel.id)) sessionStorage.setItem('chat_model', sel.id); } catch (e) { /* storage blocked */ } }, [sel]);
+  useEffect(() => { try { sessionStorage.setItem('chat_model', sel.id); } catch (e) { /* storage blocked */ } }, [sel]);
 
   const attach = async (list) => {
     const room = 3 - files.length; const got = [];
