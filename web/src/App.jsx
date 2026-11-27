@@ -659,7 +659,8 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     if (p && BOOT.login) run(p, {files: Array.isArray(pf) ? pf.slice(0, 3) : []}).catch(() => {});
     else if (p) setValue(p);
   }, []);
-  useEffect(() => { try { sessionStorage.setItem('chat_model', sel.id); } catch (e) { /* storage blocked */ } }, [sel]);
+  // Only a value shaped like a model id is stored (model lists arrive from outside this page).
+  useEffect(() => { try { if (/^[\w.:/@~-]{1,60}$/.test(sel.id)) sessionStorage.setItem('chat_model', sel.id); } catch (e) { /* storage blocked */ } }, [sel]);
 
   const attach = async (list) => {
     const room = 3 - files.length; const got = [];
