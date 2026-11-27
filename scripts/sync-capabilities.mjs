@@ -9,14 +9,18 @@ import { join } from 'node:path';
 
 const root = process.env.CAPS_ROOT || join(homedir(), 'tdk-pr-work');
 const here = join(import.meta.dir, '..');
-const services = (process.env.CAPS_SERVICES || 'grow,citable,studio').split(',');
+const services = (process.env.CAPS_SERVICES || 'grow,citable,studio,fleet').split(',');
 mkdirSync(join(here, 'capabilities'), { recursive: true });
 const all = [];
 for (const name of services) {
   const src = [join(root, name, 'docs', 'capabilities.json'), join(root, name, 'capabilities.json'), join(here, 'capabilities', `${name}.json`)].find(existsSync);
   if (!src) { console.error(`no capabilities.json for ${name}`); process.exit(1); }
   const m = JSON.parse(readFileSync(src, 'utf8'));
-  for (const c of m.capabilities) if (!c.id || !c.title || !Array.isArray(c.asks) || !c.asks.length) { console.error(`${name}: a capability needs id, title and asks`); process.exit(1); }
+  for (const c of m.capabilities) {
+    // An API action (it names an "http" route) is called by code, so it needs no asks but must say what it can do to you.
+    if (!c.id || !c.title || (!c.http && (!Array.isArray(c.asks) || !c.asks.length))) { console.error(`${name}: a capability needs id, title and asks (or http)`); process.exit(1); }
+    if ((c.http || c.access !== undefined) && !['read', 'write', 'spend'].includes(c.access)) { console.error(`${name}: "${c.id}" needs access: read, write or spend`); process.exit(1); }
+  }
   writeFileSync(join(here, 'capabilities', `${name}.json`), JSON.stringify(m, null, 2) + '\n');
   all.push(m);
 }

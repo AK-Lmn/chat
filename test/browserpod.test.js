@@ -155,6 +155,18 @@ describe('a task over the socket', () => {
     }
   });
 
+  test('a task up to 6000 characters runs; one more is refused', async () => {
+    for (const [len, ok] of [[6000, true], [6001, false]]) {
+      const s = fakeSocket();
+      let gated = 0;
+      const job = runOverSocket(s, { gate: async () => (gated++, { refuse: { status: 400, error: 'no' } }), origin: ORIGIN });
+      s.say({ type: 'task', task: 'x'.repeat(len) });
+      await job;
+      expect(gated).toBe(ok ? 1 : 0);
+      if (!ok) expect(s.sent[0]).toMatchObject({ type: 'refused', error: 'keep the task under 6000 characters' });
+    }
+  });
+
   test('a tab that closes mid-task stops the task: no more model calls, no hang', async () => {
     let asked = 0;
     const s = fakeSocket((e, sock) => e.type === 'pod_call' && e.op === 'start' && sock.drop());

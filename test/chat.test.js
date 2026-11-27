@@ -698,6 +698,15 @@ describe('attached files', () => {
     expect(writes.join('')).toBe(content);
     expect(r.error).toContain('disk full');
   });
+  test('a failed decode of a small picture is an error, and the model is told the file is not there', async () => {
+    const computer = { stop: async () => ({}), start: async () => ({ data: { id: 'p', provider: 'upstash' } }), write: async () => ({ status: 200, data: {} }), run: async (id, cmd) => (/base64 -d/.test(cmd) ? { data: { exitCode: 127, stderr: 'base64: not found' } } : { data: { exitCode: 0 } }) };
+    const r = await putFile(computer, 'p', { path: 'shot.png', content: 'QUJD', b64: true });
+    expect(r.error).toContain('base64: not found');
+    const seen = []; let n = 0;
+    const model = async (m) => (seen.push(m), n++ ? { text: '{"say":"attach it again"}' } : { text: '{"run":"ls"}' });
+    await runTask2({ task: 'what is in this', model, computer, files: [{ path: 'shot.png', content: 'QUJD', b64: true, image: 'image/png' }] });
+    expect(seen[0].some((m) => m.role === 'user' && /shot\.png could not be put on the computer/.test(m.content))).toBe(true);
+  });
   test('files are written to the computer before the first step and the model is told', async () => {
     const writes = [];
     const computer = { start: async () => ({ data: { id: 'p', provider: 'daytona' } }), write: async (id, path, content) => (writes.push([path, content]), { status: 200, data: {} }), run: async () => ({ data: { exitCode: 0, stdout: '', stderr: '' } }), stop: async () => ({ status: 200 }) };

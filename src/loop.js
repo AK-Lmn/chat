@@ -22,7 +22,7 @@ const GIVE_UP = /\b(api key|apikey|access token|please provide|provide a valid|y
 export const BYO_STEPS = 16;
 export const MAX_WORKER = 100_000;
 export const GITHUB_STEPS = 20; // a fork-to-PR run needs more than 16 actions, but Workers Free stops at 50 subrequests per run (a 32-action run died at 25)
-export const MAX_TASK = 2000;
+export const MAX_TASK = 6000;
 const OUT_CHARS = 1500;
 
 
@@ -385,8 +385,11 @@ export async function putFile(computer, podId, f) {
   }
   if (parts.length <= 1) {
     const r = f.b64 ? await computer.write(podId, `${f.path}.b64`, f.content) : await computer.write(podId, f.path, f.content);
-    if (!r.error && f.b64) await computer.run(podId, `base64 -d '${f.path}.b64' > '${f.path}' && rm '${f.path}.b64'`);
-    return r;
+    if (r.error || !f.b64) return r;
+    // The decode can fail (no base64 on the image, disk full): that left no file and no error, and the model was still told it was there.
+    const d = await computer.run(podId, `base64 -d '${f.path}.b64' > '${f.path}' && rm '${f.path}.b64'`);
+    const dcode = d?.data?.exitCode;
+    return d?.error ? d : dcode ? { error: `could not decode ${f.path}: ${String(d.data.stderr || '').slice(0, 200)}` } : r;
   }
   const names = parts.map((_, n) => `${f.path}.part${n}`);
   for (let n = 0; n < parts.length; n++) {
@@ -783,10 +786,14 @@ export async function runTask({ grade = null, stream = false, decision = null, c
           emit({ type: 'github', ok: !!g.ok, error: g.error ? scrub(g.error, token) : null });
           if (g.error) messages.push({ role: 'user', content: `Note: signing GitHub in on this computer failed (${scrub(g.error, token)}), so push and gh may not work.` });
         }
+        const lostFiles = [];
         for (const f of files) {
           const r = await putFile(computer, podId, f);
           emit({ type: 'file', path: f.path, error: r.error || null });
+          if (r.error) lostFiles.push(f.path);
         }
+        // The task text says the files are on the computer: when one did not make it, say so, or the model reads it and fails.
+        if (lostFiles.length) messages.push({ role: 'user', content: `Note: ${lostFiles.join(', ')} could not be put on the computer, so ${lostFiles.length > 1 ? 'they are' : 'it is'} not there. Do not read or open ${lostFiles.length > 1 ? 'them' : 'it'}: tell the user the attachment did not arrive and ask them to attach it again.` });
       }
       let shown;
       let ours = false; // chat itself refused the action (a rule, not a broken computer or file)

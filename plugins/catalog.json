@@ -399,7 +399,7 @@
       "id": "studio.meme",
       "title": "Meme and caption maker",
       "group": "Studio next",
-      "status": "soon",
+      "status": "ready",
       "owner": "flisk",
       "voice": [
         "make a meme"

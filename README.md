@@ -11,7 +11,7 @@ Ask for a task or a website. A free model plans it, a real computer from [fleet]
 
 ## Pull request reviews
 
-Chat can review pull requests when someone comments `@flisk-chat review`. How to use it is in the Flisk contributor guide: [Review a pull request](https://github.com/flisk-sh/flisk/blob/main/docs/contributing/04-review-a-pr.md#review-with-flisk-chat). Setup for this repo is in the deploy list below.
+Chat can review pull requests when someone comments `@flisk-chat review`. How to use it is in the Flisk contributor guide: [Review a pull request](https://github.com/flisk-sh/flisk-cli/blob/main/docs/contributing/04-review-a-pr.md#review-with-flisk-chat). Setup for this repo is in the deploy list below.
 
 ## Run the tests
 

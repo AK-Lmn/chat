@@ -106,7 +106,8 @@ function Answer({t, onAgain, onPick, onPreview, openUrl, onOpenChat}) {
       {pics.length > 0 && <HStack gap={2} wrap="wrap">{pics.map((src, i) => <Button key={src} label={pics.length > 1 ? 'Save picture ' + (i + 1) : 'Save picture'} variant="secondary" size="sm" icon={<Icon icon={ArrowDownTrayIcon} size="sm" />} onClick={() => savePicture(src)} />)}</HStack>}
       {links.map((u) => {
         // A page this chat published (/s/<id>) is kept 7 days, so it can be downloaded to keep it, as on /classic (#354).
-        const page = typeof location !== 'undefined' && u.startsWith(location.origin + '/s/');
+        // Compare the parsed address: a raw prefix check would accept /s/../ paths that leave /s/ once the browser normalizes them.
+        const page = typeof location !== 'undefined' && (() => { try { const x = new URL(u, location.origin); return x.origin === location.origin && x.pathname.startsWith('/s/'); } catch { return false; } })();
         return (
           <Card key={u}><VStack gap={2}>
             <HStack gap={2} align="center"><Badge label="Live" variant="success" /><Text type="supporting" color="secondary">{page ? 'Kept 7 days. Download the page to keep it.' : t.kept && t.kept.days ? 'Kept ' + t.kept.days + ' days' : 'Real link'}</Text></HStack>
@@ -442,7 +443,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
     else setNotice('Sign a PDF');
     return true;
   };
-  // With Studio open, "remove the background", "crop to square", or "make it an instagram story", spoken or typed, goes to the editor, not to the chat.
+  // With Studio open, "remove the background", "crop to square", "make it an instagram story" or "make a meme", spoken or typed, goes to the editor, not to the chat.
   const isImageFile = (f) => !!(f && f.b64 && (/^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|svg|bmp|ico|avif)$/i.test(f.name || '')));
   const openIcons = (fs = filesRef.current) => {
     const img = (fs || []).find(isImageFile) || null;
@@ -727,7 +728,7 @@ export default function App({scheme = 'system', setScheme = () => {}}) {
                   button={{label: 'More', variant: 'ghost', size: 'sm', isIconOnly: true, icon: <Icon icon={PlusIcon} size="sm" />}}
                   items={[
                     {label: 'Dictate', description: 'Speak your task, it turns into text', icon: MicrophoneIcon, endContent: <Demo kind="dictate" />, onClick: dictate},
-                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 30 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
+                    {label: 'Plugins', description: 'Edit photos and PDFs, and more: 50 plugins, 31 ready', icon: PhotoIcon, onClick: () => setPlugOpen(true)},
                     {label: 'Voice talk', description: 'Talk out loud with the Flisk Oracle', icon: SpeakerWaveIcon, endContent: <Demo kind="talk" />, onClick: () => setTalk(true)},
                     {label: 'Attach files', description: 'Up to 3 files, 5 MB in all', icon: PaperClipIcon, endContent: <Demo kind="attach" />, onClick: () => fileIn.current && fileIn.current.click()},
                     {label: 'Choose computers', description: 'Which of your computers may run it', icon: ComputerDesktopIcon, endContent: <Demo kind="computers" />, onClick: () => setPcOpen(true)},

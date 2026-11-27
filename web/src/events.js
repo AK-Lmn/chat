@@ -6,6 +6,8 @@ export const newTurn = (task) => ({
 });
 
 const step = (t, s) => ({ ...t, steps: [...t.steps, { status: 'complete', ...s }] });
+// Only web addresses become links: a javascript: or data: value from the stream is dropped.
+const webUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
 const chars = (n) => Number(n || 0).toLocaleString();
 
 export function applyEv(t, ev) {
@@ -33,10 +35,10 @@ export function applyEv(t, ev) {
     case 'output': {
       if (ev.error) return { ...t, outs: [...t.outs, { text: ev.error, bad: true }] };
       const text = [ev.stdout, ev.stderr, ev.content].filter(Boolean).join('\n').replace(/\n$/, '');
-      return { ...t, link: ev.live || ev.published || t.link, video: ev.video || t.video, outs: text || ev.exitCode > 0 ? [...t.outs, { text, bad: ev.exitCode > 0 }] : t.outs };
+      return { ...t, link: webUrl(ev.live || ev.published) || t.link, video: ev.video || t.video, outs: text || ev.exitCode > 0 ? [...t.outs, { text, bad: ev.exitCode > 0 }] : t.outs };
     }
     case 'search': return { ...step(t, { name: 'search', target: 'Searching the web: ' + ev.query }), status: 'Searching the web' };
-    case 'websources': return { ...t, sources: [...t.sources, ...(ev.results || [])] };
+    case 'websources': return { ...t, sources: [...t.sources, ...(ev.results || []).filter((r) => webUrl(r?.url))] };
     case 'pod_stopped': return step(t, { name: 'computer', target: 'Computer stopped' });
     case 'pod_kept': {
       const until = ev.until ? new Date(ev.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'the provider stops it';

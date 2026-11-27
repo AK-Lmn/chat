@@ -41,6 +41,9 @@ describe('widgets registry', () => {
     expect(r.data.now).toMatchObject({ temp: 7, sky: 'Clear', humidity: 55 });
     expect(r.data.hours.length).toBeGreaterThan(5);
     expect(r.summary).toContain('London');
+    // The model writes the 7-day table from this summary, so every day's numbers must be in it (not invented).
+    expect(r.summary).toContain('2026-11-15: Light rain, high 11°C, low 4°C, rain 60%');
+    expect(r.summary).toContain('2026-11-19: Partly cloudy, high 9°C, low 2°C, rain 45%');
     expect((await WIDGETS.weather.run({ place: 'Nowhereville', units: 'c' }, { fetch: fakeFetch })).error).toContain('Nowhereville');
     expect(calls.some((c) => c.includes('fahrenheit'))).toBe(false);
   });

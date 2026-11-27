@@ -60,7 +60,9 @@ async function weather({ place, units }, { fetch }) {
     hours, days,
   };
   const d0 = days[0];
-  return { data, summary: `Weather card shown for ${data.place}: now ${data.now.temp}${data.unit} and ${now.toLowerCase()}, today ${d0.low} to ${d0.high}${data.unit}, rain chance ${d0.rain}%. The next 7 days are on the card.` };
+  // The model writes the 7-day table from this text, so every day's numbers are here: it must not make them up.
+  const dayLines = days.map((d) => `${d.date}: ${d.sky}, high ${d.high}${data.unit}, low ${d.low}${data.unit}, rain ${d.rain}%`).join('; ');
+  return { data, summary: `Weather card shown for ${data.place}: now ${data.now.temp}${data.unit} and ${now.toLowerCase()}, today ${d0.low} to ${d0.high}${data.unit}, rain chance ${d0.rain}%. Next 7 days (use only these numbers): ${dayLines}.` };
 }
 
 function chartClean(i) {
@@ -143,11 +145,31 @@ async function grow(input, { fetch, citable }) {
 
 // Reads a public web page or feed from the Worker. The in-tab computer has no internet, and a cloud one may be slow:
 // this works everywhere. RSS/Atom gives titles and links; HTML gives its text. Nothing is drawn; the model gets the text.
+// Hosts that point inside a network: loopback, private and link-local IPv4 ranges, IPv6 literals, and local names.
+// Every redirect hop is checked too, so a public page cannot send the Worker to one of these.
+export const isPrivateHost = (host) => {
+  if (/^\[/.test(host) || /^(localhost$|.*\.(localhost|local|internal)$)/.test(host)) return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 198 && (b === 18 || b === 19));
+};
 export async function web({ url }, { fetch }) {
   let u;
   try { u = new URL(url); } catch { return { error: 'that is not a web address' }; }
-  if (!/^https?:$/.test(u.protocol) || /^(localhost|127\.|10\.|192\.168\.|169\.254\.|\[)/.test(u.hostname)) return { error: 'only public http(s) addresses' };
-  const r = await fetch(u.href, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; FliskChat/1.0)', accept: '*/*' }, redirect: 'follow' }).catch((e) => ({ error: String(e?.message || e) }));
+  if (!/^https?:$/.test(u.protocol) || isPrivateHost(u.hostname)) return { error: 'only public http(s) addresses' };
+  let r = null;
+  for (let hop = 0; hop < 5; hop++) {
+    r = await fetch(u.href, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; FliskChat/1.0)', accept: '*/*' }, redirect: 'manual' }).catch((e) => ({ error: String(e?.message || e) }));
+    const next = r.status >= 300 && r.status < 400 ? r.headers?.get?.('location') : null;
+    if (!next) break;
+    let to;
+    try { to = new URL(next, u); } catch { return { error: 'that page sent the chat to a bad address' }; }
+    if (!/^https?:$/.test(to.protocol) || isPrivateHost(to.hostname)) return { error: 'that page sent the chat to a private address' };
+    u = to;
+    if (hop === 4) return { error: `${u.hostname} redirected too many times. Try another address.` };
+  }
   if (r.error) return { error: `could not reach ${u.hostname}: ${r.error}. Try another address.` };
   if (!r.ok) return { error: `${u.hostname} answered ${r.status}. Try another address.` };
   const body = (await r.text().catch(() => '')).slice(0, 400000);
@@ -175,7 +197,7 @@ export const WIDGETS = {
   },
   weather: {
     id: 'weather', title: 'Weather',
-    prompt: '{"widget": {"kind": "weather", "place": "<city>", "units": "c"}} for the weather or a forecast anywhere ("units": "f" for Fahrenheit and mph). Draws a card with now, the next hours and 7 days. No computer is needed. Then "say" two or three bullets on what it means (a coat, rain, a good day for a walk); do not repeat the numbers.',
+    prompt: '{"widget": {"kind": "weather", "place": "<city>", "units": "c"}} for the weather or a forecast anywhere ("units": "f" for Fahrenheit and mph). Draws a card with now, the next hours and 7 days. No computer is needed. Then "say" one line on now, a Day | Sky | High / Low | Rain table of the 7 days copied exactly from the result, and two or three bullets on what it means (a coat, rain, a good day for a walk).',
     clean: (i) => (str(i.place, 80) ? { place: str(i.place, 80), units: i.units === 'f' ? 'f' : 'c' } : null),
     run: weather,
   },

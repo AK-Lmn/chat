@@ -2,3 +2,7 @@
 .dev.vars
 node_modules/
 evals/answers/last-run.md
+
+# Decrypted run output stays on this machine. Only the encrypted copies under runs/<id>/enc/ are committed.
+runs/*/*
+!runs/*/enc/

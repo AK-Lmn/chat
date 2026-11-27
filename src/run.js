@@ -12,12 +12,16 @@ export const runSig = async (secret, parts) => {
   return hexOf(await crypto.subtle.sign('HMAC', key, enc.encode(parts.join('|'))));
 };
 
-export function runScript({ pr, cloneUrl, callback }) {
+// The script holds the clone token, so it deletes itself first, and the checkout's remote drops the token before any
+// install or test script of the pull request runs. Git errors can echo the clone URL, so the token is redacted from the output.
+export function runScript({ pr, cloneUrl, publicUrl, callback }) {
   return `#!/bin/sh
+rm -f "$0"
 cd /tmp && rm -rf w out.txt
 note() { printf '\\n$ %s\\n' "$*" >> /tmp/out.txt; }
 step() { note "$*"; timeout 600 sh -c "$*" >> /tmp/out.txt 2>&1; echo "[exit $?]" >> /tmp/out.txt; }
 if git clone -q --depth 1 ${sq(cloneUrl)} w >> /tmp/out.txt 2>&1 && cd w && git fetch -q --depth 1 origin ${sq(`pull/${pr}/head`)} >> /tmp/out.txt 2>&1 && git checkout -q FETCH_HEAD >> /tmp/out.txt 2>&1; then
+  git remote set-url origin ${sq(publicUrl)}
   if [ -f package.json ]; then
     if [ -f bun.lock ] || [ -f bun.lockb ]; then R=bun; step "bun install"; else R=npm; if [ -f package-lock.json ]; then step "npm ci"; else step "npm install"; fi; fi
     for s in lint typecheck test; do grep -q "\\"$s\\"" package.json && step "$R run $s"; done
@@ -28,7 +32,7 @@ if git clone -q --depth 1 ${sq(cloneUrl)} w >> /tmp/out.txt 2>&1 && cd w && git 
   elif [ -f Cargo.toml ]; then step "cargo test"
   else echo "no package.json, pyproject, go.mod or Cargo.toml: nothing to run" >> /tmp/out.txt; fi
 else echo "could not check out the pull request" >> /tmp/out.txt; fi
-tail -c 6000 /tmp/out.txt | curl -s -X POST --data-binary @- ${sq(callback)} >/dev/null
+sed -e 's#x-access-token:[^@]*@#x-access-token:***@#g' /tmp/out.txt | tail -c 6000 | curl -s -X POST --data-binary @- ${sq(callback)} >/dev/null
 `;
 }
 
@@ -48,7 +52,7 @@ export async function startRun(env, { repo, pr, installationId, sender, isPrivat
   const sig = await runSig(env.GITHUB_WEBHOOK_SECRET, [installationId, repo, pr, id, sender]);
   const q = new URLSearchParams({ inst: String(installationId), repo, pr: String(pr), pod: id, login: sender, sig });
   const cloneUrl = scoped ? `https://x-access-token:${scoped}@github.com/${repo}.git` : `https://github.com/${repo}.git`;
-  const script = runScript({ pr, cloneUrl, callback: `${env.PUBLIC_ORIGIN}/github/run-result?${q}` });
+  const script = runScript({ pr, cloneUrl, publicUrl: `https://github.com/${repo}.git`, callback: `${env.PUBLIC_ORIGIN}/github/run-result?${q}` });
   const w = await fleet.write(id, '/tmp/run.sh', script);
   const r = w.error ? w : await fleet.run(id, 'setsid nohup sh /tmp/run.sh >/dev/null 2>&1 </dev/null &');
   if (r.error) {
@@ -68,7 +72,7 @@ export async function runResult(request, env, { fetchImpl = fetch, waitUntil = n
   let diff = want.length ^ sig.length;
   for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ (sig.charCodeAt(i) || 0);
   if (diff !== 0) return new Response('bad signature', { status: 401 });
-  const out = (await request.text()).slice(-6000).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/```/g, "'''");
+  const out = (await request.text()).slice(-6000).replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/```/g, "'''").replace(/@/g, '@\u200b');
   // One-shot: the first call for a pod wins. (Stopping the pod first would cut this very request off.)
   const first = await env.DB.prepare('INSERT OR IGNORE INTO run_done (pod, created) VALUES (?, ?)').bind(pod, new Date().toISOString()).run();
   if (!first.meta.changes) return new Response('already done', { status: 200 });
