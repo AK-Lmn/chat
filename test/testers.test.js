@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
@@ -32,6 +33,6 @@ describe("phone agent testers", () => {
     expect(read("scripts/android/run_agent.sh")).toContain("no report");
   });
   it("setup.sh is valid bash", () => {
-    expect(spawnSync("bash", ["-n", "setup.sh"], { cwd: new URL("..", import.meta.url).pathname }).status).toBe(0);
+    expect(spawnSync("bash", ["-n", "setup.sh"], { cwd: fileURLToPath(new URL("..", import.meta.url)) }).status).toBe(0);
   });
 });
